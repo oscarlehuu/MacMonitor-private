@@ -4,6 +4,19 @@ struct PopoverRootView: View {
     @ObservedObject var viewModel: SystemSummaryViewModel
 
     var body: some View {
+        Group {
+            switch viewModel.screen {
+            case .summary:
+                summaryScreen
+            case .settings:
+                settingsScreen
+            }
+        }
+        .padding(12)
+        .frame(width: 360)
+    }
+
+    private var summaryScreen: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
@@ -39,14 +52,46 @@ struct PopoverRootView: View {
 
             Divider()
 
-            footer
+            summaryFooter
         }
-        .padding(12)
-        .frame(width: 360)
-        .sheet(isPresented: $viewModel.showingSettings) {
+    }
+
+    private var settingsScreen: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Button {
+                    viewModel.showSummary()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+
+                Spacer()
+
+                Text("Settings")
+                    .font(.title3.weight(.semibold))
+            }
+
+            Divider()
+
             SettingsView(settings: viewModel.settings)
-                .frame(width: 380)
-                .padding(16)
+
+            Divider()
+
+            HStack {
+                Button("Back") {
+                    viewModel.showSummary()
+                }
+                .buttonStyle(.borderless)
+
+                Spacer()
+
+                Button("Quit") {
+                    NSApp.terminate(nil)
+                }
+                .keyboardShortcut("q")
+            }
+            .font(.caption)
         }
     }
 
@@ -65,7 +110,7 @@ struct PopoverRootView: View {
         }
     }
 
-    private var footer: some View {
+    private var summaryFooter: some View {
         HStack {
             Button("Refresh now") {
                 viewModel.refreshNow()
@@ -75,7 +120,7 @@ struct PopoverRootView: View {
             Spacer()
 
             Button("Settings") {
-                viewModel.showingSettings = true
+                viewModel.showSettings()
             }
 
             Button("Quit") {

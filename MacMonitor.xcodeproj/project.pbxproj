@@ -16,6 +16,7 @@
 		4290D58DB4105A57AFF3B1D6 /* SystemSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7935D3E06705ABAACAEF85E /* SystemSnapshot.swift */; };
 		46CA4FB01FD369F8453F67C7 /* MetricsEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 721B261287E8F32DBDACDCA7 /* MetricsEngineTests.swift */; };
 		55686F93103AD144B9AA2FE9 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A058DB55BF0F64222249C052 /* SettingsStore.swift */; };
+		5C9D22A7CE427706DBDE8FED /* SystemSummaryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FEC685BC6C27E89EAC286C /* SystemSummaryViewModelTests.swift */; };
 		5FBDD161AF161A4CB8036C06 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A602D5D8AF1254618D8FF235 /* AppContainer.swift */; };
 		65268E73F5E06D68CE6DC245 /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C939B57C86D6F19C64B50B /* LaunchAtLoginManager.swift */; };
 		6644AE576A48C6581840323B /* PopoverRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B700B03BA8F4DCD30625FB /* PopoverRootView.swift */; };
@@ -63,6 +64,7 @@
 		C77F3B3CE81E8983697B5DA3 /* ThermalCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalCollector.swift; sourceTree = "<group>"; };
 		DF43AE76CA735DDDDCC666C1 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		F5EC59DCDA5FABDA409CDBCB /* MacMonitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6FEC685BC6C27E89EAC286C /* SystemSummaryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSummaryViewModelTests.swift; sourceTree = "<group>"; };
 		F7935D3E06705ABAACAEF85E /* SystemSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSnapshot.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -195,6 +197,7 @@
 				721B261287E8F32DBDACDCA7 /* MetricsEngineTests.swift */,
 				DF43AE76CA735DDDDCC666C1 /* SettingsStoreTests.swift */,
 				28CD4F8B3CFF153D7BB06F5B /* SnapshotStoreTests.swift */,
+				F6FEC685BC6C27E89EAC286C /* SystemSummaryViewModelTests.swift */,
 			);
 			name = Tests;
 			path = MacMonitor/Tests;
@@ -302,6 +305,7 @@
 				46CA4FB01FD369F8453F67C7 /* MetricsEngineTests.swift in Sources */,
 				181777D1086B0FD50EE3CF52 /* SettingsStoreTests.swift in Sources */,
 				78CB8292ACC26CC5D47B70B3 /* SnapshotStoreTests.swift in Sources */,
+				5C9D22A7CE427706DBDE8FED /* SystemSummaryViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

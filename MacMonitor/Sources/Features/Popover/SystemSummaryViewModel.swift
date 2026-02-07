@@ -3,9 +3,14 @@ import Foundation
 
 @MainActor
 final class SystemSummaryViewModel: ObservableObject {
+    enum Screen {
+        case summary
+        case settings
+    }
+
     @Published private(set) var snapshot: SystemSnapshot?
     @Published private(set) var history: [SystemSnapshot] = []
-    @Published var showingSettings = false
+    @Published private(set) var screen: Screen = .summary
 
     let settings: SettingsStore
 
@@ -52,6 +57,14 @@ final class SystemSummaryViewModel: ObservableObject {
 
     func refreshNow() {
         engine.refreshNow()
+    }
+
+    func showSettings() {
+        screen = .settings
+    }
+
+    func showSummary() {
+        screen = .summary
     }
 
     var isStale: Bool {
