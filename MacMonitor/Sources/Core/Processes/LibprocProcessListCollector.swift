@@ -93,7 +93,8 @@ struct LibprocProcessListCollector: ProcessListCollecting {
             guard let rssKiB = UInt64(parts[2]) else { continue }
 
             let command = String(parts[3])
-            let name = command.split(separator: "/").last.map(String.init) ?? command
+            let executable = command.prefix(while: { !$0.isWhitespace })
+            let name = executable.split(separator: "/").last.map(String.init) ?? String(executable)
             let userID = uid_t(uidValue)
             let decision = protectionPolicy.evaluate(
                 processID: pid,

@@ -35,7 +35,7 @@ struct ProcessProtectionDecision: Equatable {
     }
 }
 
-protocol ProcessProtecting {
+protocol ProcessProtecting: Sendable {
     func evaluate(processID: Int32, userID: uid_t, flags: UInt32, processName: String) -> ProcessProtectionDecision
 }
 

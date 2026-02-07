@@ -11,6 +11,6 @@ enum ProcessCollectionError: LocalizedError {
     }
 }
 
-protocol ProcessListCollecting {
+protocol ProcessListCollecting: Sendable {
     func collectTopProcesses(limit: Int, scope: ProcessScopeMode) throws -> [ProcessMemoryItem]
 }

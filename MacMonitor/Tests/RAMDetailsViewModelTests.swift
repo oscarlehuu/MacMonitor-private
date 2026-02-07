@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class RAMDetailsViewModelTests: XCTestCase {
-    func testStartLoadsProcesses() {
+    func testStartLoadsProcesses() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()
         let viewModel = RAMDetailsViewModel(
@@ -17,14 +17,13 @@ final class RAMDetailsViewModelTests: XCTestCase {
         collector.mineItems = [makeProcess(pid: 100, name: "Safari", userID: 501, protected: false)]
         collector.allItems = collector.mineItems
 
-        viewModel.start()
+        await viewModel.performRefresh()
 
         XCTAssertEqual(viewModel.processes.count, 1)
         XCTAssertEqual(collector.callCount, 2)
-        viewModel.stop()
     }
 
-    func testChangingScopeClearsSelectionAndRefreshes() {
+    func testChangingScopeClearsSelectionAndRefreshes() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()
         let viewModel = RAMDetailsViewModel(
@@ -41,10 +40,11 @@ final class RAMDetailsViewModelTests: XCTestCase {
             makeProcess(pid: 55, name: "launchd", userID: 0, protected: true)
         ]
 
-        viewModel.start()
+        await viewModel.performRefresh()
         viewModel.selectedProcessIDs = [101]
 
         viewModel.setScopeMode(.allDiscoverable)
+        await viewModel.pendingRefreshTask?.value
 
         XCTAssertTrue(viewModel.selectedProcessIDs.isEmpty)
         XCTAssertEqual(viewModel.scopeMode, .allDiscoverable)
@@ -52,7 +52,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         viewModel.stop()
     }
 
-    func testTerminateSelectedUsesAllowedProcessesOnly() {
+    func testTerminateSelectedUsesAllowedProcessesOnly() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()
         terminator.summary = ProcessTerminationSummary(
@@ -75,7 +75,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         ]
         collector.allItems = collector.mineItems
 
-        viewModel.start()
+        await viewModel.performRefresh()
         viewModel.selectedProcessIDs = [200, 201]
 
         viewModel.terminateSelected()
@@ -83,10 +83,9 @@ final class RAMDetailsViewModelTests: XCTestCase {
         XCTAssertEqual(terminator.lastSelectedProcessIDs, [200])
         XCTAssertTrue(viewModel.selectedProcessIDs.isEmpty)
         XCTAssertEqual(viewModel.resultMessage, "Terminated 1, skipped 0, failed 0.")
-        viewModel.stop()
     }
 
-    func testRequestTerminateSelectedIgnoresProtectedOnlySelection() {
+    func testRequestTerminateSelectedIgnoresProtectedOnlySelection() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()
         let viewModel = RAMDetailsViewModel(
@@ -100,16 +99,15 @@ final class RAMDetailsViewModelTests: XCTestCase {
         collector.mineItems = [makeProcess(pid: 300, name: "Protected", userID: 501, protected: true)]
         collector.allItems = collector.mineItems
 
-        viewModel.start()
+        await viewModel.performRefresh()
         viewModel.selectedProcessIDs = [300]
 
         viewModel.requestTerminateSelected()
 
         XCTAssertFalse(viewModel.showingTerminateConfirmation)
-        viewModel.stop()
     }
 
-    func testComputesMineAndAllProcessBytesFromAllScopeData() {
+    func testComputesMineAndAllProcessBytesFromAllScopeData() async {
         let collector = FakeProcessCollector()
         collector.mineItems = [makeProcess(pid: 401, name: "Mine", userID: 501, protected: false, rankingBytes: 120)]
         collector.allItems = [
@@ -125,14 +123,13 @@ final class RAMDetailsViewModelTests: XCTestCase {
             currentUserID: 501
         )
 
-        viewModel.start()
+        await viewModel.performRefresh()
 
         XCTAssertEqual(viewModel.myProcessBytes, 120)
         XCTAssertEqual(viewModel.allProcessBytes, 420)
-        viewModel.stop()
     }
 
-    func testSetShowAllMineLoadsAllMineRows() {
+    func testSetShowAllMineLoadsAllMineRows() async {
         let collector = FakeProcessCollector()
         collector.mineItems = [
             makeProcess(pid: 501, name: "A", userID: 501, protected: false, rankingBytes: 300),
@@ -149,16 +146,16 @@ final class RAMDetailsViewModelTests: XCTestCase {
             currentUserID: 501
         )
 
-        viewModel.start()
+        await viewModel.performRefresh()
         XCTAssertEqual(viewModel.processes.count, 2)
         XCTAssertFalse(viewModel.showAllMine)
 
         viewModel.setShowAllMine(true)
+        await viewModel.pendingRefreshTask?.value
 
         XCTAssertTrue(viewModel.showAllMine)
         XCTAssertEqual(viewModel.processes.count, 3)
         XCTAssertEqual(collector.callCount, 4)
-        viewModel.stop()
     }
 
     private func makeProcess(pid: Int32, name: String, userID: uid_t, protected: Bool, rankingBytes: UInt64 = 120) -> ProcessMemoryItem {
@@ -175,7 +172,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
     }
 }
 
-private final class FakeProcessCollector: ProcessListCollecting {
+private final class FakeProcessCollector: ProcessListCollecting, @unchecked Sendable {
     var mineItems: [ProcessMemoryItem] = []
     var allItems: [ProcessMemoryItem] = []
     var error: Error?

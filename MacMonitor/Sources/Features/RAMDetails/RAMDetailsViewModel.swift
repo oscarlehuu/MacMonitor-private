@@ -26,6 +26,7 @@ final class RAMDetailsViewModel: ObservableObject {
 
     private var refreshCancellable: AnyCancellable?
     private var hasStarted = false
+    private(set) var pendingRefreshTask: Task<Void, Never>?
 
     init(
         processCollector: ProcessListCollecting,
@@ -79,28 +80,40 @@ final class RAMDetailsViewModel: ObservableObject {
     }
 
     func refresh() {
+        pendingRefreshTask = Task { await performRefresh() }
+    }
+
+    func performRefresh() async {
         if processes.isEmpty {
             isLoading = true
         }
 
-        do {
-            let mineLimit = showAllMine ? 10_000 : maxRows
-            let mineRows = try processCollector.collectTopProcesses(limit: mineLimit, scope: .sameUserOnly)
-            let allRows = try processCollector.collectTopProcesses(limit: 10_000, scope: .allDiscoverable)
+        let collector = processCollector
+        let showAll = showAllMine
+        let rows = maxRows
+        let uid = currentUserID
+        let scope = scopeMode
 
-            myProcessBytes = allRows
-                .filter { $0.userID == currentUserID }
-                .reduce(0) { $0 + $1.rankingBytes }
+        do {
+            let (allMineRows, allRows) = try await Task.detached(priority: .userInitiated) {
+                let mine = try collector.collectTopProcesses(limit: 10_000, scope: .sameUserOnly)
+                let all = try collector.collectTopProcesses(limit: 10_000, scope: .allDiscoverable)
+                return (mine, all)
+            }.value
+
+            myProcessBytes = allMineRows.reduce(0) { $0 + $1.rankingBytes }
             allProcessBytes = allRows.reduce(0) { $0 + $1.rankingBytes }
-            myProcessCount = allRows.filter { $0.userID == currentUserID }.count
+            myProcessCount = allMineRows.count
             allProcessCount = allRows.count
 
+            let mineRows = showAll ? allMineRows : Array(allMineRows.prefix(rows))
+
             let refreshed: [ProcessMemoryItem]
-            switch scopeMode {
+            switch scope {
             case .sameUserOnly:
                 refreshed = mineRows
             case .allDiscoverable:
-                refreshed = Array(allRows.prefix(maxRows))
+                refreshed = Array(allRows.prefix(rows))
             }
 
             processes = refreshed
