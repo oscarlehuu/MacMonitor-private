@@ -6,13 +6,19 @@ import SwiftUI
 final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let ramPolicyViewModel: RAMPolicySettingsViewModel
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
 
-    init(viewModel: SystemSummaryViewModel, ramDetailsViewModel: RAMDetailsViewModel) {
+    init(
+        viewModel: SystemSummaryViewModel,
+        ramDetailsViewModel: RAMDetailsViewModel,
+        ramPolicyViewModel: RAMPolicySettingsViewModel
+    ) {
         self.viewModel = viewModel
         self.ramDetailsViewModel = ramDetailsViewModel
+        self.ramPolicyViewModel = ramPolicyViewModel
         super.init()
     }
 
@@ -21,7 +27,8 @@ final class MenuBarController: NSObject {
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
                 viewModel: viewModel,
-                ramDetailsViewModel: ramDetailsViewModel
+                ramDetailsViewModel: ramDetailsViewModel,
+                ramPolicyViewModel: ramPolicyViewModel
             )
         )
 
@@ -29,6 +36,7 @@ final class MenuBarController: NSObject {
         button.action = #selector(togglePopover(_:))
         button.target = self
         button.imagePosition = .imageOnly
+        button.sendAction(on: [.leftMouseDown])
 
         bindViewModel()
         applyStatus(for: viewModel.thermalState)

@@ -7,6 +7,8 @@ final class AppContainer {
     private let snapshotStore: SnapshotStore
     private let summaryViewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
+    private let ramPolicyViewModel: RAMPolicySettingsViewModel
+    private let ramPolicyMonitor: RAMPolicyMonitor
     private let menuBarController: MenuBarController
 
     init() {
@@ -31,9 +33,27 @@ final class AppContainer {
             processCollector: processCollector,
             processTerminator: processTerminator
         )
+        let policyStore = FileRAMPolicyStore()
+        let eventStore = FileRAMPolicyEventStore()
+        let appRAMCollector = LibprocAppRAMCollector()
+        let policyEvaluator = RAMPolicyEvaluator()
+        let notifier = UserNotificationRAMPolicyNotifier()
+        let policyMonitor = RAMPolicyMonitor(
+            policyStore: policyStore,
+            eventStore: eventStore,
+            usageCollector: appRAMCollector,
+            evaluator: policyEvaluator,
+            notifier: notifier
+        )
+        let policyViewModel = RAMPolicySettingsViewModel(
+            policyStore: policyStore,
+            eventStore: eventStore,
+            monitor: policyMonitor
+        )
         let menuBar = MenuBarController(
             viewModel: viewModel,
-            ramDetailsViewModel: ramDetails
+            ramDetailsViewModel: ramDetails,
+            ramPolicyViewModel: policyViewModel
         )
 
         self.settingsStore = settings
@@ -41,17 +61,21 @@ final class AppContainer {
         self.snapshotStore = store
         self.summaryViewModel = viewModel
         self.ramDetailsViewModel = ramDetails
+        self.ramPolicyViewModel = policyViewModel
+        self.ramPolicyMonitor = policyMonitor
         self.menuBarController = menuBar
     }
 
     func start() {
         menuBarController.install()
         summaryViewModel.start()
+        ramPolicyMonitor.start()
     }
 
     func stop() {
         summaryViewModel.stop()
         ramDetailsViewModel.stop()
+        ramPolicyMonitor.stop()
         menuBarController.uninstall()
     }
 }

@@ -4,14 +4,16 @@ import Foundation
 @MainActor
 final class SystemSummaryViewModel: ObservableObject {
     enum Screen {
-        case summary
+        case temperature
+        case ram
+        case storage
         case settings
-        case ramDetails
+        case ramPolicyManager
     }
 
     @Published private(set) var snapshot: SystemSnapshot?
     @Published private(set) var history: [SystemSnapshot] = []
-    @Published private(set) var screen: Screen = .summary
+    @Published private(set) var screen: Screen = .temperature
 
     let settings: SettingsStore
 
@@ -65,11 +67,27 @@ final class SystemSummaryViewModel: ObservableObject {
     }
 
     func showSummary() {
-        screen = .summary
+        showTemperature()
     }
 
     func showRAMDetails() {
-        screen = .ramDetails
+        showRAM()
+    }
+
+    func showTemperature() {
+        screen = .temperature
+    }
+
+    func showRAM() {
+        screen = .ram
+    }
+
+    func showStorage() {
+        screen = .storage
+    }
+
+    func showRAMPolicyManager() {
+        screen = .ramPolicyManager
     }
 
     var isStale: Bool {
