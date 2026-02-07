@@ -5,18 +5,25 @@ import SwiftUI
 @MainActor
 final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
+    private let ramDetailsViewModel: RAMDetailsViewModel
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
 
-    init(viewModel: SystemSummaryViewModel) {
+    init(viewModel: SystemSummaryViewModel, ramDetailsViewModel: RAMDetailsViewModel) {
         self.viewModel = viewModel
+        self.ramDetailsViewModel = ramDetailsViewModel
         super.init()
     }
 
     func install() {
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PopoverRootView(viewModel: viewModel))
+        popover.contentViewController = NSHostingController(
+            rootView: PopoverRootView(
+                viewModel: viewModel,
+                ramDetailsViewModel: ramDetailsViewModel
+            )
+        )
 
         guard let button = statusItem.button else { return }
         button.action = #selector(togglePopover(_:))

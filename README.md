@@ -5,6 +5,7 @@ Open-source macOS (Apple Silicon) menu bar monitor.
 ## Current scope (v1)
 - Thermal state via official API (`nominal/fair/serious/critical`)
 - RAM usage / total
+- RAM details view with top processes, multi-select, and allowed-only termination
 - Storage usage / total
 - Refresh every few minutes (configurable)
 

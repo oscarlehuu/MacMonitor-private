@@ -6,6 +6,7 @@ final class AppContainer {
     private let metricsEngine: MetricsEngine
     private let snapshotStore: SnapshotStore
     private let summaryViewModel: SystemSummaryViewModel
+    private let ramDetailsViewModel: RAMDetailsViewModel
     private let menuBarController: MenuBarController
 
     init() {
@@ -23,12 +24,23 @@ final class AppContainer {
 
         let store = SnapshotStore()
         let viewModel = SystemSummaryViewModel(engine: engine, snapshotStore: store, settings: settings)
-        let menuBar = MenuBarController(viewModel: viewModel)
+        let processProtectionPolicy = DefaultProcessProtectionPolicy()
+        let processCollector = LibprocProcessListCollector(protectionPolicy: processProtectionPolicy)
+        let processTerminator = SignalProcessTerminator()
+        let ramDetails = RAMDetailsViewModel(
+            processCollector: processCollector,
+            processTerminator: processTerminator
+        )
+        let menuBar = MenuBarController(
+            viewModel: viewModel,
+            ramDetailsViewModel: ramDetails
+        )
 
         self.settingsStore = settings
         self.metricsEngine = engine
         self.snapshotStore = store
         self.summaryViewModel = viewModel
+        self.ramDetailsViewModel = ramDetails
         self.menuBarController = menuBar
     }
 
@@ -39,6 +51,7 @@ final class AppContainer {
 
     func stop() {
         summaryViewModel.stop()
+        ramDetailsViewModel.stop()
         menuBarController.uninstall()
     }
 }

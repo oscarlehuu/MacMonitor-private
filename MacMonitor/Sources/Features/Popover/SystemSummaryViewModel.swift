@@ -6,6 +6,7 @@ final class SystemSummaryViewModel: ObservableObject {
     enum Screen {
         case summary
         case settings
+        case ramDetails
     }
 
     @Published private(set) var snapshot: SystemSnapshot?
@@ -65,6 +66,10 @@ final class SystemSummaryViewModel: ObservableObject {
 
     func showSummary() {
         screen = .summary
+    }
+
+    func showRAMDetails() {
+        screen = .ramDetails
     }
 
     var isStale: Bool {
