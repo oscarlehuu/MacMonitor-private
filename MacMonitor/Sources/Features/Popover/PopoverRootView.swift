@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PopoverRootView: View {
     @ObservedObject var viewModel: SystemSummaryViewModel
+    @ObservedObject var ramDetailsViewModel: RAMDetailsViewModel
 
     var body: some View {
         Group {
@@ -10,6 +11,8 @@ struct PopoverRootView: View {
                 summaryScreen
             case .settings:
                 settingsScreen
+            case .ramDetails:
+                ramDetailsScreen
             }
         }
         .padding(12)
@@ -27,13 +30,19 @@ struct PopoverRootView: View {
             )
 
             if let snapshot = viewModel.snapshot {
-                MetricCardView(
-                    title: "RAM",
-                    subtitle: "\(MetricFormatter.usage(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes))",
-                    usagePercent: MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
-                    progress: snapshot.memory.usageRatio,
-                    tint: .blue
-                )
+                Button {
+                    viewModel.showRAMDetails()
+                } label: {
+                    MetricCardView(
+                        title: "RAM",
+                        subtitle: "\(MetricFormatter.usage(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes))",
+                        usagePercent: MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
+                        progress: snapshot.memory.usageRatio,
+                        tint: .blue
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Click to view top memory processes")
 
                 MetricCardView(
                     title: "Storage",
@@ -107,6 +116,15 @@ struct PopoverRootView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+        }
+    }
+
+    private var ramDetailsScreen: some View {
+        RAMDetailsView(
+            viewModel: ramDetailsViewModel,
+            memorySnapshot: viewModel.snapshot?.memory
+        ) {
+            viewModel.showSummary()
         }
     }
 

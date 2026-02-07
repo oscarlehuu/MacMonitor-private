@@ -3,16 +3,14 @@ import XCTest
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
-    func testPersistsIntervalAndTemperatureUnit() {
+    func testPersistsRefreshInterval() {
         let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
         let manager = MutableLaunchManager()
         let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
 
         store.refreshInterval = .fiveMinutes
-        store.temperatureUnit = .fahrenheit
 
         XCTAssertEqual(defaults.integer(forKey: "settings.refreshIntervalMinutes"), 5)
-        XCTAssertEqual(defaults.string(forKey: "settings.temperatureUnit"), TemperatureUnit.fahrenheit.rawValue)
     }
 
     func testLaunchAtLoginFailureRevertsToggleAndStoresError() {

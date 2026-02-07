@@ -11,15 +11,7 @@ struct SettingsView: View {
                         Text(interval.title).tag(interval)
                     }
                 }
-                .pickerStyle(.radioGroup)
-            }
-
-            Section("Temperature Unit") {
-                Picker("Unit", selection: $settings.temperatureUnit) {
-                    ForEach(TemperatureUnit.allCases) { unit in
-                        Text(unit.title).tag(unit)
-                    }
-                }
+                .pickerStyle(.menu)
             }
 
             Section("Launch") {

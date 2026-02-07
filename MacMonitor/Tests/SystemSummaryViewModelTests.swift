@@ -9,11 +9,14 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.screen, .summary)
     }
 
-    func testScreenTransitionsBetweenSummaryAndSettings() {
+    func testScreenTransitionsBetweenSummarySettingsAndRAMDetails() {
         let viewModel = makeViewModel()
 
         viewModel.showSettings()
         XCTAssertEqual(viewModel.screen, .settings)
+
+        viewModel.showRAMDetails()
+        XCTAssertEqual(viewModel.screen, .ramDetails)
 
         viewModel.showSummary()
         XCTAssertEqual(viewModel.screen, .summary)
