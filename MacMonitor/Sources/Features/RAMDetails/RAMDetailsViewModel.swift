@@ -60,6 +60,8 @@ final class RAMDetailsViewModel: ObservableObject {
         hasStarted = false
         refreshCancellable?.cancel()
         refreshCancellable = nil
+        pendingRefreshTask?.cancel()
+        pendingRefreshTask = nil
     }
 
     func setScopeMode(_ scope: ProcessScopeMode) {
@@ -80,6 +82,7 @@ final class RAMDetailsViewModel: ObservableObject {
     }
 
     func refresh() {
+        pendingRefreshTask?.cancel()
         pendingRefreshTask = Task { await performRefresh() }
     }
 
@@ -100,6 +103,8 @@ final class RAMDetailsViewModel: ObservableObject {
                 let all = try collector.collectTopProcesses(limit: 10_000, scope: .allDiscoverable)
                 return (mine, all)
             }.value
+
+            guard !Task.isCancelled else { return }
 
             myProcessBytes = allMineRows.reduce(0) { $0 + $1.rankingBytes }
             allProcessBytes = allRows.reduce(0) { $0 + $1.rankingBytes }
