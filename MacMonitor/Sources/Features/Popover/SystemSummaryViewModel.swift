@@ -1,0 +1,76 @@
+import Combine
+import Foundation
+
+@MainActor
+final class SystemSummaryViewModel: ObservableObject {
+    @Published private(set) var snapshot: SystemSnapshot?
+    @Published private(set) var history: [SystemSnapshot] = []
+    @Published var showingSettings = false
+
+    let settings: SettingsStore
+
+    private let engine: MetricsEngine
+    private let snapshotStore: SnapshotStore
+    private var cancellables = Set<AnyCancellable>()
+    private var hasStarted = false
+
+    init(engine: MetricsEngine, snapshotStore: SnapshotStore, settings: SettingsStore) {
+        self.engine = engine
+        self.snapshotStore = snapshotStore
+        self.settings = settings
+    }
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        history = snapshotStore.loadHistory()
+        snapshot = history.last
+
+        engine.$latestSnapshot
+            .compactMap { $0 }
+            .sink { [weak self] newSnapshot in
+                guard let self else { return }
+                snapshot = newSnapshot
+                history.append(newSnapshot)
+                if history.count > 200 {
+                    history = Array(history.suffix(200))
+                }
+                snapshotStore.append(newSnapshot)
+            }
+            .store(in: &cancellables)
+
+        engine.start()
+    }
+
+    func stop() {
+        guard hasStarted else { return }
+        hasStarted = false
+        engine.stop()
+        cancellables.removeAll()
+    }
+
+    func refreshNow() {
+        engine.refreshNow()
+    }
+
+    var isStale: Bool {
+        guard let snapshot else { return true }
+        let maxAge = settings.refreshInterval.seconds * 2.0
+        return snapshot.age() > maxAge
+    }
+
+    var thermalState: ThermalState {
+        snapshot?.thermal.state ?? .unknown
+    }
+
+    var statusTooltip: String {
+        guard let snapshot else {
+            return "MacMonitor: waiting for data"
+        }
+
+        let memoryUsage = MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes)
+        let storageUsage = MetricFormatter.percent(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes)
+        return "Thermal: \(snapshot.thermal.state.title) | RAM: \(memoryUsage) | Storage: \(storageUsage)"
+    }
+}

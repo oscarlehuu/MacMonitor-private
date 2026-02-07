@@ -1,0 +1,87 @@
+import Combine
+import Foundation
+
+@MainActor
+final class MetricsEngine: ObservableObject {
+    @Published private(set) var latestSnapshot: SystemSnapshot?
+
+    private let memoryCollector: MemoryCollecting
+    private let storageCollector: StorageCollecting
+    private let thermalCollector: ThermalCollecting
+    private let settings: SettingsStore
+    private let now: () -> Date
+
+    private var timerCancellable: AnyCancellable?
+    private var refreshIntervalCancellable: AnyCancellable?
+    private var thermalChangeCancellable: AnyCancellable?
+
+    init(
+        memoryCollector: MemoryCollecting,
+        storageCollector: StorageCollecting,
+        thermalCollector: ThermalCollecting,
+        settings: SettingsStore,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.memoryCollector = memoryCollector
+        self.storageCollector = storageCollector
+        self.thermalCollector = thermalCollector
+        self.settings = settings
+        self.now = now
+    }
+
+    func start() {
+        bindSettings()
+        bindThermalChanges()
+        scheduleTimer(using: settings.refreshInterval)
+        refresh(reason: .startup)
+    }
+
+    func stop() {
+        timerCancellable?.cancel()
+        refreshIntervalCancellable?.cancel()
+        thermalChangeCancellable?.cancel()
+    }
+
+    func refreshNow() {
+        refresh(reason: .manual)
+    }
+
+    private func bindSettings() {
+        refreshIntervalCancellable = settings.$refreshInterval
+            .dropFirst()
+            .sink { [weak self] interval in
+                self?.scheduleTimer(using: interval)
+            }
+    }
+
+    private func bindThermalChanges() {
+        thermalChangeCancellable = thermalCollector.stateDidChangePublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refresh(reason: .thermalNotification)
+            }
+    }
+
+    private func scheduleTimer(using interval: RefreshInterval) {
+        timerCancellable?.cancel()
+        timerCancellable = Timer.publish(every: interval.seconds, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refresh(reason: .interval)
+            }
+    }
+
+    private func refresh(reason: RefreshReason) {
+        let memory = memoryCollector.collect() ?? .empty(totalBytes: ProcessInfo.processInfo.physicalMemory)
+        let storage = storageCollector.collect() ?? .empty()
+        let thermal = thermalCollector.collect()
+
+        latestSnapshot = SystemSnapshot(
+            timestamp: now(),
+            memory: memory,
+            storage: storage,
+            thermal: thermal,
+            refreshReason: reason
+        )
+    }
+}

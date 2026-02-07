@@ -1,0 +1,40 @@
+name: MacMonitor
+options:
+  bundleIdPrefix: com.oscar
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+targets:
+  MacMonitor:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - MacMonitor/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.oscar.macmonitor
+        PRODUCT_NAME: MacMonitor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MacMonitor
+        INFOPLIST_KEY_LSUIElement: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+    scheme:
+      gatherCoverageData: true
+      testTargets:
+        - MacMonitorTests
+  MacMonitorTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - MacMonitor/Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: MacMonitor
