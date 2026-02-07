@@ -4,22 +4,28 @@ import XCTest
 
 @MainActor
 final class SystemSummaryViewModelTests: XCTestCase {
-    func testScreenDefaultsToSummary() {
+    func testScreenDefaultsToTemperature() {
         let viewModel = makeViewModel()
-        XCTAssertEqual(viewModel.screen, .summary)
+        XCTAssertEqual(viewModel.screen, .temperature)
     }
 
-    func testScreenTransitionsBetweenSummarySettingsAndRAMDetails() {
+    func testScreenTransitionsAcrossSidebarRoutes() {
         let viewModel = makeViewModel()
 
         viewModel.showSettings()
         XCTAssertEqual(viewModel.screen, .settings)
 
         viewModel.showRAMDetails()
-        XCTAssertEqual(viewModel.screen, .ramDetails)
+        XCTAssertEqual(viewModel.screen, .ram)
+
+        viewModel.showStorage()
+        XCTAssertEqual(viewModel.screen, .storage)
+
+        viewModel.showRAMPolicyManager()
+        XCTAssertEqual(viewModel.screen, .ramPolicyManager)
 
         viewModel.showSummary()
-        XCTAssertEqual(viewModel.screen, .summary)
+        XCTAssertEqual(viewModel.screen, .temperature)
     }
 
     private func makeViewModel() -> SystemSummaryViewModel {
