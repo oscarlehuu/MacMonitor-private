@@ -69,7 +69,7 @@ final class RAMPolicyEvaluatorTests: XCTestCase {
 
     func testBothModeTransitionsFromImmediateToSustained() {
         let evaluator = RAMPolicyEvaluator()
-        let policy = makePolicy(triggerMode: .both, sustainedSeconds: 15, cooldownSeconds: 0)
+        let policy = makePolicy(triggerMode: .both, sustainedSeconds: 15, cooldownSeconds: 300)
         let usage = AppRAMUsage(bundleID: "com.test.cursor", displayName: "Cursor", usedBytes: 8 * 1024 * 1024 * 1024)
 
         let t0 = Date(timeIntervalSince1970: 3_000)

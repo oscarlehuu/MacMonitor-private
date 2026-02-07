@@ -11,7 +11,8 @@ struct RAMPolicyBreach: Equatable {
 final class RAMPolicyEvaluator {
     private struct PolicyState {
         var firstExceededAt: Date?
-        var lastNotifiedAt: Date?
+        var lastNotifiedImmediateAt: Date?
+        var lastNotifiedSustainedAt: Date?
     }
 
     private var states: [UUID: PolicyState] = [:]
@@ -58,7 +59,15 @@ final class RAMPolicyEvaluator {
                 continue
             }
 
-            if let lastNotifiedAt = state.lastNotifiedAt,
+            let lastNotifiedAt: Date?
+            switch triggerKind {
+            case .immediate:
+                lastNotifiedAt = state.lastNotifiedImmediateAt
+            case .sustained:
+                lastNotifiedAt = state.lastNotifiedSustainedAt
+            }
+
+            if let lastNotifiedAt,
                now.timeIntervalSince(lastNotifiedAt) < TimeInterval(policy.notifyCooldownSeconds) {
                 states[policy.id] = state
                 continue
@@ -73,7 +82,12 @@ final class RAMPolicyEvaluator {
             )
             breaches.append(breach)
 
-            state.lastNotifiedAt = now
+            switch triggerKind {
+            case .immediate:
+                state.lastNotifiedImmediateAt = now
+            case .sustained:
+                state.lastNotifiedSustainedAt = now
+            }
             states[policy.id] = state
         }
 

@@ -333,7 +333,6 @@ struct PopoverRootView: View {
             if let snapshot = viewModel.snapshot {
                 VStack(alignment: .leading, spacing: 12) {
                     storageSummaryCard(snapshot.storage)
-                    storageBreakdownCard(snapshot.storage)
                 }
             } else {
                 collectingCard(text: "Collecting storage metrics...")
@@ -342,9 +341,7 @@ struct PopoverRootView: View {
     }
 
     private func storageSummaryCard(_ storage: StorageSnapshot) -> some View {
-        let breakdown = makeStorageBreakdown(storage: storage)
-
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 HStack(spacing: 8) {
                     Image(systemName: "internaldrive")
@@ -386,27 +383,6 @@ struct PopoverRootView: View {
                 }
             }
             .frame(height: 6)
-
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(breakdown, id: \.name) { item in
-                    HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(item.color)
-                            .frame(width: 10, height: 10)
-
-                        Text(item.name)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(PopoverTheme.textPrimary)
-
-                        Spacer(minLength: 8)
-
-                        Text(MetricFormatter.bytes(item.bytes))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(PopoverTheme.textSecondary)
-                    }
-                }
-            }
-            .padding(.top, 2)
         }
         .padding(14)
         .background(
@@ -416,50 +392,6 @@ struct PopoverRootView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(PopoverTheme.mint.opacity(0.2), lineWidth: 1)
-        )
-    }
-
-    private func storageBreakdownCard(_ storage: StorageSnapshot) -> some View {
-        let breakdown = makeStorageBreakdown(storage: storage)
-        let freeBytes = max(storage.totalBytes - storage.usedBytes, 0)
-
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Usage Breakdown")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(PopoverTheme.textPrimary)
-
-            GeometryReader { geometry in
-                HStack(spacing: 1) {
-                    ForEach(breakdown, id: \.name) { item in
-                        Rectangle()
-                            .fill(item.color)
-                            .frame(width: width(for: item.bytes, total: storage.totalBytes, maxWidth: geometry.size.width))
-                    }
-
-                    Rectangle()
-                        .fill(Color.white.opacity(0.04))
-                        .frame(width: width(for: freeBytes, total: storage.totalBytes, maxWidth: geometry.size.width))
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-            .frame(height: 14)
-
-            HStack {
-                Text("0 GB")
-                Spacer(minLength: 0)
-                Text(MetricFormatter.bytes(storage.totalBytes))
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(PopoverTheme.textMuted)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(PopoverTheme.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
@@ -477,25 +409,6 @@ struct PopoverRootView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
             )
-    }
-
-    private func width(for bytes: UInt64, total: UInt64, maxWidth: CGFloat) -> CGFloat {
-        guard total > 0 else { return 0 }
-        return max(1, CGFloat(Double(bytes) / Double(total)) * maxWidth)
-    }
-
-    private func makeStorageBreakdown(storage: StorageSnapshot) -> [StorageBreakdown] {
-        let ratios: [(String, Color, Double)] = [
-            ("Apps", PopoverTheme.blue, 0.18),
-            ("Documents", PopoverTheme.purple, 0.25),
-            ("Developer", PopoverTheme.orange, 0.34),
-            ("Media", PopoverTheme.mint, 0.15),
-            ("System & Other", PopoverTheme.textMuted, 0.08)
-        ]
-
-        return ratios.map { name, color, ratio in
-            StorageBreakdown(name: name, color: color, bytes: UInt64(Double(storage.usedBytes) * ratio))
-        }
     }
 
     private var settingsScreen: some View {
@@ -643,12 +556,6 @@ struct PopoverRootView: View {
             return "questionmark.circle"
         }
     }
-}
-
-private struct StorageBreakdown {
-    let name: String
-    let color: Color
-    let bytes: UInt64
 }
 
 enum PopoverTheme {
