@@ -41,15 +41,7 @@ struct LibprocProcessListCollector: ProcessListCollecting {
             items.append(record)
         }
 
-        items.sort {
-            if $0.rankingBytes == $1.rankingBytes {
-                if $0.name == $1.name {
-                    return $0.pid < $1.pid
-                }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            return $0.rankingBytes > $1.rankingBytes
-        }
+        items.sort(by: ProcessMemoryItem.rankDescending)
 
         return Array(items.prefix(limit))
     }
@@ -96,10 +88,11 @@ struct LibprocProcessListCollector: ProcessListCollecting {
             let executable = command.prefix(while: { !$0.isWhitespace })
             let name = executable.split(separator: "/").last.map(String.init) ?? String(executable)
             let userID = uid_t(uidValue)
+            let flags = bsdFlags(for: pid)
             let decision = protectionPolicy.evaluate(
                 processID: pid,
                 userID: userID,
-                flags: 0,
+                flags: flags,
                 processName: name
             )
 
@@ -111,21 +104,13 @@ struct LibprocProcessListCollector: ProcessListCollecting {
                     userName: userName(for: userID),
                     residentBytes: rssKiB * 1024,
                     footprintBytes: nil,
-                    bsdFlags: 0,
+                    bsdFlags: flags,
                     protectionReason: decision.reason
                 )
             )
         }
 
-        items.sort {
-            if $0.rankingBytes == $1.rankingBytes {
-                if $0.name == $1.name {
-                    return $0.pid < $1.pid
-                }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            return $0.rankingBytes > $1.rankingBytes
-        }
+        items.sort(by: ProcessMemoryItem.rankDescending)
 
         return Array(items.prefix(limit))
     }
@@ -197,6 +182,17 @@ struct LibprocProcessListCollector: ProcessListCollecting {
         }
 
         return usage.ri_phys_footprint
+    }
+
+    private func bsdFlags(for pid: Int32) -> UInt32 {
+        var bsdInfo = proc_bsdinfo()
+        let bytesRead = withUnsafeMutableBytes(of: &bsdInfo) { rawBuffer in
+            proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, rawBuffer.baseAddress, Int32(rawBuffer.count))
+        }
+        guard bytesRead == Int32(MemoryLayout<proc_bsdinfo>.stride) else {
+            return 0
+        }
+        return bsdInfo.pbi_flags
     }
 
     private func userName(for userID: uid_t) -> String {

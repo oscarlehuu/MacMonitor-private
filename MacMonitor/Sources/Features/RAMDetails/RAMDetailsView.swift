@@ -36,7 +36,7 @@ struct RAMDetailsView: View {
         .alert("Terminate selected processes?", isPresented: $viewModel.showingTerminateConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Terminate", role: .destructive) {
-                viewModel.terminateSelected()
+                Task { await viewModel.terminateSelected() }
             }
         } message: {
             Text("MacMonitor will proceed with allowed processes only. Protected items are skipped.")

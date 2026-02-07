@@ -78,7 +78,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         await viewModel.performRefresh()
         viewModel.selectedProcessIDs = [200, 201]
 
-        viewModel.terminateSelected()
+        await viewModel.terminateSelected()
 
         XCTAssertEqual(terminator.lastSelectedProcessIDs, [200])
         XCTAssertTrue(viewModel.selectedProcessIDs.isEmpty)

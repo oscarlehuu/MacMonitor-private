@@ -30,4 +30,16 @@ struct ProcessMemoryItem: Identifiable, Equatable {
         }
         return "Resident"
     }
+
+    /// Canonical sort order: descending by `rankingBytes`, then ascending
+    /// case-insensitive name, then ascending pid as final tiebreaker.
+    static func rankDescending(_ lhs: ProcessMemoryItem, _ rhs: ProcessMemoryItem) -> Bool {
+        if lhs.rankingBytes == rhs.rankingBytes {
+            if lhs.name == rhs.name {
+                return lhs.pid < rhs.pid
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return lhs.rankingBytes > rhs.rankingBytes
+    }
 }

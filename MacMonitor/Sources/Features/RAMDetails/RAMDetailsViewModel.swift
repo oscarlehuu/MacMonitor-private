@@ -147,7 +147,7 @@ final class RAMDetailsViewModel: ObservableObject {
         showingTerminateConfirmation = true
     }
 
-    func terminateSelected() {
+    func terminateSelected() async {
         let allowedIDs = Set(
             processes
                 .filter { selectedProcessIDs.contains($0.pid) && !$0.isProtected }
@@ -161,6 +161,10 @@ final class RAMDetailsViewModel: ObservableObject {
 
         isTerminating = true
         showingTerminateConfirmation = false
+
+        // Yield so SwiftUI can observe the isTerminating state before
+        // performing the synchronous kill() calls.
+        await Task.yield()
 
         let summary = processTerminator.terminate(processes: processes, selectedProcessIDs: allowedIDs)
         resultMessage = summary.message
