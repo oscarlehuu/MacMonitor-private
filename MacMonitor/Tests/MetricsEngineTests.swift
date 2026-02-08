@@ -1,4 +1,5 @@
 import Combine
+import Darwin
 import XCTest
 @testable import MacMonitor
 
@@ -66,6 +67,18 @@ final class MetricsEngineTests: XCTestCase {
             settings: settings,
             now: { Date(timeIntervalSince1970: 1_234_567) }
         )
+    }
+}
+
+final class MemoryCollectorTests: XCTestCase {
+    func testUsedPageCountExcludesInactivePages() {
+        var stats = vm_statistics64()
+        stats.active_count = 120
+        stats.inactive_count = 240
+        stats.wire_count = 30
+        stats.compressor_page_count = 10
+
+        XCTAssertEqual(MemoryCollector.usedPageCount(from: stats), 150)
     }
 }
 

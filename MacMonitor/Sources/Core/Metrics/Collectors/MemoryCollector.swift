@@ -6,6 +6,11 @@ protocol MemoryCollecting {
 }
 
 struct MemoryCollector: MemoryCollecting {
+    static func usedPageCount(from stats: vm_statistics64) -> UInt64 {
+        // "Used" in the RAM headline follows the app formula: Active + Wired.
+        UInt64(stats.active_count) + UInt64(stats.wire_count)
+    }
+
     func collect() -> MemorySnapshot? {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
@@ -28,7 +33,12 @@ struct MemoryCollector: MemoryCollecting {
         }
 
         let totalBytes = ProcessInfo.processInfo.physicalMemory
-        let usedPages = UInt64(stats.active_count) + UInt64(stats.inactive_count) + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)
+        let activeBytes = UInt64(stats.active_count) * UInt64(pageSize)
+        let inactiveBytes = UInt64(stats.inactive_count) * UInt64(pageSize)
+        let wiredBytes = UInt64(stats.wire_count) * UInt64(pageSize)
+        let compressedBytes = UInt64(stats.compressor_page_count) * UInt64(pageSize)
+        let freeBytes = UInt64(stats.free_count) * UInt64(pageSize)
+        let usedPages = Self.usedPageCount(from: stats)
         let usedBytes = min(totalBytes, usedPages * UInt64(pageSize))
 
         let freePages = UInt64(stats.free_count)
@@ -45,6 +55,15 @@ struct MemoryCollector: MemoryCollecting {
             pressure = .normal
         }
 
-        return MemorySnapshot(usedBytes: usedBytes, totalBytes: totalBytes, pressure: pressure)
+        return MemorySnapshot(
+            usedBytes: usedBytes,
+            totalBytes: totalBytes,
+            pressure: pressure,
+            activeBytes: activeBytes,
+            inactiveBytes: inactiveBytes,
+            wiredBytes: wiredBytes,
+            compressedBytes: compressedBytes,
+            freeBytes: freeBytes
+        )
     }
 }

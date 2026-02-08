@@ -6,6 +6,10 @@ struct RAMDetailsView: View {
     let onBack: () -> Void
     let showsBackButton: Bool
 
+    @State private var hoveredSegmentKey: MemoryBreakdownSegmentKey?
+    @State private var hoverPoint: CGPoint = .zero
+    @State private var chartAreaFrame: CGRect = .zero
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if showsBackButton {
@@ -72,32 +76,68 @@ struct RAMDetailsView: View {
     }
 
     private func summaryStrip(_ memory: MemorySnapshot) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("RAM \(MetricFormatter.percent(used: memory.usedBytes, total: memory.totalBytes)) \u{2014} \(MetricFormatter.usage(used: memory.usedBytes, total: memory.totalBytes))")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textPrimary)
+        let segments = breakdownSegments(memory)
+        let usedPercent = percentString(used: memory.usedBytes, total: memory.totalBytes, fractionDigits: 1)
+        let usedUsage = "\(MetricFormatter.bytes(memory.usedBytes)) / \(MetricFormatter.bytes(memory.totalBytes))"
+        let inclCompressed = memory.usedIncludingCompressedBytes
+        let inclCompressedPercent = percentString(used: inclCompressed, total: memory.totalBytes, fractionDigits: 1)
 
-                Text(summaryUsageText(memory: memory))
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textSecondary)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .center, spacing: 4) {
+                        Text("RAM \(usedPercent) — \(usedUsage)")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(PopoverTheme.textPrimary)
+
+                        infoIcon
+                    }
+
+                    Text("Used = Active + Wired")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textSecondary)
+
+                    Text("Incl. Compressed: \(MetricFormatter.bytes(inclCompressed)) (\(inclCompressedPercent))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 6)
+
+                pressureBadge(memory.pressure)
             }
 
-            Spacer(minLength: 6)
+            VStack(alignment: .leading, spacing: 8) {
+                barTrack(segments: segments)
 
-            Text(memory.pressure.title)
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule()
-                        .fill(pressureFill(for: memory.pressure))
-                )
-                .foregroundStyle(pressureTint(for: memory.pressure))
-                .help(memory.pressure.explanation)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 4) {
+                    ForEach(segments) { segment in
+                        legendItem(for: segment, totalBytes: memory.totalBytes)
+                    }
+                }
+            }
+            .padding(.top, 2)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear {
+                            chartAreaFrame = geometry.frame(in: .global)
+                        }
+                        .onChange(of: geometry.frame(in: .global)) { _, newValue in
+                            chartAreaFrame = newValue
+                        }
+                }
+            )
+            .overlay(alignment: .topLeading) {
+                if let hoveredSegmentKey,
+                   let hoveredSegment = segments.first(where: { $0.key == hoveredSegmentKey }) {
+                    chartTooltip(segment: hoveredSegment, totalBytes: memory.totalBytes)
+                        .offset(x: tooltipOffsetX, y: tooltipOffsetY)
+                }
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(PopoverTheme.bgCard)
@@ -106,6 +146,173 @@ struct RAMDetailsView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(PopoverTheme.blue.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    private var infoIcon: some View {
+        ZStack {
+            Circle()
+                .stroke(PopoverTheme.textMuted, lineWidth: 1)
+                .frame(width: 14, height: 14)
+            Text("i")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(PopoverTheme.textMuted)
+        }
+        .help("Used = Active + Wired (kernel-locked memory)\nCompressed = Pages compressed by macOS\nInactive = Reclaimable file-backed cache\nFree = Immediately available pages")
+    }
+
+    private func pressureBadge(_ pressure: MemoryPressureLevel) -> some View {
+        Text(pressure.title)
+            .font(.system(size: 10, weight: .semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(pressureFill(for: pressure))
+            )
+            .foregroundStyle(pressureTint(for: pressure))
+            .help(pressure.explanation)
+    }
+
+    private func barTrack(segments: [MemoryBreakdownSegment]) -> some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ForEach(segments) { segment in
+                    Rectangle()
+                        .fill(segment.color)
+                        .frame(width: max(0, geometry.size.width * segment.ratio))
+                        .opacity(segmentOpacity(for: segment.key))
+                        .brightness(hoveredSegmentKey == segment.key ? 0.08 : 0)
+                        .onContinuousHover(coordinateSpace: .global) { phase in
+                            switch phase {
+                            case .active(let location):
+                                hoveredSegmentKey = segment.key
+                                hoverPoint = location
+                            case .ended:
+                                hoveredSegmentKey = nil
+                            }
+                        }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 12)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func legendItem(for segment: MemoryBreakdownSegment, totalBytes: UInt64) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(segment.color)
+                .frame(width: 8, height: 8)
+
+            Text(segment.name)
+                .font(.system(size: 10))
+                .foregroundStyle(PopoverTheme.textSecondary)
+                .lineLimit(1)
+
+            Text(segment.valueText(totalBytes: totalBytes))
+                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                .foregroundStyle(PopoverTheme.textMuted)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(hoveredSegmentKey == segment.key ? Color.white.opacity(0.04) : .clear)
+        )
+        .opacity(segmentOpacity(for: segment.key))
+        .onContinuousHover(coordinateSpace: .global) { phase in
+            switch phase {
+            case .active(let location):
+                hoveredSegmentKey = segment.key
+                hoverPoint = location
+            case .ended:
+                hoveredSegmentKey = nil
+            }
+        }
+    }
+
+    private func chartTooltip(segment: MemoryBreakdownSegment, totalBytes: UInt64) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(segment.name): \(segment.valueText(totalBytes: totalBytes))")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(PopoverTheme.textPrimary)
+
+            Text(segment.description)
+                .font(.system(size: 10))
+                .foregroundStyle(PopoverTheme.textMuted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgElevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(PopoverTheme.borderMedium, lineWidth: 1)
+        )
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+
+    private var tooltipOffsetX: CGFloat {
+        let localX = hoverPoint.x - chartAreaFrame.minX + 12
+        return max(0, min(localX, max(chartAreaFrame.width - 210, 0)))
+    }
+
+    private var tooltipOffsetY: CGFloat {
+        let localY = hoverPoint.y - chartAreaFrame.minY - 42
+        return max(0, localY)
+    }
+
+    private func breakdownSegments(_ memory: MemorySnapshot) -> [MemoryBreakdownSegment] {
+        let totalBytes = max(memory.totalBytes, 1)
+        let usedBytes = min(memory.usedBytes, memory.totalBytes)
+        let compressedBytes = min(memory.compressedBytes ?? 0, memory.totalBytes)
+        let inactiveBytes = min(memory.inactiveBytes ?? 0, memory.totalBytes)
+
+        let fallbackFreeBytes: UInt64 = {
+            let accounted = min(memory.totalBytes, usedBytes + compressedBytes + inactiveBytes)
+            return max(memory.totalBytes - accounted, 0)
+        }()
+
+        let freeBytes = min(memory.freeBytes ?? fallbackFreeBytes, memory.totalBytes)
+
+        let rawSegments: [(MemoryBreakdownSegmentKey, String, UInt64, Color, String)] = [
+            (.used, "Used (Active + Wired)", usedBytes, PopoverTheme.blue, "App memory + kernel-locked pages"),
+            (.compressed, "Compressed", compressedBytes, Color(hex: 0xf59e0b), "Pages compressed by macOS VM"),
+            (.inactive, "Inactive (Cache)", inactiveBytes, PopoverTheme.purple, "Reclaimable file-backed cache"),
+            (.free, "Free", freeBytes, PopoverTheme.green, "Immediately available pages")
+        ]
+
+        return rawSegments
+            .filter { $0.2 > 0 }
+            .map { key, name, bytes, color, description in
+                MemoryBreakdownSegment(
+                    key: key,
+                    name: name,
+                    bytes: bytes,
+                    color: color,
+                    description: description,
+                    ratio: Double(bytes) / Double(totalBytes)
+                )
+            }
+    }
+
+    private func segmentOpacity(for key: MemoryBreakdownSegmentKey) -> Double {
+        guard let hoveredSegmentKey else { return 1 }
+        return hoveredSegmentKey == key ? 1 : 0.25
+    }
+
+    private func percentString(used: UInt64, total: UInt64, fractionDigits: Int) -> String {
+        guard total > 0 else { return "0%" }
+        let ratio = (Double(used) / Double(total)) * 100
+        return String(format: "%0.*f%%", fractionDigits, ratio)
     }
 
     private var scopeControls: some View {
@@ -197,7 +404,7 @@ struct RAMDetailsView: View {
 
     private var terminateBar: some View {
         HStack {
-            Text("\(viewModel.selectedAllowedCount) selected \u{2022} \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))")
+            Text("\(viewModel.selectedAllowedCount) selected • \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))")
                 .font(.system(size: 10))
                 .foregroundStyle(PopoverTheme.textMuted)
 
@@ -266,15 +473,6 @@ struct RAMDetailsView: View {
         }
     }
 
-    private func summaryUsageText(memory: MemorySnapshot) -> String {
-        switch viewModel.scopeMode {
-        case .sameUserOnly:
-            return "\(MetricFormatter.bytes(viewModel.myProcessBytes)) user / \(MetricFormatter.bytes(viewModel.allProcessBytes)) total / \(MetricFormatter.bytes(memory.totalBytes))"
-        case .allDiscoverable:
-            return "\(MetricFormatter.bytes(viewModel.allProcessBytes)) total / \(MetricFormatter.bytes(memory.totalBytes))"
-        }
-    }
-
     private var totalProcessesInScope: Int {
         switch viewModel.scopeMode {
         case .sameUserOnly:
@@ -287,9 +485,9 @@ struct RAMDetailsView: View {
     private var listSummaryText: String {
         let listed = MetricFormatter.bytes(viewModel.listedRowsBytes)
         if viewModel.scopeMode == .sameUserOnly && viewModel.showAllMine {
-            return "All mine \(viewModel.processes.count) of \(viewModel.myProcessCount) \u{2022} Listed \(listed)"
+            return "All mine \(viewModel.processes.count) of \(viewModel.myProcessCount) • Listed \(listed)"
         }
-        return "Top \(viewModel.processes.count) of \(totalProcessesInScope) \u{2022} Listed \(listed)"
+        return "Top \(viewModel.processes.count) of \(totalProcessesInScope) • Listed \(listed)"
     }
 }
 
@@ -300,49 +498,33 @@ private struct ProcessRowView: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 checkbox
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(process.name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(processNameColor)
-                            .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(process.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(processNameColor)
+                        .lineLimit(1)
 
-                        Spacer(minLength: 8)
-
-                        Text(MetricFormatter.bytes(process.rankingBytes))
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(PopoverTheme.textPrimary)
-                    }
-
-                    HStack(spacing: 6) {
-                        Text("PID \(process.pid) \u{2022} \(process.userName)")
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .foregroundStyle(PopoverTheme.textMuted)
-                            .lineLimit(1)
-
-                        if let reason = process.protectionReason {
-                            Text(reason.description)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(PopoverTheme.orange)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(PopoverTheme.orangeDim)
-                                )
-                        }
-
-                        Spacer(minLength: 4)
-
-                        Text(metricSummary)
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .foregroundStyle(PopoverTheme.textMuted)
-                            .lineLimit(1)
-                    }
+                    Text(processMetaLine)
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .lineLimit(1)
                 }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(MetricFormatter.bytes(process.rankingBytes))
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+
+                    Text(metricSummary)
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -375,7 +557,6 @@ private struct ProcessRowView: View {
                 }
             }
             .opacity(process.isProtected ? 0.3 : 1)
-            .padding(.top, 1)
     }
 
     private var borderColor: Color {
@@ -392,11 +573,42 @@ private struct ProcessRowView: View {
         process.isProtected ? PopoverTheme.textMuted : PopoverTheme.textPrimary
     }
 
+    private var processMetaLine: String {
+        if let reason = process.protectionReason {
+            return "PID \(process.pid) • \(process.userName) • \(reason.description)"
+        }
+        return "PID \(process.pid) • \(process.userName)"
+    }
+
     private var metricSummary: String {
         if let footprintBytes = process.footprintBytes, footprintBytes > 0 {
             return "\(MetricFormatter.bytes(footprintBytes)) PSS"
         }
         return "\(MetricFormatter.bytes(process.residentBytes)) Resident"
+    }
+}
+
+private enum MemoryBreakdownSegmentKey: String {
+    case used
+    case compressed
+    case inactive
+    case free
+}
+
+private struct MemoryBreakdownSegment: Identifiable {
+    let key: MemoryBreakdownSegmentKey
+    let name: String
+    let bytes: UInt64
+    let color: Color
+    let description: String
+    let ratio: Double
+
+    var id: MemoryBreakdownSegmentKey { key }
+
+    func valueText(totalBytes: UInt64) -> String {
+        let total = max(totalBytes, 1)
+        let percent = (Double(bytes) / Double(total)) * 100
+        return "\(MetricFormatter.bytes(bytes)) (\(String(format: "%.1f", percent))%)"
     }
 }
 
@@ -417,11 +629,11 @@ private extension MemoryPressureLevel {
     var explanation: String {
         switch self {
         case .normal:
-            return "Memory pressure is normal."
+            return "Memory pressure is normal — no swap activity."
         case .warning:
-            return "Memory pressure warning: macOS is reclaiming memory more aggressively."
+            return "macOS is reclaiming memory more aggressively."
         case .critical:
-            return "Memory pressure is critical: apps may be terminated by the system."
+            return "Critical pressure: apps may be terminated."
         case .unknown:
             return "Memory pressure is currently unavailable."
         }
