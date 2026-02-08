@@ -94,7 +94,6 @@ final class RAMDetailsViewModel: ObservableObject {
         let collector = processCollector
         let showAll = showAllMine
         let rows = maxRows
-        let uid = currentUserID
         let scope = scopeMode
 
         do {
