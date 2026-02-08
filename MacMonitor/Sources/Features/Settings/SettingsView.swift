@@ -161,7 +161,8 @@ struct SettingsView: View {
         ) {
             settingRow(
                 title: "Launch at login",
-                subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login"
+                subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login",
+                subtitleColor: settings.launchAtLoginError != nil ? PopoverTheme.red : PopoverTheme.textMuted
             ) {
                 Toggle("", isOn: $settings.launchAtLoginEnabled)
                     .labelsHidden()
@@ -169,7 +170,6 @@ struct SettingsView: View {
                     .tint(PopoverTheme.blue)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .foregroundStyle(settings.launchAtLoginError == nil ? PopoverTheme.textPrimary : PopoverTheme.red)
         }
     }
 
@@ -244,6 +244,7 @@ struct SettingsView: View {
     private func settingRow<Content: View>(
         title: String,
         subtitle: String,
+        subtitleColor: Color = PopoverTheme.textMuted,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -253,7 +254,7 @@ struct SettingsView: View {
 
             Text(subtitle)
                 .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textMuted)
+                .foregroundStyle(subtitleColor)
 
             content()
         }
