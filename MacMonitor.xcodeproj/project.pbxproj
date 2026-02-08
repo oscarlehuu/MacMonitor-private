@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04E0FB97B6EE7E1F4AEFAB35 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941700165C111E76B04CD300 /* MenuBarController.swift */; };
+		064080983D9E49E926317894 /* MenuBarDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9F7F99BD40B5C30DA032A5 /* MenuBarDisplayFormatter.swift */; };
 		07AD23476E24B1EF4A0F49FE /* MetricFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB0997A4E9ACE2FFE25FFE1 /* MetricFormatterTests.swift */; };
 		10C141A21FDE82BC95E24CE4 /* SystemSummaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159CD730784F43EC59156F0B /* SystemSummaryViewModel.swift */; };
 		181777D1086B0FD50EE3CF52 /* SettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF43AE76CA735DDDDCC666C1 /* SettingsStoreTests.swift */; };
@@ -35,9 +36,11 @@
 		7624234E2183B24791F2DC0A /* ProcessProtectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB570304AC01EE313F1CBB4D /* ProcessProtectionPolicy.swift */; };
 		7787017B007B171C0EBD60B8 /* SnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772C3D8CEA3E94A326B95755 /* SnapshotStore.swift */; };
 		78CB8292ACC26CC5D47B70B3 /* SnapshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28CD4F8B3CFF153D7BB06F5B /* SnapshotStoreTests.swift */; };
+		79D1638F6B5F7737B47A979F /* MenuBarStatusIconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CFE5C55989025593739B50 /* MenuBarStatusIconRenderer.swift */; };
 		7C297ED449F5F6A514B986D4 /* MetricsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D62B0D507515E565BB9E0A0 /* MetricsEngine.swift */; };
 		88387CDAE2AC1CC74EF89B57 /* MacMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEA6BD38BA8D887B1DB64A9 /* MacMonitorApp.swift */; };
 		9103C399CB45A35D2AA78DF5 /* RAMPolicyEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49FAADA9E9A136F18E9336A /* RAMPolicyEvaluator.swift */; };
+		9B960F60144FD00EA21E20C1 /* MenuBarDisplayFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A0F640289C1463DC2BCEE8 /* MenuBarDisplayFormatterTests.swift */; };
 		9D1582E3A3AA0BE3CDC0EC93 /* ThermalCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77F3B3CE81E8983697B5DA3 /* ThermalCollector.swift */; };
 		A0620EE28C8FB7119152B7D0 /* RAMPolicyEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C06E61074B633D6D13ED7296 /* RAMPolicyEvaluatorTests.swift */; };
 		ADF8EAF1A98728FA7C580BB2 /* ProcessProtectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF888678A69B73A27AC6B5D /* ProcessProtectionPolicyTests.swift */; };
@@ -66,6 +69,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		04CFE5C55989025593739B50 /* MenuBarStatusIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatusIconRenderer.swift; sourceTree = "<group>"; };
 		07002BDE8626C66BC778862E /* StorageCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCollector.swift; sourceTree = "<group>"; };
 		159CD730784F43EC59156F0B /* SystemSummaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSummaryViewModel.swift; sourceTree = "<group>"; };
 		1B2B40D2FD6F77679BD222DB /* FileRAMPolicyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileRAMPolicyStoreTests.swift; sourceTree = "<group>"; };
@@ -78,6 +82,7 @@
 		38E319329C90694AD37693FE /* MetricFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricFormatter.swift; sourceTree = "<group>"; };
 		3F3718321C22DD14B8B2D695 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4152BE4A80031CF8082079D1 /* RAMPolicyEventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyEventStore.swift; sourceTree = "<group>"; };
+		44A0F640289C1463DC2BCEE8 /* MenuBarDisplayFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarDisplayFormatterTests.swift; sourceTree = "<group>"; };
 		44C1428F04FBFCBA0C2731DA /* RAMDetailsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMDetailsViewModel.swift; sourceTree = "<group>"; };
 		45C8CEA7757A3D851067C250 /* RAMPolicySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicySettingsView.swift; sourceTree = "<group>"; };
 		4EA87CA5A81227576FA6BD26 /* LibprocProcessListCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibprocProcessListCollector.swift; sourceTree = "<group>"; };
@@ -85,6 +90,7 @@
 		56E285A0A1746AE659981F22 /* MacMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		582041D656EB3F83A1E15926 /* ThermalCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalCardView.swift; sourceTree = "<group>"; };
 		5AB0997A4E9ACE2FFE25FFE1 /* MetricFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricFormatterTests.swift; sourceTree = "<group>"; };
+		5B9F7F99BD40B5C30DA032A5 /* MenuBarDisplayFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarDisplayFormatter.swift; sourceTree = "<group>"; };
 		5BC98187389EEBBACA7F00BB /* RAMPolicyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyStore.swift; sourceTree = "<group>"; };
 		6B2C138F9087A204F5154A2C /* MemoryCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryCollector.swift; sourceTree = "<group>"; };
 		721B261287E8F32DBDACDCA7 /* MetricsEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsEngineTests.swift; sourceTree = "<group>"; };
@@ -205,6 +211,8 @@
 			isa = PBXGroup;
 			children = (
 				941700165C111E76B04CD300 /* MenuBarController.swift */,
+				5B9F7F99BD40B5C30DA032A5 /* MenuBarDisplayFormatter.swift */,
+				04CFE5C55989025593739B50 /* MenuBarStatusIconRenderer.swift */,
 			);
 			path = MenuBar;
 			sourceTree = "<group>";
@@ -269,6 +277,7 @@
 			children = (
 				87474FC1ABE7CC3318FBE2A9 /* FileRAMPolicyEventStoreTests.swift */,
 				1B2B40D2FD6F77679BD222DB /* FileRAMPolicyStoreTests.swift */,
+				44A0F640289C1463DC2BCEE8 /* MenuBarDisplayFormatterTests.swift */,
 				5AB0997A4E9ACE2FFE25FFE1 /* MetricFormatterTests.swift */,
 				721B261287E8F32DBDACDCA7 /* MetricsEngineTests.swift */,
 				7FF888678A69B73A27AC6B5D /* ProcessProtectionPolicyTests.swift */,
@@ -407,6 +416,7 @@
 			files = (
 				6822E73C47151980DC6BABD5 /* FileRAMPolicyEventStoreTests.swift in Sources */,
 				4F226C0C7A62B29D0765FDB0 /* FileRAMPolicyStoreTests.swift in Sources */,
+				9B960F60144FD00EA21E20C1 /* MenuBarDisplayFormatterTests.swift in Sources */,
 				07AD23476E24B1EF4A0F49FE /* MetricFormatterTests.swift in Sources */,
 				46CA4FB01FD369F8453F67C7 /* MetricsEngineTests.swift in Sources */,
 				ADF8EAF1A98728FA7C580BB2 /* ProcessProtectionPolicyTests.swift in Sources */,
@@ -432,6 +442,8 @@
 				88387CDAE2AC1CC74EF89B57 /* MacMonitorApp.swift in Sources */,
 				D3520EE7AEADD7A5FA2FAF47 /* MemoryCollector.swift in Sources */,
 				04E0FB97B6EE7E1F4AEFAB35 /* MenuBarController.swift in Sources */,
+				064080983D9E49E926317894 /* MenuBarDisplayFormatter.swift in Sources */,
+				79D1638F6B5F7737B47A979F /* MenuBarStatusIconRenderer.swift in Sources */,
 				BD0EBFDE38B6E99D3010BBC1 /* MetricFormatter.swift in Sources */,
 				7C297ED449F5F6A514B986D4 /* MetricsEngine.swift in Sources */,
 				6644AE576A48C6581840323B /* PopoverRootView.swift in Sources */,

@@ -33,9 +33,7 @@ struct MemoryCollector: MemoryCollecting {
         }
 
         let totalBytes = ProcessInfo.processInfo.physicalMemory
-        let activeBytes = UInt64(stats.active_count) * UInt64(pageSize)
         let inactiveBytes = UInt64(stats.inactive_count) * UInt64(pageSize)
-        let wiredBytes = UInt64(stats.wire_count) * UInt64(pageSize)
         let compressedBytes = UInt64(stats.compressor_page_count) * UInt64(pageSize)
         let freeBytes = UInt64(stats.free_count) * UInt64(pageSize)
         let usedPages = Self.usedPageCount(from: stats)
@@ -59,9 +57,7 @@ struct MemoryCollector: MemoryCollecting {
             usedBytes: usedBytes,
             totalBytes: totalBytes,
             pressure: pressure,
-            activeBytes: activeBytes,
             inactiveBytes: inactiveBytes,
-            wiredBytes: wiredBytes,
             compressedBytes: compressedBytes,
             freeBytes: freeBytes
         )

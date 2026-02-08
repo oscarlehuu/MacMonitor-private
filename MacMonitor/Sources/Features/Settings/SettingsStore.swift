@@ -18,6 +18,57 @@ enum RefreshInterval: Int, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum MenuBarDisplayMode: String, CaseIterable, Codable, Identifiable {
+    case icon
+    case ram
+    case storage
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .icon:
+            return "Icon"
+        case .ram:
+            return "RAM"
+        case .storage:
+            return "Storage"
+        }
+    }
+}
+
+enum MenuBarMetricValueMode: String, CaseIterable, Codable, Identifiable {
+    case used
+    case free
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .used:
+            return "Used"
+        case .free:
+            return "Free"
+        }
+    }
+}
+
+enum MenuBarMetricFormat: String, CaseIterable, Codable, Identifiable {
+    case percent
+    case number
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .percent:
+            return "Percent"
+        case .number:
+            return "Number"
+        }
+    }
+}
+
 protocol LaunchAtLoginManaging {
     func isEnabled() -> Bool
     func setEnabled(_ enabled: Bool) throws
@@ -29,6 +80,27 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard !isHydrating else { return }
             defaults.set(refreshInterval.rawValue, forKey: Keys.refreshInterval)
+        }
+    }
+
+    @Published var menuBarDisplayMode: MenuBarDisplayMode {
+        didSet {
+            guard !isHydrating else { return }
+            defaults.set(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode)
+        }
+    }
+
+    @Published var menuBarMetricValueMode: MenuBarMetricValueMode {
+        didSet {
+            guard !isHydrating else { return }
+            defaults.set(menuBarMetricValueMode.rawValue, forKey: Keys.menuBarMetricValueMode)
+        }
+    }
+
+    @Published var menuBarMetricFormat: MenuBarMetricFormat {
+        didSet {
+            guard !isHydrating else { return }
+            defaults.set(menuBarMetricFormat.rawValue, forKey: Keys.menuBarMetricFormat)
         }
     }
 
@@ -49,6 +121,9 @@ final class SettingsStore: ObservableObject {
 
     private enum Keys {
         static let refreshInterval = "settings.refreshIntervalMinutes"
+        static let menuBarDisplayMode = "settings.menuBarDisplayMode"
+        static let menuBarMetricValueMode = "settings.menuBarMetricValueMode"
+        static let menuBarMetricFormat = "settings.menuBarMetricFormat"
         static let launchAtLogin = "settings.launchAtLogin"
     }
 
@@ -61,6 +136,16 @@ final class SettingsStore: ObservableObject {
 
         let persistedInterval = defaults.integer(forKey: Keys.refreshInterval)
         self.refreshInterval = RefreshInterval(rawValue: persistedInterval) ?? .threeMinutes
+
+        self.menuBarDisplayMode = MenuBarDisplayMode(
+            rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? ""
+        ) ?? .icon
+        self.menuBarMetricValueMode = MenuBarMetricValueMode(
+            rawValue: defaults.string(forKey: Keys.menuBarMetricValueMode) ?? ""
+        ) ?? .used
+        self.menuBarMetricFormat = MenuBarMetricFormat(
+            rawValue: defaults.string(forKey: Keys.menuBarMetricFormat) ?? ""
+        ) ?? .percent
 
         if defaults.object(forKey: Keys.launchAtLogin) == nil {
             self.launchAtLoginEnabled = launchAtLoginManager.isEnabled()

@@ -7,9 +7,11 @@ final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    private let statusIconRenderer = MenuBarStatusIconRenderer.shared
     private var cancellables = Set<AnyCancellable>()
+    private var appearanceObserver: NSObjectProtocol?
 
     init(
         viewModel: SystemSummaryViewModel,
@@ -24,6 +26,7 @@ final class MenuBarController: NSObject {
 
     func install() {
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
                 viewModel: viewModel,
@@ -35,15 +38,19 @@ final class MenuBarController: NSObject {
         guard let button = statusItem.button else { return }
         button.action = #selector(togglePopover(_:))
         button.target = self
-        button.imagePosition = .imageOnly
         button.sendAction(on: [.leftMouseDown])
 
+        installAppearanceObserver()
         bindViewModel()
-        applyStatus(for: viewModel.thermalState)
+        renderStatusItem()
     }
 
     func uninstall() {
         cancellables.removeAll()
+        if let appearanceObserver {
+            DistributedNotificationCenter.default().removeObserver(appearanceObserver)
+            self.appearanceObserver = nil
+        }
         if popover.isShown {
             popover.performClose(nil)
         }
@@ -58,54 +65,136 @@ final class MenuBarController: NSObject {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
+
+        renderStatusItem()
     }
 
     private func bindViewModel() {
         viewModel.$snapshot
             .receive(on: RunLoop.main)
-            .sink { [weak self] snapshot in
+            .sink { [weak self] _ in
                 guard let self else { return }
-                applyStatus(for: snapshot?.thermal.state ?? .unknown)
                 statusItem.button?.toolTip = viewModel.statusTooltip
+                renderStatusItem()
             }
             .store(in: &cancellables)
+
+        Publishers.CombineLatest3(
+            viewModel.settings.$menuBarDisplayMode,
+            viewModel.settings.$menuBarMetricValueMode,
+            viewModel.settings.$menuBarMetricFormat
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _, _, _ in
+            self?.renderStatusItem()
+        }
+        .store(in: &cancellables)
     }
 
-    private func applyStatus(for state: ThermalState) {
+    private func renderStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: state.symbolName, accessibilityDescription: state.title)
-        button.contentTintColor = state.nsColor
+        let settings = viewModel.settings
+
+        switch settings.menuBarDisplayMode {
+        case .icon:
+            statusItem.length = NSStatusItem.squareLength
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.image = statusIconRenderer.icon(
+                for: statusIconVariant(for: button, thermalState: viewModel.thermalState),
+                pointSize: iconPointSize(for: button)
+            )
+        case .ram, .storage:
+            statusItem.length = NSStatusItem.variableLength
+            button.imagePosition = .imageLeft
+            button.image = metricIcon(for: settings.menuBarDisplayMode, in: button)
+            button.font = NSFont.monospacedDigitSystemFont(
+                ofSize: NSFont.systemFontSize(for: .small),
+                weight: .semibold
+            )
+            button.title = MenuBarDisplayFormatter.valueText(
+                for: viewModel.snapshot,
+                mode: settings.menuBarDisplayMode,
+                valueMode: settings.menuBarMetricValueMode,
+                format: settings.menuBarMetricFormat
+            ) ?? ""
+        }
+
+        button.contentTintColor = nil
+    }
+
+    private func metricIcon(for mode: MenuBarDisplayMode, in button: NSStatusBarButton) -> NSImage? {
+        let symbolName: String
+        switch mode {
+        case .icon:
+            return nil
+        case .ram:
+            symbolName = "memorychip.fill"
+        case .storage:
+            symbolName = "internaldrive.fill"
+        }
+
+        guard let symbolImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+            return nil
+        }
+
+        let configured = symbolImage.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(
+                pointSize: max(10, iconPointSize(for: button) - 4),
+                weight: .medium
+            )
+        )
+        guard let configured else {
+            symbolImage.isTemplate = true
+            return symbolImage
+        }
+        configured.isTemplate = true
+        return configured
+    }
+
+    private func statusIconVariant(for button: NSStatusBarButton, thermalState: ThermalState) -> MenuBarIconVariant {
+        if popover.isShown {
+            return .premiumGlass(thermalState)
+        }
+
+        let bestAppearance = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        if bestAppearance == .darkAqua {
+            return .white
+        }
+        return .black
+    }
+
+    private func iconPointSize(for button: NSStatusBarButton) -> CGFloat {
+        let side = min(button.bounds.width, button.bounds.height)
+        guard side > 8 else { return 18 }
+        return max(side - 4, 14)
+    }
+
+    private func installAppearanceObserver() {
+        if let appearanceObserver {
+            DistributedNotificationCenter.default().removeObserver(appearanceObserver)
+            self.appearanceObserver = nil
+        }
+
+        appearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.renderStatusItem()
+            }
+        }
     }
 }
 
-private extension ThermalState {
-    var symbolName: String {
-        switch self {
-        case .nominal:
-            return "thermometer.low"
-        case .fair:
-            return "thermometer.medium"
-        case .serious:
-            return "thermometer.high"
-        case .critical:
-            return "exclamationmark.triangle.fill"
-        case .unknown:
-            return "questionmark.circle"
-        }
+extension MenuBarController: NSPopoverDelegate {
+    func popoverDidShow(_ notification: Notification) {
+        renderStatusItem()
     }
 
-    var nsColor: NSColor {
-        switch self {
-        case .nominal:
-            return .systemGreen
-        case .fair:
-            return .systemYellow
-        case .serious:
-            return .systemOrange
-        case .critical:
-            return .systemRed
-        case .unknown:
-            return .secondaryLabelColor
-        }
+    func popoverDidClose(_ notification: Notification) {
+        renderStatusItem()
     }
 }

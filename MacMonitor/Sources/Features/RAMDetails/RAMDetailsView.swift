@@ -271,7 +271,6 @@ struct RAMDetailsView: View {
     }
 
     private func breakdownSegments(_ memory: MemorySnapshot) -> [MemoryBreakdownSegment] {
-        let totalBytes = max(memory.totalBytes, 1)
         let usedBytes = min(memory.usedBytes, memory.totalBytes)
         let compressedBytes = min(memory.compressedBytes ?? 0, memory.totalBytes)
         let inactiveBytes = min(memory.inactiveBytes ?? 0, memory.totalBytes)
@@ -290,8 +289,11 @@ struct RAMDetailsView: View {
             (.free, "Free", freeBytes, PopoverTheme.green, "Immediately available pages")
         ]
 
-        return rawSegments
-            .filter { $0.2 > 0 }
+        let filtered = rawSegments.filter { $0.2 > 0 }
+        let sumBytes = filtered.reduce(UInt64(0)) { $0 + $1.2 }
+        let normalizer = sumBytes > 0 ? Double(sumBytes) : 1.0
+
+        return filtered
             .map { key, name, bytes, color, description in
                 MemoryBreakdownSegment(
                     key: key,
@@ -299,7 +301,7 @@ struct RAMDetailsView: View {
                     bytes: bytes,
                     color: color,
                     description: description,
-                    ratio: Double(bytes) / Double(totalBytes)
+                    ratio: Double(bytes) / normalizer
                 )
             }
     }
@@ -606,8 +608,7 @@ private struct MemoryBreakdownSegment: Identifiable {
     var id: MemoryBreakdownSegmentKey { key }
 
     func valueText(totalBytes: UInt64) -> String {
-        let total = max(totalBytes, 1)
-        let percent = (Double(bytes) / Double(total)) * 100
+        let percent = totalBytes > 0 ? Double(bytes) / Double(totalBytes) * 100 : 0
         return "\(MetricFormatter.bytes(bytes)) (\(String(format: "%.1f", percent))%)"
     }
 }
