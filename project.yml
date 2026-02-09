@@ -7,6 +7,10 @@ configs:
 settings:
   base:
     SWIFT_VERSION: 6.0
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.8.0
 targets:
   MacMonitor:
     type: application
@@ -16,6 +20,7 @@ targets:
       - MacMonitor/Sources
     dependencies:
       - target: BatteryHelper
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.oscar.macmonitor
@@ -24,6 +29,8 @@ targets:
         INFOPLIST_FILE: MacMonitor/Config/App-Info.plist
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
+        SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor-updates/appcast.xml"
+        SPARKLE_PUBLIC_ED_KEY: "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU="
     postBuildScripts:
       - name: Embed Battery Helper
         script: |

@@ -6,6 +6,7 @@ struct PopoverRootView: View {
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
     @ObservedObject var batteryPolicyCoordinator: BatteryPolicyCoordinator
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var appUpdateController: AppUpdateController
 
     @State private var simulatedThermalState: ThermalState?
 
@@ -33,13 +34,6 @@ struct PopoverRootView: View {
 
     private var sidebar: some View {
         VStack(spacing: 2) {
-            navButton(
-                symbol: "thermometer.medium",
-                helpText: "Temperature",
-                isActive: viewModel.screen == .temperature,
-                action: viewModel.showTemperature
-            )
-
             navButton(
                 symbol: "battery.100",
                 helpText: "Battery",
@@ -489,6 +483,7 @@ struct PopoverRootView: View {
         SettingsView(
             settings: settings,
             ramPolicyViewModel: ramPolicyViewModel,
+            appUpdateController: appUpdateController,
             onOpenPolicyManager: viewModel.showRAMPolicyManager
         )
     }
@@ -502,9 +497,31 @@ struct PopoverRootView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Text("MacMonitor")
-                .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textMuted)
+            if appUpdateController.canRestartToInstallUpdate {
+                Button {
+                    appUpdateController.restartToInstallUpdate()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "power")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Restart to Update")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(PopoverTheme.accentContrastText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(PopoverTheme.orange)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Install the downloaded update now.")
+            } else {
+                Text("MacMonitor")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
 
             Spacer(minLength: 0)
 

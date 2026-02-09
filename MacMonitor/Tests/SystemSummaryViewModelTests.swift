@@ -4,9 +4,9 @@ import XCTest
 
 @MainActor
 final class SystemSummaryViewModelTests: XCTestCase {
-    func testScreenDefaultsToTemperature() {
+    func testScreenDefaultsToBattery() {
         let viewModel = makeViewModel()
-        XCTAssertEqual(viewModel.screen, .temperature)
+        XCTAssertEqual(viewModel.screen, .battery)
     }
 
     func testScreenTransitionsAcrossSidebarRoutes() {
@@ -28,7 +28,7 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.screen, .ramPolicyManager)
 
         viewModel.showSummary()
-        XCTAssertEqual(viewModel.screen, .temperature)
+        XCTAssertEqual(viewModel.screen, .battery)
     }
 
     private func makeViewModel() -> SystemSummaryViewModel {

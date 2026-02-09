@@ -14,7 +14,7 @@ final class SystemSummaryViewModel: ObservableObject {
 
     @Published private(set) var snapshot: SystemSnapshot?
     @Published private(set) var history: [SystemSnapshot] = []
-    @Published private(set) var screen: Screen = .temperature
+    @Published private(set) var screen: Screen = .battery
 
     let settings: SettingsStore
 
@@ -68,7 +68,7 @@ final class SystemSummaryViewModel: ObservableObject {
     }
 
     func showSummary() {
-        showTemperature()
+        showBattery()
     }
 
     func showRAMDetails() {

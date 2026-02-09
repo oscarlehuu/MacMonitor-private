@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
+    @ObservedObject var appUpdateController: AppUpdateController
     let onOpenPolicyManager: () -> Void
 
     var body: some View {
@@ -17,7 +18,7 @@ struct SettingsView: View {
             settingSeparator
             startupSection
             settingSeparator
-            thermalSection
+            updatesSection
         }
         .onAppear {
             ramPolicyViewModel.refresh()
@@ -212,27 +213,55 @@ struct SettingsView: View {
         }
     }
 
-    private var thermalSection: some View {
-        settingSection(title: "Thermal", subtitle: "Official Apple thermal states") {
-            HStack(spacing: 6) {
-                thermalTag(title: "Nominal", tint: PopoverTheme.green)
-                thermalTag(title: "Fair", tint: PopoverTheme.yellow)
-                thermalTag(title: "Serious", tint: PopoverTheme.orange)
-                thermalTag(title: "Critical", tint: PopoverTheme.red)
+    private var updatesSection: some View {
+        settingSection(title: "Updates", subtitle: "Get new releases safely") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(appUpdateController.statusMessage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                if let detail = appUpdateController.detailMessage {
+                    Text(detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        appUpdateController.checkForUpdates()
+                    } label: {
+                        updateActionLabel(
+                            title: "Check for Updates",
+                            symbol: "arrow.triangle.2.circlepath"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!appUpdateController.canCheckForUpdates)
+                    .opacity(appUpdateController.canCheckForUpdates ? 1 : 0.6)
+                }
             }
         }
     }
 
-    private func thermalTag(title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(tint.opacity(0.10))
-            )
+    private func updateActionLabel(
+        title: String,
+        symbol: String,
+        tint: Color = PopoverTheme.accent
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(PopoverTheme.accentContrastText)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(tint)
+        )
     }
 
     private func settingSection<Content: View>(

@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class AppContainer {
     private let settingsStore: SettingsStore
+    private let appUpdateController: AppUpdateController
     private let metricsEngine: MetricsEngine
     private let snapshotStore: SnapshotStore
     private let summaryViewModel: SystemSummaryViewModel
@@ -18,6 +19,7 @@ final class AppContainer {
 
     init() {
         let settings = SettingsStore(launchAtLoginManager: LaunchAtLoginManager())
+        let appUpdateController = AppUpdateController()
         let memoryCollector = MemoryCollector()
         let storageCollector = StorageCollector()
         let batteryCollector = BatteryCollector()
@@ -123,10 +125,12 @@ final class AppContainer {
             viewModel: viewModel,
             ramDetailsViewModel: ramDetails,
             ramPolicyViewModel: policyViewModel,
-            batteryPolicyCoordinator: batteryPolicyCoordinator
+            batteryPolicyCoordinator: batteryPolicyCoordinator,
+            appUpdateController: appUpdateController
         )
 
         self.settingsStore = settings
+        self.appUpdateController = appUpdateController
         self.metricsEngine = engine
         self.snapshotStore = store
         self.summaryViewModel = viewModel
