@@ -55,7 +55,7 @@ final class BatteryReconciliationManager {
             )
         }
 
-        if shouldApply {
+        if shouldApply && (commandResult == nil || commandResult?.accepted == true) {
             lastAppliedSignature = signature
         }
 

@@ -384,13 +384,6 @@ struct BatteryScreenView: View {
         }
     }
 
-    private var batterySymbol: String {
-        if battery?.isCharging == true {
-            return "battery.100.bolt"
-        }
-        return "battery.100"
-    }
-
     private var displayPercent: String {
         battery?.percentage.map { "\($0)%" } ?? "--"
     }
@@ -400,41 +393,6 @@ struct BatteryScreenView: View {
             return "No battery telemetry available"
         }
         return "\(battery.chargeState.title) • \(battery.powerSource.title)"
-    }
-
-    private var powerFlowText: String? {
-        guard let battery else { return nil }
-
-        let currentText = formattedAmperageText(battery.amperageMilliAmps)
-
-        if isAdapterConnected && settings.batteryPolicyConfiguration.topUpEnabled {
-            if battery.isCharging {
-                return "AC Connected • Top Up Active\(currentText.map { " (\($0))" } ?? "")"
-            }
-
-            if battery.isCharged {
-                return "AC Connected • Top Up Armed (Battery full)\(currentText.map { " (\($0))" } ?? "")"
-            }
-
-            return "AC Connected • Top Up Armed\(currentText.map { " (\($0))" } ?? "")"
-        }
-
-        switch battery.powerSource {
-        case .ac, .ups:
-            if battery.isCharging {
-                return "AC Connected • Charging\(currentText.map { " (\($0))" } ?? "")"
-            }
-
-            if let current = battery.amperageMilliAmps, current < 0 {
-                return "AC Connected • Discharging (\(formattedAmperageText(current) ?? "\(current) mA"))"
-            }
-
-            return "AC Connected • Charging Paused\(currentText.map { " (\($0))" } ?? "")"
-        case .battery:
-            return "On Battery • Discharging\(currentText.map { " (\($0))" } ?? "")"
-        case .unknown:
-            return "Power Source Unknown\(currentText.map { " (\($0))" } ?? "")"
-        }
     }
 
     private var isAdapterConnected: Bool {
@@ -577,12 +535,6 @@ struct BatteryScreenView: View {
                 .foregroundStyle(PopoverTheme.textPrimary)
             InlineHelpIcon(text: help)
         }
-    }
-
-    private func metricRow(title: String, help: String) -> some View {
-        helpLabel(title, help: help)
-            .font(.system(size: 10))
-            .foregroundStyle(PopoverTheme.textSecondary)
     }
 
     private func formattedAmperageText(_ amperage: Int?) -> String? {

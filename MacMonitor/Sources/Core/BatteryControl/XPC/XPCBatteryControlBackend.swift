@@ -39,8 +39,9 @@ final class XPCBatteryControlBackend: BatteryControlBackend {
     }
 
     func execute(_ command: BatteryControlCommand) -> BatteryControlCommandResult {
-        guard case .available = availability else {
-            if case .unavailable(let reason) = availability {
+        let currentAvailability = availability
+        guard case .available = currentAvailability else {
+            if case .unavailable(let reason) = currentAvailability {
                 return .failure(reason)
             }
             return .failure("Battery helper unavailable.")
