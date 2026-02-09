@@ -15,6 +15,9 @@ final class SystemSummaryViewModelTests: XCTestCase {
         viewModel.showSettings()
         XCTAssertEqual(viewModel.screen, .settings)
 
+        viewModel.showBattery()
+        XCTAssertEqual(viewModel.screen, .battery)
+
         viewModel.showRAMDetails()
         XCTAssertEqual(viewModel.screen, .ram)
 
@@ -36,6 +39,7 @@ final class SystemSummaryViewModelTests: XCTestCase {
             engine: MetricsEngine(
                 memoryCollector: DummyMemoryCollector(),
                 storageCollector: DummyStorageCollector(),
+                batteryCollector: DummyBatteryCollector(),
                 thermalCollector: DummyThermalCollector(),
                 settings: settings
             ),
@@ -54,6 +58,16 @@ private struct DummyMemoryCollector: MemoryCollecting {
 private struct DummyStorageCollector: StorageCollecting {
     func collect() -> StorageSnapshot? {
         StorageSnapshot(usedBytes: 1, totalBytes: 2)
+    }
+}
+
+private struct DummyBatteryCollector: BatteryCollecting {
+    func collect() -> BatterySnapshot? {
+        BatterySnapshot.unavailable
+    }
+
+    var stateDidChangePublisher: AnyPublisher<Void, Never> {
+        Empty<Void, Never>().eraseToAnyPublisher()
     }
 }
 

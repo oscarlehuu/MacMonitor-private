@@ -6,11 +6,17 @@ struct SettingsView: View {
     let onOpenPolicyManager: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
+            themeSection
+            settingSeparator
             policySection
+            settingSeparator
             refreshSection
+            settingSeparator
             menuBarSection
+            settingSeparator
             startupSection
+            settingSeparator
             thermalSection
         }
         .onAppear {
@@ -18,12 +24,68 @@ struct SettingsView: View {
         }
     }
 
+    private var settingSeparator: some View {
+        Rectangle()
+            .fill(PopoverTheme.borderSubtle)
+            .frame(height: 1)
+    }
+
+    private var themeSection: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Theme")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                Text(settings.appTheme.title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 4) {
+                ForEach(AppTheme.allCases) { theme in
+                    themeSwatch(theme)
+                }
+            }
+        }
+        .padding(14)
+    }
+
+    private func themeSwatch(_ theme: AppTheme) -> some View {
+        let palette = PopoverTheme.palette(for: theme)
+        let isSelected = settings.appTheme == theme
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                settings.appTheme = theme
+            }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(palette.bgDeep)
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(palette.accent)
+                            .frame(width: 10, height: 10)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(
+                                isSelected ? PopoverTheme.accent : palette.bgPanel,
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .help(theme.title)
+    }
+
     private var policySection: some View {
-        sectionCard(
-            title: "RAM Policy",
-            symbol: "shield.lefthalf.filled.badge.checkmark",
-            tint: PopoverTheme.blue
-        ) {
+        settingSection(title: "RAM Policy", subtitle: "Keep your memory in check") {
             HStack {
                 Text("\(ramPolicyViewModel.policies.filter(\.enabled).count) active of \(ramPolicyViewModel.policies.count) policies")
                     .font(.system(size: 11))
@@ -32,7 +94,7 @@ struct SettingsView: View {
                 Spacer(minLength: 8)
 
                 if let lastEvent = ramPolicyViewModel.recentEvents.first {
-                    Text("Last alert: \(MetricFormatter.relativeTime(from: lastEvent.timestamp))")
+                    Text("Last: \(MetricFormatter.relativeTime(from: lastEvent.timestamp))")
                         .font(.system(size: 10))
                         .foregroundStyle(PopoverTheme.textMuted)
                         .lineLimit(1)
@@ -55,12 +117,12 @@ struct SettingsView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                 }
-                .foregroundStyle(Color.white)
+                .foregroundStyle(PopoverTheme.accentContrastText)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(PopoverTheme.blue)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(PopoverTheme.accent)
                 )
             }
             .buttonStyle(.plain)
@@ -68,65 +130,47 @@ struct SettingsView: View {
     }
 
     private var refreshSection: some View {
-        sectionCard(
-            title: "Refresh",
-            symbol: "arrow.clockwise",
-            tint: PopoverTheme.textPrimary
-        ) {
-            settingRow(
-                title: "Update interval",
-                subtitle: "How often metrics are collected"
-            ) {
-                optionGroup(
-                    selection: $settings.refreshInterval,
-                    options: RefreshInterval.allCases
-                ) { interval, isSelected in
-                    Text(refreshTitle(for: interval))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(isSelected ? Color.white : PopoverTheme.textSecondary)
-                }
+        settingSection(title: "Auto Refresh", subtitle: "How obsessive are you") {
+            optionGroup(
+                selection: $settings.refreshInterval,
+                options: RefreshInterval.allCases
+            ) { interval, isSelected in
+                Text(refreshTitle(for: interval))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
             }
         }
     }
 
     private var menuBarSection: some View {
-        sectionCard(
-            title: "Menu Bar",
-            symbol: "menubar.rectangle",
-            tint: PopoverTheme.textPrimary
-        ) {
-            settingRow(
-                title: "Show in menu bar",
-                subtitle: "Icon, RAM, or Storage"
-            ) {
-                optionGroup(
-                    selection: $settings.menuBarDisplayMode,
-                    options: MenuBarDisplayMode.allCases
-                ) { mode, isSelected in
-                    HStack(spacing: 6) {
-                        Image(systemName: menuBarDisplaySymbol(for: mode))
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(mode.title)
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(isSelected ? Color.white : PopoverTheme.textSecondary)
+        settingSection(title: "Menu Bar", subtitle: "The little guy up top") {
+            optionGroup(
+                selection: $settings.menuBarDisplayMode,
+                options: MenuBarDisplayMode.allCases
+            ) { mode, isSelected in
+                HStack(spacing: 4) {
+                    Image(systemName: menuBarDisplaySymbol(for: mode))
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(mode.title)
+                        .font(.system(size: 11, weight: .semibold))
                 }
+                .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
             }
 
-            if settings.menuBarDisplayMode != .icon {
+            if settings.menuBarDisplayMode == .ram || settings.menuBarDisplayMode == .storage {
                 settingDivider
 
                 settingRow(
                     title: "Metric scope",
-                    subtitle: "Used or free capacity"
+                    subtitle: "Glass half full or half empty"
                 ) {
                     optionGroup(
                         selection: $settings.menuBarMetricValueMode,
                         options: MenuBarMetricValueMode.allCases
                     ) { mode, isSelected in
                         Text(mode.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(isSelected ? Color.white : PopoverTheme.textSecondary)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
                     }
                 }
 
@@ -134,19 +178,19 @@ struct SettingsView: View {
 
                 settingRow(
                     title: "Format",
-                    subtitle: "Percent or absolute number"
+                    subtitle: "Numbers or vibes"
                 ) {
                     optionGroup(
                         selection: $settings.menuBarMetricFormat,
                         options: MenuBarMetricFormat.allCases
                     ) { format, isSelected in
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Text(menuBarFormatBadge(for: format))
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
                             Text(format.title)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 11, weight: .semibold))
                         }
-                        .foregroundStyle(isSelected ? Color.white : PopoverTheme.textSecondary)
+                        .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
                     }
                 }
             }
@@ -154,11 +198,7 @@ struct SettingsView: View {
     }
 
     private var startupSection: some View {
-        sectionCard(
-            title: "Startup",
-            symbol: "power",
-            tint: PopoverTheme.textPrimary
-        ) {
+        settingSection(title: "Startup", subtitle: "Set it and forget it") {
             settingRow(
                 title: "Launch at login",
                 subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login",
@@ -167,23 +207,14 @@ struct SettingsView: View {
                 Toggle("", isOn: $settings.launchAtLoginEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .tint(PopoverTheme.blue)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .tint(PopoverTheme.accent)
             }
         }
     }
 
     private var thermalSection: some View {
-        sectionCard(
-            title: "Thermal",
-            symbol: "thermometer.medium",
-            tint: PopoverTheme.orange
-        ) {
-            Text("Uses official Apple API: Nominal / Fair / Serious / Critical states.")
-                .font(.system(size: 11))
-                .foregroundStyle(PopoverTheme.textSecondary)
-
-            HStack(spacing: 8) {
+        settingSection(title: "Thermal", subtitle: "Official Apple thermal states") {
+            HStack(spacing: 6) {
                 thermalTag(title: "Nominal", tint: PopoverTheme.green)
                 thermalTag(title: "Fair", tint: PopoverTheme.yellow)
                 thermalTag(title: "Serious", tint: PopoverTheme.orange)
@@ -197,48 +228,32 @@ struct SettingsView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(tint.opacity(0.14))
+                    .fill(tint.opacity(0.10))
             )
     }
 
-    private func sectionCard<Content: View>(
+    private func settingSection<Content: View>(
         title: String,
-        symbol: String,
-        tint: Color,
+        subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .semibold))
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
             }
-            .foregroundStyle(tint)
 
             content()
         }
         .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(hex: 0x171c27),
-                            PopoverTheme.bgCard
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 1)
-        )
     }
 
     private func settingRow<Content: View>(
@@ -247,9 +262,9 @@ struct SettingsView: View {
         subtitleColor: Color = PopoverTheme.textMuted,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(PopoverTheme.textPrimary)
 
             Text(subtitle)
@@ -272,7 +287,7 @@ struct SettingsView: View {
         options: [Option],
         @ViewBuilder label: @escaping (Option, Bool) -> Label
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             ForEach(options) { option in
                 let isSelected = selection.wrappedValue == option
                 Button {
@@ -280,27 +295,24 @@ struct SettingsView: View {
                 } label: {
                     label(option, isSelected)
                         .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
                         .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected ? PopoverTheme.blue : PopoverTheme.bgElevated)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(
-                                    isSelected ? PopoverTheme.borderActive : PopoverTheme.borderMedium,
-                                    lineWidth: 1
-                                )
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isSelected ? PopoverTheme.accent : Color.white.opacity(0.001))
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(3)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.03))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
@@ -321,6 +333,8 @@ struct SettingsView: View {
         switch mode {
         case .icon:
             return "app.fill"
+        case .battery:
+            return "battery.100"
         case .ram:
             return "memorychip.fill"
         case .storage:

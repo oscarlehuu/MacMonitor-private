@@ -1,5 +1,106 @@
 import Foundation
 
+enum BatteryPowerSource: String, Codable, Equatable {
+    case ac
+    case battery
+    case ups
+    case unknown
+
+    var title: String {
+        switch self {
+        case .ac:
+            return "AC"
+        case .battery:
+            return "Battery"
+        case .ups:
+            return "UPS"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+}
+
+enum BatteryChargeState: String, Codable, Equatable {
+    case charging
+    case discharging
+    case charged
+    case notCharging
+    case unknown
+
+    var title: String {
+        switch self {
+        case .charging:
+            return "Charging"
+        case .discharging:
+            return "Discharging"
+        case .charged:
+            return "Charged"
+        case .notCharging:
+            return "Not Charging"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+}
+
+struct BatterySnapshot: Codable, Equatable {
+    let currentCapacity: Int?
+    let maxCapacity: Int?
+    let isPresent: Bool
+    let isCharging: Bool
+    let isCharged: Bool
+    let powerSource: BatteryPowerSource
+    let timeToEmptyMinutes: Int?
+    let timeToFullChargeMinutes: Int?
+    let amperageMilliAmps: Int?
+    let voltageMilliVolts: Int?
+    let temperatureCelsius: Int?
+    let cycleCount: Int?
+    let health: String?
+    let healthCondition: String?
+    let lowPowerModeEnabled: Bool
+
+    var percentage: Int? {
+        guard let currentCapacity, let maxCapacity, maxCapacity > 0 else { return nil }
+        return Int((Double(currentCapacity) / Double(maxCapacity) * 100).rounded())
+    }
+
+    var chargeState: BatteryChargeState {
+        if isCharging {
+            return .charging
+        }
+        if isCharged {
+            return .charged
+        }
+        switch powerSource {
+        case .battery:
+            return .discharging
+        case .ac, .ups:
+            return .notCharging
+        case .unknown:
+            return .unknown
+        }
+    }
+
+    static let unavailable = BatterySnapshot(
+        currentCapacity: nil,
+        maxCapacity: nil,
+        isPresent: false,
+        isCharging: false,
+        isCharged: false,
+        powerSource: .unknown,
+        timeToEmptyMinutes: nil,
+        timeToFullChargeMinutes: nil,
+        amperageMilliAmps: nil,
+        voltageMilliVolts: nil,
+        temperatureCelsius: nil,
+        cycleCount: nil,
+        health: nil,
+        healthCondition: nil,
+        lowPowerModeEnabled: false
+    )
+}
+
 enum ThermalState: String, Codable, CaseIterable {
     case nominal
     case fair
@@ -104,6 +205,7 @@ struct ThermalSnapshot: Codable, Equatable {
 enum RefreshReason: String, Codable {
     case startup
     case interval
+    case batteryNotification
     case thermalNotification
     case manual
 }
@@ -113,14 +215,26 @@ struct SystemSnapshot: Identifiable, Codable, Equatable {
     let timestamp: Date
     let memory: MemorySnapshot
     let storage: StorageSnapshot
+    let battery: BatterySnapshot
     let thermal: ThermalSnapshot
     let refreshReason: RefreshReason
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case timestamp
+        case memory
+        case storage
+        case battery
+        case thermal
+        case refreshReason
+    }
 
     init(
         id: UUID = UUID(),
         timestamp: Date,
         memory: MemorySnapshot,
         storage: StorageSnapshot,
+        battery: BatterySnapshot = .unavailable,
         thermal: ThermalSnapshot,
         refreshReason: RefreshReason
     ) {
@@ -128,8 +242,31 @@ struct SystemSnapshot: Identifiable, Codable, Equatable {
         self.timestamp = timestamp
         self.memory = memory
         self.storage = storage
+        self.battery = battery
         self.thermal = thermal
         self.refreshReason = refreshReason
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        memory = try container.decode(MemorySnapshot.self, forKey: .memory)
+        storage = try container.decode(StorageSnapshot.self, forKey: .storage)
+        battery = try container.decodeIfPresent(BatterySnapshot.self, forKey: .battery) ?? .unavailable
+        thermal = try container.decode(ThermalSnapshot.self, forKey: .thermal)
+        refreshReason = try container.decode(RefreshReason.self, forKey: .refreshReason)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(memory, forKey: .memory)
+        try container.encode(storage, forKey: .storage)
+        try container.encode(battery, forKey: .battery)
+        try container.encode(thermal, forKey: .thermal)
+        try container.encode(refreshReason, forKey: .refreshReason)
     }
 
     func age(referenceDate: Date = Date()) -> TimeInterval {

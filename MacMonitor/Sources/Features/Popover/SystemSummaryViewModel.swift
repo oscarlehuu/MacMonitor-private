@@ -5,6 +5,7 @@ import Foundation
 final class SystemSummaryViewModel: ObservableObject {
     enum Screen {
         case temperature
+        case battery
         case ram
         case storage
         case settings
@@ -74,6 +75,10 @@ final class SystemSummaryViewModel: ObservableObject {
         showRAM()
     }
 
+    func showBattery() {
+        screen = .battery
+    }
+
     func showTemperature() {
         screen = .temperature
     }
@@ -107,6 +112,12 @@ final class SystemSummaryViewModel: ObservableObject {
 
         let memoryUsage = MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes)
         let storageUsage = MetricFormatter.percent(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes)
-        return "Thermal: \(snapshot.thermal.state.title) | RAM: \(memoryUsage) | Storage: \(storageUsage)"
+        let batteryText: String
+        if let percentage = snapshot.battery.percentage {
+            batteryText = "\(percentage)% \(snapshot.battery.chargeState.title)"
+        } else {
+            batteryText = "Unavailable"
+        }
+        return "Thermal: \(snapshot.thermal.state.title) | RAM: \(memoryUsage) | Storage: \(storageUsage) | Battery: \(batteryText)"
     }
 }

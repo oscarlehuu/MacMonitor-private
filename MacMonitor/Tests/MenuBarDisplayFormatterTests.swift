@@ -35,6 +35,42 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         XCTAssertEqual(title, "20%")
     }
 
+    func testBatteryPercentTitle() {
+        let snapshot = makeSnapshot(memoryUsed: 0, memoryTotal: 1, storageUsed: 0, storageTotal: 1)
+        let title = MenuBarDisplayFormatter.valueText(
+            for: SystemSnapshot(
+                id: snapshot.id,
+                timestamp: snapshot.timestamp,
+                memory: snapshot.memory,
+                storage: snapshot.storage,
+                battery: BatterySnapshot(
+                    currentCapacity: 81,
+                    maxCapacity: 100,
+                    isPresent: true,
+                    isCharging: false,
+                    isCharged: false,
+                    powerSource: .battery,
+                    timeToEmptyMinutes: 200,
+                    timeToFullChargeMinutes: nil,
+                    amperageMilliAmps: nil,
+                    voltageMilliVolts: nil,
+                    temperatureCelsius: nil,
+                    cycleCount: nil,
+                    health: nil,
+                    healthCondition: nil,
+                    lowPowerModeEnabled: false
+                ),
+                thermal: snapshot.thermal,
+                refreshReason: snapshot.refreshReason
+            ),
+            mode: .battery,
+            valueMode: .used,
+            format: .percent
+        )
+
+        XCTAssertEqual(title, "81%\u{2193}")
+    }
+
     func testPlaceholderWhenSnapshotMissing() {
         let title = MenuBarDisplayFormatter.valueText(
             for: nil,

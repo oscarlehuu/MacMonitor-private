@@ -58,10 +58,6 @@ struct RAMPolicySettingsView: View {
                 .foregroundStyle(PopoverTheme.textSecondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.001))
-                )
             }
             .buttonStyle(.plain)
 
@@ -76,12 +72,12 @@ struct RAMPolicySettingsView: View {
                     Text("Add Policy")
                         .font(.system(size: 11, weight: .semibold))
                 }
-                .foregroundStyle(Color.white)
+                .foregroundStyle(PopoverTheme.accentContrastText)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(PopoverTheme.blue)
+                        .fill(PopoverTheme.accent)
                 )
             }
             .buttonStyle(.plain)
@@ -91,7 +87,7 @@ struct RAMPolicySettingsView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "tray")
-                .font(.system(size: 28, weight: .regular))
+                .font(.system(size: 24, weight: .regular))
                 .foregroundStyle(PopoverTheme.textMuted)
 
             Text("No RAM policies")
@@ -108,17 +104,17 @@ struct RAMPolicySettingsView: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(PopoverTheme.blue)
+            .foregroundStyle(PopoverTheme.accent)
             .padding(.top, 4)
         }
-        .padding(24)
+        .padding(20)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(PopoverTheme.bgCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
@@ -147,7 +143,7 @@ struct RAMPolicySettingsView: View {
                 .lineLimit(1)
 
             HStack(spacing: 6) {
-                policyTag(text: "> \(policy.thresholdDescription)", tint: PopoverTheme.blue, background: PopoverTheme.blueDim)
+                policyTag(text: "> \(policy.thresholdDescription)", tint: PopoverTheme.accent, background: PopoverTheme.accentDim)
                 policyTag(text: triggerTagText(for: policy), tint: PopoverTheme.mint, background: PopoverTheme.mintDim)
                 policyTag(text: "Cooldown \(policy.notifyCooldownSeconds)s", tint: PopoverTheme.purple, background: PopoverTheme.purpleDim)
             }
@@ -161,7 +157,7 @@ struct RAMPolicySettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(PopoverTheme.textMuted)
+                .foregroundStyle(PopoverTheme.textSecondary)
 
                 Button("Delete") {
                     viewModel.deletePolicy(id: policy.id)
@@ -173,12 +169,12 @@ struct RAMPolicySettingsView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(PopoverTheme.bgCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(policy.enabled ? PopoverTheme.blue.opacity(0.25) : PopoverTheme.borderSubtle, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(policy.enabled ? PopoverTheme.accent.opacity(0.20) : PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
@@ -320,7 +316,7 @@ struct RAMPolicySettingsView: View {
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.06))
+                            .fill(PopoverTheme.borderMedium)
                     )
 
                     Button("Save") {
@@ -331,12 +327,12 @@ struct RAMPolicySettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(PopoverTheme.accentContrastText)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(PopoverTheme.blue)
+                            .fill(PopoverTheme.accent)
                     )
                     .disabled(validationError != nil)
                     .opacity(validationError == nil ? 1 : 0.6)
@@ -380,12 +376,12 @@ struct RAMPolicySettingsView: View {
         } label: {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(draft.limitMode == mode ? PopoverTheme.blue : PopoverTheme.textMuted)
+                .foregroundStyle(draft.limitMode == mode ? PopoverTheme.accentContrastText : PopoverTheme.textMuted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(draft.limitMode == mode ? PopoverTheme.blueDim : .clear)
+                        .fill(draft.limitMode == mode ? PopoverTheme.accent : Color.white.opacity(0.001))
                 )
         }
         .buttonStyle(.plain)
@@ -397,12 +393,12 @@ struct RAMPolicySettingsView: View {
         } label: {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(draft.triggerMode == mode ? PopoverTheme.blue : PopoverTheme.textMuted)
+                .foregroundStyle(draft.triggerMode == mode ? PopoverTheme.accentContrastText : PopoverTheme.textMuted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(draft.triggerMode == mode ? PopoverTheme.blueDim : .clear)
+                        .fill(draft.triggerMode == mode ? PopoverTheme.accent : Color.white.opacity(0.001))
                 )
         }
         .buttonStyle(.plain)

@@ -54,7 +54,49 @@ final class MetricsEngineTests: XCTestCase {
         XCTAssertEqual(refreshReasons, [.startup, .thermalNotification])
     }
 
+    func testBatteryChangePublishesBatteryNotificationSnapshot() {
+        let batteryCollector = FakeBatteryCollector(initial: .unavailable)
+        let engine = makeEngine(batteryCollector: batteryCollector)
+
+        var refreshReasons: [RefreshReason] = []
+        let expectation = expectation(description: "collect startup and battery change snapshots")
+
+        engine.$latestSnapshot
+            .compactMap { $0?.refreshReason }
+            .sink { reason in
+                refreshReasons.append(reason)
+                if refreshReasons.count == 2 {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        engine.start()
+        batteryCollector.send(snapshot: BatterySnapshot(
+            currentCapacity: 80,
+            maxCapacity: 100,
+            isPresent: true,
+            isCharging: false,
+            isCharged: false,
+            powerSource: .battery,
+            timeToEmptyMinutes: 180,
+            timeToFullChargeMinutes: nil,
+            amperageMilliAmps: -1_200,
+            voltageMilliVolts: 12_500,
+            temperatureCelsius: 31,
+            cycleCount: 20,
+            health: "Good",
+            healthCondition: nil,
+            lowPowerModeEnabled: false
+        ))
+
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(refreshReasons, [.startup, .batteryNotification])
+    }
+
     private func makeEngine(
+        batteryCollector: FakeBatteryCollector = FakeBatteryCollector(initial: .unavailable),
         thermalCollector: FakeThermalCollector = FakeThermalCollector(initial: .nominal)
     ) -> MetricsEngine {
         let defaults = UserDefaults(suiteName: "MetricsEngineTests-\(UUID().uuidString)")!
@@ -63,6 +105,7 @@ final class MetricsEngineTests: XCTestCase {
         return MetricsEngine(
             memoryCollector: FakeMemoryCollector(),
             storageCollector: FakeStorageCollector(),
+            batteryCollector: batteryCollector,
             thermalCollector: thermalCollector,
             settings: settings,
             now: { Date(timeIntervalSince1970: 1_234_567) }
@@ -91,6 +134,28 @@ private struct FakeMemoryCollector: MemoryCollecting {
 private struct FakeStorageCollector: StorageCollecting {
     func collect() -> StorageSnapshot? {
         StorageSnapshot(usedBytes: 10, totalBytes: 20)
+    }
+}
+
+private final class FakeBatteryCollector: BatteryCollecting {
+    private let subject = PassthroughSubject<Void, Never>()
+    private var current: BatterySnapshot
+
+    init(initial: BatterySnapshot) {
+        current = initial
+    }
+
+    var stateDidChangePublisher: AnyPublisher<Void, Never> {
+        subject.eraseToAnyPublisher()
+    }
+
+    func collect() -> BatterySnapshot? {
+        current
+    }
+
+    func send(snapshot: BatterySnapshot) {
+        current = snapshot
+        subject.send(())
     }
 }
 

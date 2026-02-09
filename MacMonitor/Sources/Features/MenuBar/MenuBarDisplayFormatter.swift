@@ -10,6 +10,12 @@ enum MenuBarDisplayFormatter {
         switch mode {
         case .icon:
             return nil
+        case .battery:
+            guard let battery = snapshot?.battery,
+                  let percentage = battery.percentage else {
+                return "--"
+            }
+            return "\(percentage)%\(batteryDirectionSuffix(for: battery.chargeState))"
         case .ram:
             return metricValue(
                 usedBytes: snapshot?.memory.usedBytes,
@@ -50,5 +56,20 @@ enum MenuBarDisplayFormatter {
         }
 
         return valueText
+    }
+
+    private static func batteryDirectionSuffix(for chargeState: BatteryChargeState) -> String {
+        switch chargeState {
+        case .charging:
+            return "\u{2191}"
+        case .discharging:
+            return "\u{2193}"
+        case .charged:
+            return "\u{2713}"
+        case .notCharging:
+            return "\u{2022}"
+        case .unknown:
+            return ""
+        }
     }
 }
