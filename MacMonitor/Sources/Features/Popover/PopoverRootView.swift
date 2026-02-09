@@ -4,6 +4,8 @@ struct PopoverRootView: View {
     @ObservedObject var viewModel: SystemSummaryViewModel
     @ObservedObject var ramDetailsViewModel: RAMDetailsViewModel
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
+    @ObservedObject var batteryPolicyCoordinator: BatteryPolicyCoordinator
+    @ObservedObject var settings: SettingsStore
 
     @State private var simulatedThermalState: ThermalState?
 
@@ -14,12 +16,14 @@ struct PopoverRootView: View {
         }
         .frame(width: 480, height: 560)
         .background(PopoverTheme.bgDeep)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.6), radius: 40, y: 24)
+        .shadow(color: Color.black.opacity(0.5), radius: 30, y: 16)
+        .preferredColorScheme(settings.appTheme.isDark ? .dark : .light)
+        .id(settings.appTheme)
         .onChange(of: viewModel.screen) { _, screen in
             if screen != .temperature {
                 simulatedThermalState = nil
@@ -28,12 +32,19 @@ struct PopoverRootView: View {
     }
 
     private var sidebar: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             navButton(
                 symbol: "thermometer.medium",
                 helpText: "Temperature",
                 isActive: viewModel.screen == .temperature,
                 action: viewModel.showTemperature
+            )
+
+            navButton(
+                symbol: "battery.100",
+                helpText: "Battery",
+                isActive: viewModel.screen == .battery,
+                action: viewModel.showBattery
             )
 
             navButton(
@@ -59,8 +70,8 @@ struct PopoverRootView: View {
                 action: viewModel.showSettings
             )
         }
-        .padding(.vertical, 12)
-        .frame(width: 52)
+        .padding(.vertical, 10)
+        .frame(width: 48)
         .background(PopoverTheme.bgPanel)
         .overlay(alignment: .trailing) {
             Rectangle()
@@ -72,20 +83,16 @@ struct PopoverRootView: View {
     private func navButton(symbol: String, helpText: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(isActive ? PopoverTheme.blue : PopoverTheme.textMuted)
-                .frame(width: 36, height: 36)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(isActive ? PopoverTheme.accent : PopoverTheme.textMuted)
+                .frame(width: 32, height: 32)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(isActive ? PopoverTheme.blueDim : Color.white.opacity(0.001))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(isActive ? PopoverTheme.borderActive : .clear, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isActive ? PopoverTheme.accentDim : Color.white.opacity(0.001))
                 )
         }
-        .frame(width: 44, height: 44)
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: 40, height: 40)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .buttonStyle(.plain)
         .help(helpText)
     }
@@ -99,6 +106,8 @@ struct PopoverRootView: View {
                     switch viewModel.screen {
                     case .temperature:
                         temperatureScreen
+                    case .battery:
+                        batteryScreen
                     case .ram:
                         ramScreen
                     case .storage:
@@ -120,33 +129,28 @@ struct PopoverRootView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text(screenTitle)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(PopoverTheme.textPrimary)
 
             Spacer(minLength: 8)
 
             if viewModel.isStale {
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 10, weight: .medium))
-                    Text("Stale")
-                        .font(.system(size: 10, weight: .medium))
-                }
-                .foregroundStyle(PopoverTheme.orange)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(PopoverTheme.orangeDim)
-                )
+                Text("Stale")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(PopoverTheme.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(PopoverTheme.orangeDim)
+                    )
             }
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(PopoverTheme.borderSubtle)
@@ -155,82 +159,89 @@ struct PopoverRootView: View {
     }
 
     private var temperatureScreen: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             thermalCard
 
-            if let snapshot = viewModel.snapshot {
-                HStack(spacing: 10) {
-                    gaugeCard(
-                        title: "RAM",
-                        usageText: MetricFormatter.usage(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
-                        percentText: MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
-                        ratio: snapshot.memory.usageRatio,
-                        color: PopoverTheme.blue,
-                        action: viewModel.showRAM
-                    )
+            sectionSeparator
 
-                    gaugeCard(
-                        title: "Storage",
-                        usageText: MetricFormatter.usage(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
-                        percentText: MetricFormatter.percent(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
-                        ratio: snapshot.storage.usageRatio,
-                        color: PopoverTheme.mint,
-                        action: viewModel.showStorage
-                    )
-                }
+            if let snapshot = viewModel.snapshot {
+                metricProgressCard(
+                    title: "RAM",
+                    usageText: MetricFormatter.usage(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
+                    percentText: MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
+                    ratio: snapshot.memory.usageRatio,
+                    color: PopoverTheme.blue,
+                    action: viewModel.showRAM
+                )
+
+                sectionSeparator
+
+                metricProgressCard(
+                    title: "Storage",
+                    usageText: MetricFormatter.usage(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
+                    percentText: MetricFormatter.percent(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
+                    ratio: snapshot.storage.usageRatio,
+                    color: PopoverTheme.mint,
+                    action: viewModel.showStorage
+                )
             } else {
                 collectingCard(text: "Collecting RAM and storage metrics...")
             }
+
+            sectionSeparator
 
             simulationCard
         }
     }
 
+    private var sectionSeparator: some View {
+        Rectangle()
+            .fill(PopoverTheme.borderSubtle)
+            .frame(height: 1)
+            .padding(.vertical, 2)
+    }
+
     private var thermalCard: some View {
         let state = displayedThermalState
 
-        return VStack(alignment: .leading, spacing: 12) {
+        return Button(action: viewModel.showTemperature) {
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(thermalIndicatorFill(for: state))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 36, height: 36)
                     .overlay {
                         Image(systemName: thermalSymbol(for: state))
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(thermalColor(for: state))
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(state.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(thermalColor(for: state))
+                    HStack(spacing: 6) {
+                        Text(state.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(thermalColor(for: state))
+
+                        if let lastUpdated = viewModel.snapshot?.timestamp {
+                            Text(MetricFormatter.relativeTime(from: lastUpdated))
+                                .font(.system(size: 10))
+                                .foregroundStyle(PopoverTheme.textMuted)
+                        }
+                    }
 
                     Text(thermalDescription(for: state))
                         .font(.system(size: 11))
                         .foregroundStyle(PopoverTheme.textSecondary)
-
-                    if let lastUpdated = viewModel.snapshot?.timestamp {
-                        Text("Updated \(MetricFormatter.relativeTime(from: lastUpdated))")
-                            .font(.system(size: 10))
-                            .foregroundStyle(PopoverTheme.textMuted)
-                    }
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 0)
             }
+            .padding(12)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(PopoverTheme.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(thermalStrokeColor(for: state), lineWidth: 1)
-        )
+        .buttonStyle(.plain)
     }
 
-    private func gaugeCard(
+    private func metricProgressCard(
         title: String,
         usageText: String,
         percentText: String,
@@ -239,49 +250,43 @@ struct PopoverRootView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .stroke(PopoverTheme.borderSubtle, lineWidth: 5)
-                        .frame(width: 72, height: 72)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textPrimary)
 
-                    Circle()
-                        .trim(from: 0, to: min(max(ratio, 0), 1))
-                        .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 72, height: 72)
+                    Spacer(minLength: 8)
 
                     Text(percentText)
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(color)
                 }
 
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textSecondary)
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(PopoverTheme.borderMedium)
+
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(color)
+                            .frame(width: geometry.size.width * min(max(ratio, 0), 1))
+                    }
+                }
+                .frame(height: 6)
 
                 Text(usageText)
-                    .font(.system(size: 10, weight: .regular, design: .monospaced))
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(PopoverTheme.textMuted)
-                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(PopoverTheme.bgCard)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-            )
+            .padding(12)
         }
         .buttonStyle(.plain)
     }
 
     private var simulationCard: some View {
-        HStack(spacing: 6) {
-            Text("Simulate:")
+        HStack(spacing: 4) {
+            Text("Simulate")
                 .font(.system(size: 10))
                 .foregroundStyle(PopoverTheme.textMuted)
 
@@ -291,32 +296,20 @@ struct PopoverRootView: View {
                 } label: {
                     Text(state.title)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(displayedThermalState == state ? PopoverTheme.blue : PopoverTheme.textSecondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
+                        .foregroundStyle(displayedThermalState == state ? PopoverTheme.accent : PopoverTheme.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(displayedThermalState == state ? PopoverTheme.blueDim : .clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(displayedThermalState == state ? PopoverTheme.blue : PopoverTheme.borderSubtle, lineWidth: 1)
+                                .fill(displayedThermalState == state ? PopoverTheme.accentDim : Color.white.opacity(0.001))
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(PopoverTheme.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-        )
     }
 
     private var ramScreen: some View {
@@ -328,10 +321,105 @@ struct PopoverRootView: View {
         )
     }
 
+    private var batteryScreen: some View {
+        BatteryScreenView(
+            battery: viewModel.snapshot?.battery,
+            settings: settings,
+            coordinator: batteryPolicyCoordinator
+        )
+    }
+
+    private func batterySummaryCard(_ battery: BatterySnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Battery")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                Spacer(minLength: 8)
+
+                Text((battery.percentage.map { "\($0)%" }) ?? "--")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(PopoverTheme.green)
+            }
+
+            if let percent = battery.percentage {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(PopoverTheme.borderMedium)
+
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(PopoverTheme.green)
+                            .frame(width: geometry.size.width * min(max(Double(percent) / 100.0, 0), 1))
+                    }
+                }
+                .frame(height: 6)
+            }
+
+            Text("\(battery.chargeState.title) • \(battery.powerSource.title)")
+                .font(.system(size: 11))
+                .foregroundStyle(PopoverTheme.textSecondary)
+
+            HStack(spacing: 6) {
+                batteryChip(
+                    title: battery.lowPowerModeEnabled ? "Low Power On" : "Low Power Off",
+                    tint: battery.lowPowerModeEnabled ? PopoverTheme.yellow : PopoverTheme.textMuted
+                )
+
+                if let cycleCount = battery.cycleCount {
+                    batteryChip(
+                        title: "Cycles \(cycleCount)",
+                        tint: PopoverTheme.textSecondary
+                    )
+                }
+            }
+
+            if let temperature = battery.temperatureCelsius {
+                Text("Temp \(temperature)\u{00B0}C")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+
+            if let health = battery.health, !health.isEmpty {
+                Text("Health: \(health)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+
+            if let healthCondition = battery.healthCondition, !healthCondition.isEmpty {
+                Text("Condition: \(healthCondition)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func batteryChip(title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(0.10))
+            )
+    }
+
     private var storageScreen: some View {
         Group {
             if let snapshot = viewModel.snapshot {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
                     storageSummaryCard(snapshot.storage)
                 }
             } else {
@@ -343,13 +431,9 @@ struct PopoverRootView: View {
     private func storageSummaryCard(_ storage: StorageSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                HStack(spacing: 8) {
-                    Image(systemName: "internaldrive")
-                        .font(.system(size: 16, weight: .medium))
-                    Text("Storage")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .foregroundStyle(PopoverTheme.mint)
+                Text("Storage")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
 
                 Spacer(minLength: 8)
 
@@ -358,62 +442,52 @@ struct PopoverRootView: View {
                     .foregroundStyle(PopoverTheme.mint)
             }
 
-            Text(MetricFormatter.usage(used: storage.usedBytes, total: storage.totalBytes))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(PopoverTheme.textPrimary)
-
-            Text("\(MetricFormatter.bytes(max(storage.totalBytes - storage.usedBytes, 0))) available")
-                .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textSecondary)
-
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(PopoverTheme.borderSubtle)
+                        .fill(PopoverTheme.borderMedium)
 
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [PopoverTheme.mint, Color(hex: 0x14b8a6)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(PopoverTheme.mint)
                         .frame(width: geometry.size.width * min(max(storage.usageRatio, 0), 1))
                 }
             }
             .frame(height: 6)
+
+            HStack {
+                Text(MetricFormatter.usage(used: storage.usedBytes, total: storage.totalBytes))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+
+                Spacer(minLength: 4)
+
+                Text("\(MetricFormatter.bytes(max(storage.totalBytes - storage.usedBytes, 0))) available")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(PopoverTheme.bgCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(PopoverTheme.mint.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
     private func collectingCard(text: String) -> some View {
         Text(text)
             .font(.system(size: 11))
-            .foregroundStyle(PopoverTheme.textSecondary)
+            .foregroundStyle(PopoverTheme.textMuted)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(PopoverTheme.bgCard)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-            )
     }
 
     private var settingsScreen: some View {
         SettingsView(
-            settings: viewModel.settings,
+            settings: settings,
             ramPolicyViewModel: ramPolicyViewModel,
             onOpenPolicyManager: viewModel.showRAMPolicyManager
         )
@@ -427,31 +501,34 @@ struct PopoverRootView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Button {
-                viewModel.refreshNow()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textMuted)
+        HStack(spacing: 12) {
+            Text("MacMonitor")
+                .font(.system(size: 10))
+                .foregroundStyle(PopoverTheme.textMuted)
 
             Spacer(minLength: 0)
 
             Button {
-                NSApp.terminate(nil)
+                viewModel.refreshNow()
             } label: {
-                Label("Quit", systemImage: "power")
-                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .medium))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.red)
+            .foregroundStyle(PopoverTheme.textMuted)
+
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(PopoverTheme.textMuted)
             .keyboardShortcut("q")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(PopoverTheme.bgPanel)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(PopoverTheme.borderSubtle)
@@ -463,6 +540,8 @@ struct PopoverRootView: View {
         switch viewModel.screen {
         case .temperature:
             return "Temperature"
+        case .battery:
+            return "Battery"
         case .ram:
             return "RAM"
         case .storage:
@@ -558,42 +637,335 @@ struct PopoverRootView: View {
     }
 }
 
+// MARK: - Theme Palette
+
+struct ThemePalette {
+    let bgDeep: Color
+    let bgPanel: Color
+    let bgCard: Color
+    let bgCardHover: Color
+    let bgElevated: Color
+
+    let borderSubtle: Color
+    let borderMedium: Color
+    let borderActive: Color
+
+    let textPrimary: Color
+    let textSecondary: Color
+    let textMuted: Color
+
+    let accent: Color
+    let accentDim: Color
+
+    let blue: Color
+    let blueDim: Color
+    let blueGlow: Color
+
+    let green: Color
+    let greenDim: Color
+
+    let yellow: Color
+    let yellowDim: Color
+
+    let orange: Color
+    let orangeDim: Color
+
+    let red: Color
+    let redDim: Color
+
+    let mint: Color
+    let mintDim: Color
+
+    let purple: Color
+    let purpleDim: Color
+
+    /// Toggle knob and accent-on-accent text color
+    let accentContrastText: Color
+
+    /// Toggle track off state
+    let toggleOffTrack: Color
+    let toggleOffKnob: Color
+}
+
+// MARK: - PopoverTheme (dynamic)
+
 enum PopoverTheme {
-    static let bgDeep = Color(hex: 0x0a0c10)
-    static let bgPanel = Color(hex: 0x111318)
-    static let bgCard = Color(hex: 0x171a21)
-    static let bgCardHover = Color(hex: 0x1c1f28)
-    static let bgElevated = Color(hex: 0x1e2230)
+    nonisolated(unsafe) private(set) static var current: ThemePalette = palette(for: .lime)
 
-    static let borderSubtle = Color.white.opacity(0.06)
-    static let borderMedium = Color.white.opacity(0.10)
-    static let borderActive = Color(hex: 0x3b82f6, opacity: 0.40)
+    @MainActor
+    static func applyTheme(_ theme: AppTheme) {
+        current = palette(for: theme)
+    }
 
-    static let textPrimary = Color(hex: 0xe8eaed)
-    static let textSecondary = Color(hex: 0x8b8fa3)
-    static let textMuted = Color(hex: 0x5c6070)
+    // ── Convenience accessors (keeps every call site unchanged) ──
 
-    static let blue = Color(hex: 0x3b82f6)
-    static let blueDim = Color(hex: 0x3b82f6, opacity: 0.08)
-    static let blueGlow = Color(hex: 0x3b82f6, opacity: 0.15)
+    static var bgDeep: Color { current.bgDeep }
+    static var bgPanel: Color { current.bgPanel }
+    static var bgCard: Color { current.bgCard }
+    static var bgCardHover: Color { current.bgCardHover }
+    static var bgElevated: Color { current.bgElevated }
 
-    static let green = Color(hex: 0x34d399)
-    static let greenDim = Color(hex: 0x34d399, opacity: 0.12)
+    static var borderSubtle: Color { current.borderSubtle }
+    static var borderMedium: Color { current.borderMedium }
+    static var borderActive: Color { current.borderActive }
 
-    static let yellow = Color(hex: 0xfbbf24)
-    static let yellowDim = Color(hex: 0xfbbf24, opacity: 0.12)
+    static var textPrimary: Color { current.textPrimary }
+    static var textSecondary: Color { current.textSecondary }
+    static var textMuted: Color { current.textMuted }
 
-    static let orange = Color(hex: 0xf97316)
-    static let orangeDim = Color(hex: 0xf97316, opacity: 0.12)
+    static var accent: Color { current.accent }
+    static var accentDim: Color { current.accentDim }
 
-    static let red = Color(hex: 0xef4444)
-    static let redDim = Color(hex: 0xef4444, opacity: 0.12)
+    static var blue: Color { current.blue }
+    static var blueDim: Color { current.blueDim }
+    static var blueGlow: Color { current.blueGlow }
 
-    static let mint = Color(hex: 0x2dd4bf)
-    static let mintDim = Color(hex: 0x2dd4bf, opacity: 0.12)
+    static var green: Color { current.green }
+    static var greenDim: Color { current.greenDim }
 
-    static let purple = Color(hex: 0xa78bfa)
-    static let purpleDim = Color(hex: 0xa78bfa, opacity: 0.12)
+    static var yellow: Color { current.yellow }
+    static var yellowDim: Color { current.yellowDim }
+
+    static var orange: Color { current.orange }
+    static var orangeDim: Color { current.orangeDim }
+
+    static var red: Color { current.red }
+    static var redDim: Color { current.redDim }
+
+    static var mint: Color { current.mint }
+    static var mintDim: Color { current.mintDim }
+
+    static var purple: Color { current.purple }
+    static var purpleDim: Color { current.purpleDim }
+
+    static var accentContrastText: Color { current.accentContrastText }
+    static var toggleOffTrack: Color { current.toggleOffTrack }
+    static var toggleOffKnob: Color { current.toggleOffKnob }
+
+    // ── Palette factory ──
+
+    static func palette(for theme: AppTheme) -> ThemePalette {
+        switch theme {
+        case .lime:     return limePalette
+        case .midnight: return midnightPalette
+        case .cyber:    return cyberPalette
+        case .daylight: return daylightPalette
+        case .arctic:   return arcticPalette
+        case .sand:     return sandPalette
+        }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // DARK THEMES
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static let limePalette = ThemePalette(
+        bgDeep:          Color(hex: 0x1c1c1e),
+        bgPanel:         Color(hex: 0x252527),
+        bgCard:          Color(hex: 0x2c2c2e),
+        bgCardHover:     Color(hex: 0x333336),
+        bgElevated:      Color(hex: 0x2a2a2c),
+        borderSubtle:    Color.white.opacity(0.08),
+        borderMedium:    Color.white.opacity(0.12),
+        borderActive:    Color(hex: 0xBFFF00, opacity: 0.40),
+        textPrimary:     Color(hex: 0xededed),
+        textSecondary:   Color(hex: 0x888888),
+        textMuted:       Color(hex: 0x555555),
+        accent:          Color(hex: 0xBFFF00),
+        accentDim:       Color(hex: 0xBFFF00, opacity: 0.10),
+        blue:            Color(hex: 0x3b82f6),
+        blueDim:         Color(hex: 0x3b82f6, opacity: 0.10),
+        blueGlow:        Color(hex: 0x3b82f6, opacity: 0.15),
+        green:           Color(hex: 0xBFFF00),
+        greenDim:        Color(hex: 0xBFFF00, opacity: 0.10),
+        yellow:          Color(hex: 0xe6d400),
+        yellowDim:       Color(hex: 0xe6d400, opacity: 0.10),
+        orange:          Color(hex: 0xf97316),
+        orangeDim:       Color(hex: 0xf97316, opacity: 0.10),
+        red:             Color(hex: 0xef4444),
+        redDim:          Color(hex: 0xef4444, opacity: 0.10),
+        mint:            Color(hex: 0x2dd4bf),
+        mintDim:         Color(hex: 0x2dd4bf, opacity: 0.10),
+        purple:          Color(hex: 0xa78bfa),
+        purpleDim:       Color(hex: 0xa78bfa, opacity: 0.10),
+        accentContrastText: .black,
+        toggleOffTrack:  Color.white.opacity(0.10),
+        toggleOffKnob:   .white
+    )
+
+    private static let midnightPalette = ThemePalette(
+        bgDeep:          Color(hex: 0x000000),
+        bgPanel:         Color(hex: 0x0a0a0a),
+        bgCard:          Color(hex: 0x111111),
+        bgCardHover:     Color(hex: 0x1a1a1a),
+        bgElevated:      Color(hex: 0x0d0d0d),
+        borderSubtle:    Color.white.opacity(0.06),
+        borderMedium:    Color.white.opacity(0.10),
+        borderActive:    Color(hex: 0x3b82f6, opacity: 0.40),
+        textPrimary:     Color(hex: 0xf0f0f0),
+        textSecondary:   Color(hex: 0x7a7a7a),
+        textMuted:       Color(hex: 0x444444),
+        accent:          Color(hex: 0x3b82f6),
+        accentDim:       Color(hex: 0x3b82f6, opacity: 0.12),
+        blue:            Color(hex: 0x3b82f6),
+        blueDim:         Color(hex: 0x3b82f6, opacity: 0.12),
+        blueGlow:        Color(hex: 0x3b82f6, opacity: 0.15),
+        green:           Color(hex: 0x22c55e),
+        greenDim:        Color(hex: 0x22c55e, opacity: 0.12),
+        yellow:          Color(hex: 0xeab308),
+        yellowDim:       Color(hex: 0xeab308, opacity: 0.12),
+        orange:          Color(hex: 0xf97316),
+        orangeDim:       Color(hex: 0xf97316, opacity: 0.12),
+        red:             Color(hex: 0xef4444),
+        redDim:          Color(hex: 0xef4444, opacity: 0.12),
+        mint:            Color(hex: 0x06b6d4),
+        mintDim:         Color(hex: 0x06b6d4, opacity: 0.12),
+        purple:          Color(hex: 0x8b5cf6),
+        purpleDim:       Color(hex: 0x8b5cf6, opacity: 0.12),
+        accentContrastText: .white,
+        toggleOffTrack:  Color.white.opacity(0.10),
+        toggleOffKnob:   .white
+    )
+
+    private static let cyberPalette = ThemePalette(
+        bgDeep:          Color(hex: 0x0a0a0f),
+        bgPanel:         Color(hex: 0x0f0f18),
+        bgCard:          Color(hex: 0x141420),
+        bgCardHover:     Color(hex: 0x1a1a2e),
+        bgElevated:      Color(hex: 0x121220),
+        borderSubtle:    Color(hex: 0x00ffff, opacity: 0.10),
+        borderMedium:    Color(hex: 0x00ffff, opacity: 0.16),
+        borderActive:    Color(hex: 0x00ffcc, opacity: 0.40),
+        textPrimary:     Color(hex: 0xe0ffe0),
+        textSecondary:   Color(hex: 0x66cc99),
+        textMuted:       Color(hex: 0x336655),
+        accent:          Color(hex: 0x00ffcc),
+        accentDim:       Color(hex: 0x00ffcc, opacity: 0.10),
+        blue:            Color(hex: 0x00ccff),
+        blueDim:         Color(hex: 0x00ccff, opacity: 0.12),
+        blueGlow:        Color(hex: 0x00ccff, opacity: 0.15),
+        green:           Color(hex: 0x00ff66),
+        greenDim:        Color(hex: 0x00ff66, opacity: 0.12),
+        yellow:          Color(hex: 0xffff00),
+        yellowDim:       Color(hex: 0xffff00, opacity: 0.12),
+        orange:          Color(hex: 0xff6600),
+        orangeDim:       Color(hex: 0xff6600, opacity: 0.12),
+        red:             Color(hex: 0xff0066),
+        redDim:          Color(hex: 0xff0066, opacity: 0.12),
+        mint:            Color(hex: 0x00ffff),
+        mintDim:         Color(hex: 0x00ffff, opacity: 0.12),
+        purple:          Color(hex: 0xcc00ff),
+        purpleDim:       Color(hex: 0xcc00ff, opacity: 0.12),
+        accentContrastText: .black,
+        toggleOffTrack:  Color.white.opacity(0.10),
+        toggleOffKnob:   .white
+    )
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // LIGHT THEMES
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static let daylightPalette = ThemePalette(
+        bgDeep:          Color(hex: 0xf7f6f3),
+        bgPanel:         Color(hex: 0xeceae5),
+        bgCard:          Color(hex: 0xffffff),
+        bgCardHover:     Color(hex: 0xf5f4f1),
+        bgElevated:      Color(hex: 0xfafaf8),
+        borderSubtle:    Color.black.opacity(0.07),
+        borderMedium:    Color.black.opacity(0.11),
+        borderActive:    Color(hex: 0x65a30d, opacity: 0.40),
+        textPrimary:     Color(hex: 0x1a1a18),
+        textSecondary:   Color(hex: 0x5c5c56),
+        textMuted:       Color(hex: 0xa0a098),
+        accent:          Color(hex: 0x65a30d),
+        accentDim:       Color(hex: 0x65a30d, opacity: 0.10),
+        blue:            Color(hex: 0x2563eb),
+        blueDim:         Color(hex: 0x2563eb, opacity: 0.08),
+        blueGlow:        Color(hex: 0x2563eb, opacity: 0.12),
+        green:           Color(hex: 0x16a34a),
+        greenDim:        Color(hex: 0x16a34a, opacity: 0.08),
+        yellow:          Color(hex: 0xb45309),
+        yellowDim:       Color(hex: 0xb45309, opacity: 0.08),
+        orange:          Color(hex: 0xc2410c),
+        orangeDim:       Color(hex: 0xc2410c, opacity: 0.08),
+        red:             Color(hex: 0xdc2626),
+        redDim:          Color(hex: 0xdc2626, opacity: 0.08),
+        mint:            Color(hex: 0x0d9488),
+        mintDim:         Color(hex: 0x0d9488, opacity: 0.08),
+        purple:          Color(hex: 0x7c3aed),
+        purpleDim:       Color(hex: 0x7c3aed, opacity: 0.08),
+        accentContrastText: .white,
+        toggleOffTrack:  Color.black.opacity(0.10),
+        toggleOffKnob:   Color(hex: 0xb0b0b0)
+    )
+
+    private static let arcticPalette = ThemePalette(
+        bgDeep:          Color(hex: 0xf0f4f8),
+        bgPanel:         Color(hex: 0xe2e8f0),
+        bgCard:          Color(hex: 0xffffff),
+        bgCardHover:     Color(hex: 0xf1f5f9),
+        bgElevated:      Color(hex: 0xf8fafc),
+        borderSubtle:    Color(hex: 0x0f172a, opacity: 0.08),
+        borderMedium:    Color(hex: 0x0f172a, opacity: 0.13),
+        borderActive:    Color(hex: 0x2563eb, opacity: 0.35),
+        textPrimary:     Color(hex: 0x0f172a),
+        textSecondary:   Color(hex: 0x475569),
+        textMuted:       Color(hex: 0x94a3b8),
+        accent:          Color(hex: 0x2563eb),
+        accentDim:       Color(hex: 0x2563eb, opacity: 0.08),
+        blue:            Color(hex: 0x2563eb),
+        blueDim:         Color(hex: 0x2563eb, opacity: 0.08),
+        blueGlow:        Color(hex: 0x2563eb, opacity: 0.12),
+        green:           Color(hex: 0x059669),
+        greenDim:        Color(hex: 0x059669, opacity: 0.08),
+        yellow:          Color(hex: 0xca8a04),
+        yellowDim:       Color(hex: 0xca8a04, opacity: 0.08),
+        orange:          Color(hex: 0xea580c),
+        orangeDim:       Color(hex: 0xea580c, opacity: 0.08),
+        red:             Color(hex: 0xdc2626),
+        redDim:          Color(hex: 0xdc2626, opacity: 0.08),
+        mint:            Color(hex: 0x0891b2),
+        mintDim:         Color(hex: 0x0891b2, opacity: 0.08),
+        purple:          Color(hex: 0x7c3aed),
+        purpleDim:       Color(hex: 0x7c3aed, opacity: 0.08),
+        accentContrastText: .white,
+        toggleOffTrack:  Color.black.opacity(0.10),
+        toggleOffKnob:   Color(hex: 0xb0b0b0)
+    )
+
+    private static let sandPalette = ThemePalette(
+        bgDeep:          Color(hex: 0xf5f0eb),
+        bgPanel:         Color(hex: 0xe8e0d8),
+        bgCard:          Color(hex: 0xfffefa),
+        bgCardHover:     Color(hex: 0xf7f2ed),
+        bgElevated:      Color(hex: 0xfaf7f4),
+        borderSubtle:    Color(hex: 0x3c2814, opacity: 0.08),
+        borderMedium:    Color(hex: 0x3c2814, opacity: 0.12),
+        borderActive:    Color(hex: 0x0d9488, opacity: 0.35),
+        textPrimary:     Color(hex: 0x1c1512),
+        textSecondary:   Color(hex: 0x6b5c50),
+        textMuted:       Color(hex: 0xa89888),
+        accent:          Color(hex: 0x0d9488),
+        accentDim:       Color(hex: 0x0d9488, opacity: 0.10),
+        blue:            Color(hex: 0x2563eb),
+        blueDim:         Color(hex: 0x2563eb, opacity: 0.08),
+        blueGlow:        Color(hex: 0x2563eb, opacity: 0.12),
+        green:           Color(hex: 0x15803d),
+        greenDim:        Color(hex: 0x15803d, opacity: 0.08),
+        yellow:          Color(hex: 0xa16207),
+        yellowDim:       Color(hex: 0xa16207, opacity: 0.08),
+        orange:          Color(hex: 0xc2410c),
+        orangeDim:       Color(hex: 0xc2410c, opacity: 0.08),
+        red:             Color(hex: 0xb91c1c),
+        redDim:          Color(hex: 0xb91c1c, opacity: 0.08),
+        mint:            Color(hex: 0x0d9488),
+        mintDim:         Color(hex: 0x0d9488, opacity: 0.08),
+        purple:          Color(hex: 0x6d28d9),
+        purpleDim:       Color(hex: 0x6d28d9, opacity: 0.08),
+        accentContrastText: .white,
+        toggleOffTrack:  Color.black.opacity(0.10),
+        toggleOffKnob:   Color(hex: 0xb0b0b0)
+    )
 }
 
 struct PopoverToggle: View {
@@ -606,11 +978,11 @@ struct PopoverToggle: View {
             }
         } label: {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isOn ? PopoverTheme.blue : Color.white.opacity(0.10))
+                .fill(isOn ? PopoverTheme.accent : PopoverTheme.toggleOffTrack)
                 .frame(width: 36, height: 20)
                 .overlay(alignment: .leading) {
                     Circle()
-                        .fill(Color.white)
+                        .fill(isOn ? PopoverTheme.accentContrastText : PopoverTheme.toggleOffKnob)
                         .frame(width: 16, height: 16)
                         .offset(x: isOn ? 18 : 2)
                 }

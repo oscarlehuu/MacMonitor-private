@@ -7,23 +7,27 @@ final class MetricsEngine: ObservableObject {
 
     private let memoryCollector: MemoryCollecting
     private let storageCollector: StorageCollecting
+    private let batteryCollector: BatteryCollecting
     private let thermalCollector: ThermalCollecting
     private let settings: SettingsStore
     private let now: () -> Date
 
     private var timerCancellable: AnyCancellable?
     private var refreshIntervalCancellable: AnyCancellable?
+    private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
 
     init(
         memoryCollector: MemoryCollecting,
         storageCollector: StorageCollecting,
+        batteryCollector: BatteryCollecting,
         thermalCollector: ThermalCollecting,
         settings: SettingsStore,
         now: @escaping () -> Date = Date.init
     ) {
         self.memoryCollector = memoryCollector
         self.storageCollector = storageCollector
+        self.batteryCollector = batteryCollector
         self.thermalCollector = thermalCollector
         self.settings = settings
         self.now = now
@@ -31,6 +35,7 @@ final class MetricsEngine: ObservableObject {
 
     func start() {
         bindSettings()
+        bindBatteryChanges()
         bindThermalChanges()
         scheduleTimer(using: settings.refreshInterval)
         refresh(reason: .startup)
@@ -39,6 +44,7 @@ final class MetricsEngine: ObservableObject {
     func stop() {
         timerCancellable?.cancel()
         refreshIntervalCancellable?.cancel()
+        batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
     }
 
@@ -51,6 +57,14 @@ final class MetricsEngine: ObservableObject {
             .dropFirst()
             .sink { [weak self] interval in
                 self?.scheduleTimer(using: interval)
+            }
+    }
+
+    private func bindBatteryChanges() {
+        batteryChangeCancellable = batteryCollector.stateDidChangePublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                self?.refresh(reason: .batteryNotification)
             }
     }
 
@@ -74,12 +88,14 @@ final class MetricsEngine: ObservableObject {
     private func refresh(reason: RefreshReason) {
         let memory = memoryCollector.collect() ?? .empty(totalBytes: ProcessInfo.processInfo.physicalMemory)
         let storage = storageCollector.collect() ?? .empty()
+        let battery = batteryCollector.collect() ?? .unavailable
         let thermal = thermalCollector.collect()
 
         latestSnapshot = SystemSnapshot(
             timestamp: now(),
             memory: memory,
             storage: storage,
+            battery: battery,
             thermal: thermal,
             refreshReason: reason
         )

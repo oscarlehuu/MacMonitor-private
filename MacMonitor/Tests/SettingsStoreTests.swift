@@ -51,6 +51,57 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.menuBarMetricValueMode, .free)
         XCTAssertEqual(store.menuBarMetricFormat, .number)
     }
+
+    func testPersistsBatteryPolicyConfiguration() throws {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        var config = BatteryPolicyConfiguration.default
+        config.chargeLimitPercent = 83
+        config.automaticDischargeEnabled = true
+        store.batteryPolicyConfiguration = config
+
+        let persistedData = try XCTUnwrap(defaults.data(forKey: "settings.batteryPolicyConfiguration"))
+        let persistedConfig = try JSONDecoder().decode(BatteryPolicyConfiguration.self, from: persistedData)
+
+        XCTAssertEqual(persistedConfig.chargeLimitPercent, 83)
+        XCTAssertTrue(persistedConfig.automaticDischargeEnabled)
+    }
+
+    func testNormalizesBatteryPolicyConfigurationBounds() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        var config = BatteryPolicyConfiguration.default
+        config.chargeLimitPercent = 20
+        config.sailingLowerPercent = 99
+        config.sailingUpperPercent = 40
+        config.heatProtectionThresholdCelsius = 90
+
+        store.batteryPolicyConfiguration = config
+
+        XCTAssertEqual(store.batteryPolicyConfiguration.chargeLimitPercent, 50)
+        XCTAssertEqual(store.batteryPolicyConfiguration.sailingLowerPercent, 50)
+        XCTAssertEqual(store.batteryPolicyConfiguration.sailingUpperPercent, 95)
+        XCTAssertEqual(store.batteryPolicyConfiguration.heatProtectionThresholdCelsius, 55)
+    }
+
+    func testNormalizesBatteryPolicyConfigurationDischargeMutualExclusion() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        var config = BatteryPolicyConfiguration.default
+        config.manualDischargeEnabled = true
+        config.automaticDischargeEnabled = true
+
+        store.batteryPolicyConfiguration = config
+
+        XCTAssertTrue(store.batteryPolicyConfiguration.manualDischargeEnabled)
+        XCTAssertFalse(store.batteryPolicyConfiguration.automaticDischargeEnabled)
+    }
 }
 
 private final class MutableLaunchManager: LaunchAtLoginManaging {

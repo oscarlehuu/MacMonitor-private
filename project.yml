@@ -14,19 +14,48 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - MacMonitor/Sources
+    dependencies:
+      - target: BatteryHelper
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.oscar.macmonitor
         PRODUCT_NAME: MacMonitor
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: MacMonitor
-        INFOPLIST_KEY_LSUIElement: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: MacMonitor/Config/App-Info.plist
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
+    postBuildScripts:
+      - name: Embed Battery Helper
+        script: |
+          helper_binary="${BUILT_PRODUCTS_DIR}/com.oscar.macmonitor.battery-helper"
+          helper_destination_dir="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices"
+          helper_destination="${helper_destination_dir}/com.oscar.macmonitor.battery-helper"
+
+          if [ -f "${helper_binary}" ]; then
+            mkdir -p "${helper_destination_dir}"
+            cp "${helper_binary}" "${helper_destination}"
+            chmod 755 "${helper_destination}"
+          fi
     scheme:
       gatherCoverageData: true
       testTargets:
         - MacMonitorTests
+  BatteryHelper:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - MacMonitor/Helper/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.oscar.macmonitor.battery-helper
+        PRODUCT_NAME: com.oscar.macmonitor.battery-helper
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: MacMonitor/Helper/Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        OTHER_CODE_SIGN_FLAGS: --identifier com.oscar.macmonitor.battery-helper
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
   MacMonitorTests:
     type: bundle.unit-test
     platform: macOS

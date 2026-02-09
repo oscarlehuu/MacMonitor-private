@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
+    private let batteryPolicyCoordinator: BatteryPolicyCoordinator
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let statusIconRenderer = MenuBarStatusIconRenderer.shared
@@ -16,11 +17,13 @@ final class MenuBarController: NSObject {
     init(
         viewModel: SystemSummaryViewModel,
         ramDetailsViewModel: RAMDetailsViewModel,
-        ramPolicyViewModel: RAMPolicySettingsViewModel
+        ramPolicyViewModel: RAMPolicySettingsViewModel,
+        batteryPolicyCoordinator: BatteryPolicyCoordinator
     ) {
         self.viewModel = viewModel
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
+        self.batteryPolicyCoordinator = batteryPolicyCoordinator
         super.init()
     }
 
@@ -31,7 +34,9 @@ final class MenuBarController: NSObject {
             rootView: PopoverRootView(
                 viewModel: viewModel,
                 ramDetailsViewModel: ramDetailsViewModel,
-                ramPolicyViewModel: ramPolicyViewModel
+                ramPolicyViewModel: ramPolicyViewModel,
+                batteryPolicyCoordinator: batteryPolicyCoordinator,
+                settings: viewModel.settings
             )
         )
 
@@ -104,7 +109,7 @@ final class MenuBarController: NSObject {
                 for: statusIconVariant(for: button, thermalState: viewModel.thermalState),
                 pointSize: iconPointSize(for: button)
             )
-        case .ram, .storage:
+        case .battery, .ram, .storage:
             statusItem.length = NSStatusItem.variableLength
             button.imagePosition = .imageLeft
             button.image = metricIcon(for: settings.menuBarDisplayMode, in: button)
@@ -128,6 +133,8 @@ final class MenuBarController: NSObject {
         switch mode {
         case .icon:
             return nil
+        case .battery:
+            symbolName = batterySymbolName(for: viewModel.snapshot?.battery)
         case .ram:
             symbolName = "memorychip.fill"
         case .storage:
@@ -150,6 +157,33 @@ final class MenuBarController: NSObject {
         }
         configured.isTemplate = true
         return configured
+    }
+
+    private func batterySymbolName(for battery: BatterySnapshot?) -> String {
+        guard let battery else {
+            return "battery.0"
+        }
+
+        if battery.isCharging {
+            return "battery.100.bolt"
+        }
+
+        guard let percent = battery.percentage else {
+            return "battery.0"
+        }
+
+        switch percent {
+        case ..<13:
+            return "battery.0"
+        case ..<38:
+            return "battery.25"
+        case ..<63:
+            return "battery.50"
+        case ..<88:
+            return "battery.75"
+        default:
+            return "battery.100"
+        }
     }
 
     private func statusIconVariant(for button: NSStatusBarButton, thermalState: ThermalState) -> MenuBarIconVariant {

@@ -87,7 +87,7 @@ struct RAMDetailsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .center, spacing: 4) {
                         Text("RAM \(usedPercent) — \(usedUsage)")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(PopoverTheme.textPrimary)
 
                         infoIcon
@@ -136,15 +136,14 @@ struct RAMDetailsView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(PopoverTheme.bgCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(PopoverTheme.blue.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
@@ -195,12 +194,12 @@ struct RAMDetailsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(height: 12)
+        .frame(height: 8)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(PopoverTheme.borderMedium)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 
     private func legendItem(for segment: MemoryBreakdownSegment, totalBytes: UInt64) -> some View {
@@ -356,12 +355,12 @@ struct RAMDetailsView: View {
         } label: {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(viewModel.scopeMode == mode ? PopoverTheme.blue : PopoverTheme.textMuted)
+                .foregroundStyle(viewModel.scopeMode == mode ? PopoverTheme.accentContrastText : PopoverTheme.textMuted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(viewModel.scopeMode == mode ? PopoverTheme.blueDim : .clear)
+                        .fill(viewModel.scopeMode == mode ? PopoverTheme.accent : Color.white.opacity(0.001))
                 )
         }
         .buttonStyle(.plain)
@@ -416,11 +415,11 @@ struct RAMDetailsView: View {
                 Text(viewModel.isTerminating ? "Terminating..." : "Terminate (\(viewModel.selectedAllowedCount))")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(viewModel.canTerminateSelection ? Color.white : PopoverTheme.textMuted)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(viewModel.canTerminateSelection ? PopoverTheme.red : Color.white.opacity(0.04))
+                            .fill(viewModel.canTerminateSelection ? PopoverTheme.red : Color.white.opacity(0.06))
                     )
             }
             .buttonStyle(.plain)
@@ -530,7 +529,7 @@ private struct ProcessRowView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? PopoverTheme.blueDim : PopoverTheme.bgCard)
+                    .fill(isSelected ? PopoverTheme.accentDim : PopoverTheme.bgCard)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -543,17 +542,17 @@ private struct ProcessRowView: View {
 
     private var checkbox: some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(isSelected ? PopoverTheme.blue : .clear)
+            .fill(isSelected ? PopoverTheme.accent : .clear)
             .frame(width: 16, height: 16)
             .overlay {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .stroke(isSelected ? PopoverTheme.blue : PopoverTheme.textMuted, lineWidth: 1.5)
+                    .stroke(isSelected ? PopoverTheme.accent : PopoverTheme.textMuted, lineWidth: 1.5)
             }
             .overlay {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(PopoverTheme.accentContrastText)
                 }
             }
             .opacity(process.isProtected ? 0.3 : 1)
