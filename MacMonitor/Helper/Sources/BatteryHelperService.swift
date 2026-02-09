@@ -1,5 +1,6 @@
-import Foundation
 import Darwin
+import Foundation
+import Security
 
 final class BatteryHelperService: NSObject, NSXPCListenerDelegate, BatteryHelperXPCProtocol {
     private let listener: NSXPCListener
@@ -20,10 +21,35 @@ final class BatteryHelperService: NSObject, NSXPCListenerDelegate, BatteryHelper
     }
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
+        guard validateCallerIdentity(of: newConnection) else {
+            return false
+        }
         newConnection.exportedInterface = NSXPCInterface(with: BatteryHelperXPCProtocol.self)
         newConnection.exportedObject = self
         newConnection.resume()
         return true
+    }
+
+    private func validateCallerIdentity(of connection: NSXPCConnection) -> Bool {
+        let pid = connection.processIdentifier
+        var code: SecCode?
+        let attributes = [kSecGuestAttributePid: pid] as NSDictionary
+
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, SecCSFlags(), &code) == errSecSuccess,
+              let clientCode = code else {
+            return false
+        }
+
+        // Require the caller to be signed and to carry the MacMonitor bundle identifier.
+        let requirementString = "identifier \"com.oscar.macmonitor\" and anchor apple generic"
+        var requirement: SecRequirement?
+
+        guard SecRequirementCreateWithString(requirementString as CFString, SecCSFlags(), &requirement) == errSecSuccess,
+              let requirement = requirement else {
+            return false
+        }
+
+        return SecCodeCheckValidity(clientCode, SecCSFlags(), requirement) == errSecSuccess
     }
 
     func execute(requestData: Data, withReply reply: @escaping (Data?, String?) -> Void) {

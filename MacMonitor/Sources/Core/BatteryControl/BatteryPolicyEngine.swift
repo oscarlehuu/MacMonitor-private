@@ -21,13 +21,13 @@ struct BatteryPolicyEngine {
         }
 
         // Priority 1: heat safety has top precedence.
+        // Block both active charging and any lower-priority rule that would initiate charging.
         if config.heatProtectionEnabled,
-           snapshot.isCharging,
            let temperature = snapshot.temperatureCelsius,
            temperature >= config.heatProtectionThresholdCelsius {
             return BatteryPolicyDecision(
                 state: .heatProtection,
-                command: .setChargingPaused(true),
+                command: snapshot.isCharging ? .setChargingPaused(true) : nil,
                 reason: "Heat protection threshold reached."
             )
         }

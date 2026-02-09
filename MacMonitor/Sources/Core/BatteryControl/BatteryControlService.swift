@@ -42,7 +42,9 @@ final class BatteryControlService: ObservableObject {
             result = .failure(unavailableReason)
         }
 
-        effectiveState = resultingState
+        if result.accepted {
+            effectiveState = resultingState
+        }
         lastCommand = command
         lastCommandResult = result
 

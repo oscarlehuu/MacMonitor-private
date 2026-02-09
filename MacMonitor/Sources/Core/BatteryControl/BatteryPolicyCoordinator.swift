@@ -45,6 +45,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
 
         settings.$batteryPolicyConfiguration
             .dropFirst()
+            .removeDuplicates()
             .sink { [weak self] _ in
                 self?.reconcileNow(
                     source: .policy,

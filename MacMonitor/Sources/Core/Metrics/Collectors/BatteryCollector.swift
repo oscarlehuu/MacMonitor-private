@@ -25,6 +25,7 @@ final class BatteryCollector: BatteryCollecting {
     private let powerEventSubject = PassthroughSubject<Void, Never>()
     private var cachedSystemProfilerBatteryHealth: CachedSystemProfilerBatteryHealth?
     private let systemProfilerHealthCacheInterval: TimeInterval = 30 * 60
+    private var isRefreshingSystemProfiler = false
 
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private lazy var lowPowerModePublisher: AnyPublisher<Void, Never> = {
@@ -274,9 +275,23 @@ final class BatteryCollector: BatteryCollecting {
             return cached.info
         }
 
-        let info = readSystemProfilerBatteryHealthInfo()
-        cachedSystemProfilerBatteryHealth = CachedSystemProfilerBatteryHealth(info: info, fetchedAt: referenceDate)
-        return info
+        // Return the stale cached value (or nil on first call) and refresh in the background
+        // to avoid blocking the main thread while system_profiler runs.
+        if !isRefreshingSystemProfiler {
+            isRefreshingSystemProfiler = true
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let info = self?.readSystemProfilerBatteryHealthInfo()
+                DispatchQueue.main.async {
+                    self?.cachedSystemProfilerBatteryHealth = CachedSystemProfilerBatteryHealth(
+                        info: info,
+                        fetchedAt: referenceDate
+                    )
+                    self?.isRefreshingSystemProfiler = false
+                }
+            }
+        }
+
+        return cachedSystemProfilerBatteryHealth?.info
     }
 
     private func readSystemProfilerBatteryHealthInfo() -> SystemProfilerBatteryHealthInfo? {

@@ -18,7 +18,6 @@ enum BatteryHelperInstallerError: LocalizedError {
     case blessFailed(String)
     case bundledHelperMissing
     case launchDaemonInstallFailed(String)
-    case launchAgentInstallFailed(String)
     case installFailed(primary: String, fallback: String)
 
     var errorDescription: String? {
@@ -31,8 +30,6 @@ enum BatteryHelperInstallerError: LocalizedError {
             return "Bundled helper binary was not found in the app bundle."
         case .launchDaemonInstallFailed(let message):
             return "Privileged LaunchDaemon install failed: \(message)"
-        case .launchAgentInstallFailed(let message):
-            return "User helper install failed: \(message)"
         case .installFailed(let primary, let fallback):
             return "\(primary) Fallback install also failed: \(fallback)"
         }
@@ -111,44 +108,6 @@ final class SMJobBlessBatteryHelperInstaller: BatteryHelperInstalling {
 
         let message = blessingError?.takeRetainedValue().localizedDescription ?? "Unknown error"
         return .failure(.blessFailed(message))
-    }
-
-    private func installUserLaunchAgent() -> Result<Void, BatteryHelperInstallerError> {
-        guard let helperSourceURL = resolveBundledHelperURL() else {
-            return .failure(.bundledHelperMissing)
-        }
-
-        let installDirectory = userHelperInstallDirectory()
-        let installedHelperURL = installDirectory.appendingPathComponent(helperLabel, isDirectory: false)
-        let launchAgentURL = userLaunchAgentURL()
-
-        do {
-            try fileManager.createDirectory(at: installDirectory, withIntermediateDirectories: true)
-            if fileManager.fileExists(atPath: installedHelperURL.path) {
-                try fileManager.removeItem(at: installedHelperURL)
-            }
-            try fileManager.copyItem(at: helperSourceURL, to: installedHelperURL)
-            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedHelperURL.path)
-            try writeLaunchAgentPlist(helperExecutableURL: installedHelperURL, to: launchAgentURL)
-        } catch {
-            return .failure(.launchAgentInstallFailed(error.localizedDescription))
-        }
-
-        _ = runLaunchctl(["bootout", "gui/\(uidString)/\(helperLabel)"])
-
-        let bootstrap = runLaunchctl(["bootstrap", "gui/\(uidString)", launchAgentURL.path])
-        if bootstrap.terminationStatus != 0 && !isServiceLoaded(inDomain: "gui/\(uidString)") {
-            let output = bootstrap.output.isEmpty ? "launchctl bootstrap failed." : bootstrap.output
-            return .failure(.launchAgentInstallFailed(output))
-        }
-
-        _ = runLaunchctl(["kickstart", "-k", "gui/\(uidString)/\(helperLabel)"])
-
-        guard isServiceLoaded(inDomain: "gui/\(uidString)") else {
-            return .failure(.launchAgentInstallFailed("LaunchAgent did not appear in launchctl after install."))
-        }
-
-        return .success(())
     }
 
     private func installPrivilegedLaunchDaemon() -> Result<Void, BatteryHelperInstallerError> {
@@ -243,37 +202,6 @@ final class SMJobBlessBatteryHelperInstaller: BatteryHelperInstalling {
         }
 
         return bundledData == installedData
-    }
-
-    private func userHelperInstallDirectory() -> URL {
-        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
-
-        return baseURL
-            .appendingPathComponent("com.oscar.macmonitor", isDirectory: true)
-            .appendingPathComponent("Helper", isDirectory: true)
-    }
-
-    private func userLaunchAgentURL() -> URL {
-        URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
-            .appendingPathComponent("\(helperLabel).plist", isDirectory: false)
-    }
-
-    private func writeLaunchAgentPlist(helperExecutableURL: URL, to plistURL: URL) throws {
-        let launchAgentsDirectory = plistURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: launchAgentsDirectory, withIntermediateDirectories: true)
-
-        let plist: [String: Any] = [
-            "Label": helperLabel,
-            "ProgramArguments": [helperExecutableURL.path],
-            "MachServices": [helperLabel: true],
-            "RunAtLoad": true,
-            "KeepAlive": true
-        ]
-
-        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
-        try data.write(to: plistURL, options: [.atomic])
     }
 
     private func writeLaunchDaemonPlist(helperExecutablePath: String, to plistURL: URL) throws {
