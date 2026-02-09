@@ -150,9 +150,7 @@ struct MemorySnapshot: Codable, Equatable {
     let usedBytes: UInt64
     let totalBytes: UInt64
     let pressure: MemoryPressureLevel
-    let activeBytes: UInt64?
     let inactiveBytes: UInt64?
-    let wiredBytes: UInt64?
     let compressedBytes: UInt64?
     let freeBytes: UInt64?
 
@@ -160,18 +158,14 @@ struct MemorySnapshot: Codable, Equatable {
         usedBytes: UInt64,
         totalBytes: UInt64,
         pressure: MemoryPressureLevel,
-        activeBytes: UInt64? = nil,
         inactiveBytes: UInt64? = nil,
-        wiredBytes: UInt64? = nil,
         compressedBytes: UInt64? = nil,
         freeBytes: UInt64? = nil
     ) {
         self.usedBytes = usedBytes
         self.totalBytes = totalBytes
         self.pressure = pressure
-        self.activeBytes = activeBytes
         self.inactiveBytes = inactiveBytes
-        self.wiredBytes = wiredBytes
         self.compressedBytes = compressedBytes
         self.freeBytes = freeBytes
     }

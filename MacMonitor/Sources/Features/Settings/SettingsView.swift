@@ -199,19 +199,11 @@ struct SettingsView: View {
 
     private var startupSection: some View {
         settingSection(title: "Startup", subtitle: "Set it and forget it") {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Launch at login")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(settings.launchAtLoginError == nil ? PopoverTheme.textPrimary : PopoverTheme.red)
-
-                    Text(settings.launchAtLoginError ?? "Start automatically after login")
-                        .font(.system(size: 10))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                }
-
-                Spacer(minLength: 8)
-
+            settingRow(
+                title: "Launch at login",
+                subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login",
+                subtitleColor: settings.launchAtLoginError != nil ? PopoverTheme.red : PopoverTheme.textMuted
+            ) {
                 Toggle("", isOn: $settings.launchAtLoginEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
@@ -267,6 +259,7 @@ struct SettingsView: View {
     private func settingRow<Content: View>(
         title: String,
         subtitle: String,
+        subtitleColor: Color = PopoverTheme.textMuted,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -276,7 +269,7 @@ struct SettingsView: View {
 
             Text(subtitle)
                 .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textMuted)
+                .foregroundStyle(subtitleColor)
 
             content()
         }
