@@ -15,6 +15,17 @@ Open-source macOS (Apple Silicon) menu bar monitor.
 2. Build and test:
    - `xcodebuild -project MacMonitor.xcodeproj -scheme MacMonitor -destination 'platform=macOS' test`
 
+## Versioning and releases
+- Versioning uses SemVer (`MAJOR.MINOR.PATCH`) via `release-please`.
+- Merge PRs to `main` using Conventional Commits:
+  - `feat:` => minor
+  - `fix:` / `deps:` => patch
+  - `feat!:` or `BREAKING CHANGE:` => major
+- Docs/chore/test-only merges do not create a release.
+- Sparkle update assets + appcast are published automatically when a GitHub Release is published.
+- Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `UPDATES_REPO_TOKEN`).
+- See `scripts/release-checklist.md` for full release flow and secrets.
+
 ## Install new build
 Use:
 - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/scripts/install-macmonitor-update.sh`

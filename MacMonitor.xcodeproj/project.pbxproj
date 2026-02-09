@@ -28,12 +28,14 @@
 		4290D58DB4105A57AFF3B1D6 /* SystemSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7935D3E06705ABAACAEF85E /* SystemSnapshot.swift */; };
 		42C3C7FACC00F6EF28EABEBD /* RAMPolicySettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2742FE280420C7D14A5653 /* RAMPolicySettingsViewModel.swift */; };
 		45687130E0A490D5B1B15CD1 /* BatteryReconciliationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AA370339A92BC634D7CEE0D /* BatteryReconciliationManagerTests.swift */; };
+		463F0753E856222F3035209F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 380C2E52A0799CE17F9A916E /* Sparkle */; };
 		46CA4FB01FD369F8453F67C7 /* MetricsEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 721B261287E8F32DBDACDCA7 /* MetricsEngineTests.swift */; };
 		4753E5A8D636591BC9BEC382 /* RAMDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2665DF7F6E538B2D5D4EF6E9 /* RAMDetailsView.swift */; };
 		47CCD1C1A71B3246F51747A5 /* RAMDetailsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C1428F04FBFCBA0C2731DA /* RAMDetailsViewModel.swift */; };
 		4F226C0C7A62B29D0765FDB0 /* FileRAMPolicyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2B40D2FD6F77679BD222DB /* FileRAMPolicyStoreTests.swift */; };
 		54DA1EB3085A182A6DFC1B26 /* BatteryScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FC1349FC699830E89CA4A9 /* BatteryScreenView.swift */; };
 		55686F93103AD144B9AA2FE9 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A058DB55BF0F64222249C052 /* SettingsStore.swift */; };
+		565695A220D1AE08ECCD5AA8 /* AppUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA3F410E5D3FC81765B1F05 /* AppUpdateController.swift */; };
 		5C9D22A7CE427706DBDE8FED /* SystemSummaryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FEC685BC6C27E89EAC286C /* SystemSummaryViewModelTests.swift */; };
 		5E4F6537BFB109C2BA30A834 /* RAMPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8FA604CBA270C6315281BCB /* RAMPolicy.swift */; };
 		5FBDD161AF161A4CB8036C06 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A602D5D8AF1254618D8FF235 /* AppContainer.swift */; };
@@ -161,6 +163,7 @@
 		A49FAADA9E9A136F18E9336A /* RAMPolicyEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyEvaluator.swift; sourceTree = "<group>"; };
 		A602D5D8AF1254618D8FF235 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		A8DE3334A84A08757ADC8649 /* BatteryEventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryEventStore.swift; sourceTree = "<group>"; };
+		ADA3F410E5D3FC81765B1F05 /* AppUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateController.swift; sourceTree = "<group>"; };
 		ADC871394D58EB83CF7D2840 /* ProcessListCollecting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessListCollecting.swift; sourceTree = "<group>"; };
 		ADEA6BD38BA8D887B1DB64A9 /* MacMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMonitorApp.swift; sourceTree = "<group>"; };
 		B7C939B57C86D6F19C64B50B /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
@@ -188,6 +191,17 @@
 		FA7B49917494DFAE13A9EB96 /* AppRAMUsageCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRAMUsageCollector.swift; sourceTree = "<group>"; };
 		FE663B471A85D9134A749CFF /* BatteryControlXPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryControlXPCProtocol.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		232654D97C29A6EB7C0150DA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				463F0753E856222F3035209F /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		16E5092A6F91199FD6A79576 /* Processes */ = {
@@ -421,6 +435,7 @@
 		D0091B573F18374FAEC46395 /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				ADA3F410E5D3FC81765B1F05 /* AppUpdateController.swift */,
 				B7C939B57C86D6F19C64B50B /* LaunchAtLoginManager.swift */,
 			);
 			path = Support;
@@ -489,6 +504,7 @@
 			buildPhases = (
 				9F478799591119C7B9BC9B18 /* Sources */,
 				D0DCCDDA1169F3F9C3A86D2D /* Resources */,
+				232654D97C29A6EB7C0150DA /* Frameworks */,
 				BE69FA25BBA6BE97A3741D82 /* Embed Battery Helper */,
 			);
 			buildRules = (
@@ -498,6 +514,7 @@
 			);
 			name = MacMonitor;
 			packageProductDependencies = (
+				380C2E52A0799CE17F9A916E /* Sparkle */,
 			);
 			productName = MacMonitor;
 			productReference = F5EC59DCDA5FABDA409CDBCB /* MacMonitor.app */;
@@ -557,6 +574,9 @@
 			);
 			mainGroup = 1E4B6EF5F92A76F77E44AEAD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				15604027FE2DA7C1413325E4 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -646,6 +666,7 @@
 				1FBBA33D6E8F36707E88475C /* AppDataDirectory.swift in Sources */,
 				EC63DDC09710215EA2588416 /* AppDelegate.swift in Sources */,
 				B1BA0BF1589BCA5D56454942 /* AppRAMUsageCollector.swift in Sources */,
+				565695A220D1AE08ECCD5AA8 /* AppUpdateController.swift in Sources */,
 				B161B23815C435AA6997AABF /* BatteryAppIntents.swift in Sources */,
 				7D89CD0FF92CA4735731AF59 /* BatteryCollector.swift in Sources */,
 				9702F25157858384C4945459 /* BatteryControlBackend.swift in Sources */,
@@ -733,6 +754,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-updates/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Debug;
 		};
@@ -906,6 +929,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-updates/appcast.xml";
+				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Release;
 		};
@@ -991,6 +1016,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		15604027FE2DA7C1413325E4 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		380C2E52A0799CE17F9A916E /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 15604027FE2DA7C1413325E4 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 50A0A2115D830ED94B0DCD89 /* Project object */;
 }

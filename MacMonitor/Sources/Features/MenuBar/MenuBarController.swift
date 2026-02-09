@@ -8,6 +8,7 @@ final class MenuBarController: NSObject {
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
     private let batteryPolicyCoordinator: BatteryPolicyCoordinator
+    private let appUpdateController: AppUpdateController
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let statusIconRenderer = MenuBarStatusIconRenderer.shared
@@ -18,12 +19,14 @@ final class MenuBarController: NSObject {
         viewModel: SystemSummaryViewModel,
         ramDetailsViewModel: RAMDetailsViewModel,
         ramPolicyViewModel: RAMPolicySettingsViewModel,
-        batteryPolicyCoordinator: BatteryPolicyCoordinator
+        batteryPolicyCoordinator: BatteryPolicyCoordinator,
+        appUpdateController: AppUpdateController
     ) {
         self.viewModel = viewModel
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
         self.batteryPolicyCoordinator = batteryPolicyCoordinator
+        self.appUpdateController = appUpdateController
         super.init()
     }
 
@@ -36,7 +39,8 @@ final class MenuBarController: NSObject {
                 ramDetailsViewModel: ramDetailsViewModel,
                 ramPolicyViewModel: ramPolicyViewModel,
                 batteryPolicyCoordinator: batteryPolicyCoordinator,
-                settings: viewModel.settings
+                settings: viewModel.settings,
+                appUpdateController: appUpdateController
             )
         )
 
