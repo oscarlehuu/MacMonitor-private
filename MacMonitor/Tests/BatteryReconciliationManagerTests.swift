@@ -3,12 +3,12 @@ import XCTest
 
 @MainActor
 final class BatteryReconciliationManagerTests: XCTestCase {
-    func testReconcileAppliesCommandOnFirstEvaluation() {
+    func testReconcileAppliesCommandOnFirstEvaluation() async {
         let context = makeContext()
         var configuration = BatteryPolicyConfiguration.default
         configuration.chargeLimitPercent = 80
 
-        let result = context.manager.reconcile(
+        let result = await context.manager.reconcile(
             snapshot: makeSnapshot(percent: 70),
             configuration: configuration,
             source: .policy,
@@ -21,12 +21,12 @@ final class BatteryReconciliationManagerTests: XCTestCase {
         XCTAssertEqual(context.backend.executedCommands, [.setChargeLimit(80)])
     }
 
-    func testReconcileSkipsDuplicateCommandWhenNotForced() {
+    func testReconcileSkipsDuplicateCommandWhenNotForced() async {
         let context = makeContext()
         var configuration = BatteryPolicyConfiguration.default
         configuration.chargeLimitPercent = 80
 
-        _ = context.manager.reconcile(
+        _ = await context.manager.reconcile(
             snapshot: makeSnapshot(percent: 70),
             configuration: configuration,
             source: .policy,
@@ -34,7 +34,7 @@ final class BatteryReconciliationManagerTests: XCTestCase {
             force: false
         )
 
-        let second = context.manager.reconcile(
+        let second = await context.manager.reconcile(
             snapshot: makeSnapshot(percent: 70),
             configuration: configuration,
             source: .policy,
@@ -46,12 +46,12 @@ final class BatteryReconciliationManagerTests: XCTestCase {
         XCTAssertEqual(context.backend.executedCommands.count, 1)
     }
 
-    func testReconcileReappliesDuplicateCommandWhenForced() {
+    func testReconcileReappliesDuplicateCommandWhenForced() async {
         let context = makeContext()
         var configuration = BatteryPolicyConfiguration.default
         configuration.chargeLimitPercent = 80
 
-        _ = context.manager.reconcile(
+        _ = await context.manager.reconcile(
             snapshot: makeSnapshot(percent: 70),
             configuration: configuration,
             source: .policy,
@@ -59,7 +59,7 @@ final class BatteryReconciliationManagerTests: XCTestCase {
             force: false
         )
 
-        let second = context.manager.reconcile(
+        let second = await context.manager.reconcile(
             snapshot: makeSnapshot(percent: 70),
             configuration: configuration,
             source: .lifecycle,

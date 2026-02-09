@@ -428,10 +428,12 @@ struct BatteryScreenView: View {
 
         return HStack(spacing: 4) {
             actionButton(title: title, tint: tint) {
-                if isStartMode {
-                    _ = coordinator.startChargingNow()
-                } else {
-                    _ = coordinator.pauseChargingNow()
+                Task {
+                    if isStartMode {
+                        _ = await coordinator.startChargingNow()
+                    } else {
+                        _ = await coordinator.pauseChargingNow()
+                    }
                 }
             }
             .disabled(!isAdapterConnected)

@@ -47,11 +47,13 @@ final class BatteryPolicyCoordinator: ObservableObject {
             .dropFirst()
             .removeDuplicates()
             .sink { [weak self] _ in
-                self?.reconcileNow(
-                    source: .policy,
-                    reason: "Policy configuration changed.",
-                    force: true
-                )
+                Task { [weak self] in
+                    await self?.reconcileNow(
+                        source: .policy,
+                        reason: "Policy configuration changed.",
+                        force: true
+                    )
+                }
             }
             .store(in: &cancellables)
 
@@ -63,19 +65,19 @@ final class BatteryPolicyCoordinator: ObservableObject {
         cancellables.removeAll()
     }
 
-    func handle(snapshot: BatterySnapshot) {
+    func handle(snapshot: BatterySnapshot) async {
         latestBatterySnapshot = snapshot
-        reconcileNow(source: .policy, reason: "Telemetry updated.")
+        await reconcileNow(source: .policy, reason: "Telemetry updated.")
     }
 
-    func handleLifecycleEvent(_ event: BatteryLifecycleEvent) {
+    func handleLifecycleEvent(_ event: BatteryLifecycleEvent) async {
         let reason = "Lifecycle event: \(event.rawValue)."
 
         if event == .appDidLaunch {
             reconciliationManager.clearLastAppliedState()
         }
 
-        reconcileNow(source: .lifecycle, reason: reason, force: true)
+        await reconcileNow(source: .lifecycle, reason: reason, force: true)
     }
 
     func updateConfiguration(_ mutate: (inout BatteryPolicyConfiguration) -> Void) {
@@ -103,21 +105,21 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func applyScheduledAction(_ action: BatteryScheduledAction) -> BatteryControlCommandResult {
+    func applyScheduledAction(_ action: BatteryScheduledAction) async -> BatteryControlCommandResult {
         switch action {
         case .setChargeLimit(let limit):
-            return setChargeLimit(limit)
+            return await setChargeLimit(limit)
         case .startTopUp:
-            return startTopUpNow()
+            return await startTopUpNow()
         case .startDischarge(let targetPercent):
-            return startDischargeNow(targetPercent: targetPercent)
+            return await startDischargeNow(targetPercent: targetPercent)
         case .pauseCharging:
-            return pauseChargingNow()
+            return await pauseChargingNow()
         }
     }
 
     @discardableResult
-    func setChargeLimit(_ percent: Int) -> BatteryControlCommandResult {
+    func setChargeLimit(_ percent: Int) async -> BatteryControlCommandResult {
         let normalizedLimit = min(max(percent, 50), 95)
         updateConfiguration { configuration in
             configuration.chargeLimitPercent = normalizedLimit
@@ -125,7 +127,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
             configuration.topUpEnabled = false
         }
 
-        return directCommand(
+        return await directCommand(
             .setChargeLimit(normalizedLimit),
             state: .chargingToLimit,
             source: .manual,
@@ -134,13 +136,13 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func pauseChargingNow() -> BatteryControlCommandResult {
+    func pauseChargingNow() async -> BatteryControlCommandResult {
         updateConfiguration { configuration in
             configuration.topUpEnabled = false
             configuration.manualDischargeEnabled = false
         }
 
-        return directCommand(
+        return await directCommand(
             .setChargingPaused(true),
             state: .pausedAtLimit,
             source: .manual,
@@ -149,13 +151,13 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func startChargingNow() -> BatteryControlCommandResult {
+    func startChargingNow() async -> BatteryControlCommandResult {
         updateConfiguration { configuration in
             configuration.topUpEnabled = true
             configuration.manualDischargeEnabled = false
         }
 
-        return directCommand(
+        return await directCommand(
             .startTopUp,
             state: .topUp,
             source: .manual,
@@ -164,13 +166,13 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func startTopUpNow() -> BatteryControlCommandResult {
+    func startTopUpNow() async -> BatteryControlCommandResult {
         updateConfiguration { configuration in
             configuration.topUpEnabled = true
             configuration.manualDischargeEnabled = false
         }
 
-        return directCommand(
+        return await directCommand(
             .startTopUp,
             state: .topUp,
             source: .manual,
@@ -179,7 +181,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func startDischargeNow(targetPercent: Int) -> BatteryControlCommandResult {
+    func startDischargeNow(targetPercent: Int) async -> BatteryControlCommandResult {
         let normalizedTarget = min(max(targetPercent, 50), 95)
         updateConfiguration { configuration in
             configuration.topUpEnabled = false
@@ -188,7 +190,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
             configuration.chargeLimitPercent = normalizedTarget
         }
 
-        return directCommand(
+        return await directCommand(
             .startDischarge(targetPercent: normalizedTarget),
             state: .dischargingToLimit,
             source: .manual,
@@ -197,12 +199,12 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func stopDischargeNow() -> BatteryControlCommandResult {
+    func stopDischargeNow() async -> BatteryControlCommandResult {
         updateConfiguration { configuration in
             configuration.manualDischargeEnabled = false
         }
 
-        return directCommand(
+        return await directCommand(
             .stopDischarge,
             state: .pausedAtLimit,
             source: .manual,
@@ -256,8 +258,8 @@ final class BatteryPolicyCoordinator: ObservableObject {
         source: BatteryControlEventSource,
         reason: String,
         force: Bool = false
-    ) {
-        let result = reconciliationManager.reconcile(
+    ) async {
+        let result = await reconciliationManager.reconcile(
             snapshot: latestBatterySnapshot,
             configuration: settings.batteryPolicyConfiguration,
             source: source,
@@ -280,8 +282,8 @@ final class BatteryPolicyCoordinator: ObservableObject {
         state: BatteryControlState,
         source: BatteryControlEventSource,
         reason: String
-    ) -> BatteryControlCommandResult {
-        let result = controlService.execute(
+    ) async -> BatteryControlCommandResult {
+        let result = await controlService.execute(
             command,
             resultingState: state,
             source: source,

@@ -80,32 +80,37 @@ final class AppContainer {
             queueEngine: BatteryScheduleEngine(),
             policyCoordinator: batteryPolicyCoordinator
         )
-        let batteryLifecycleCoordinator = BatteryLifecycleCoordinator { event in
-            batteryPolicyCoordinator.handleLifecycleEvent(event)
-            if event == .didWake || event == .userSessionDidBecomeActive {
-                batteryScheduleCoordinator.processWakeCatchUp()
+        let batteryLifecycleCoordinator = BatteryLifecycleCoordinator { [weak batteryPolicyCoordinator, weak batteryScheduleCoordinator] event in
+            Task { @MainActor [weak batteryPolicyCoordinator, weak batteryScheduleCoordinator] in
+                await batteryPolicyCoordinator?.handleLifecycleEvent(event)
+                if event == .didWake || event == .userSessionDidBecomeActive {
+                    batteryScheduleCoordinator?.processWakeCatchUp()
+                }
             }
         }
 
-        BatteryIntentBridge.shared.handler = { command in
+        BatteryIntentBridge.shared.handler = { [weak batteryPolicyCoordinator] command in
+            guard let batteryPolicyCoordinator else {
+                return .failure("Battery control is not available.")
+            }
             switch command {
             case .setChargeLimit(let limit):
-                let result = batteryPolicyCoordinator.setChargeLimit(limit)
+                let result = await batteryPolicyCoordinator.setChargeLimit(limit)
                 return result.accepted
                 ? .success("Charge limit set to \(min(max(limit, 50), 95))%.")
                 : .failure(result.message ?? "Failed to set charge limit.")
             case .pauseCharging:
-                let result = batteryPolicyCoordinator.pauseChargingNow()
+                let result = await batteryPolicyCoordinator.pauseChargingNow()
                 return result.accepted
                 ? .success("Charging paused.")
                 : .failure(result.message ?? "Failed to pause charging.")
             case .startTopUp:
-                let result = batteryPolicyCoordinator.startTopUpNow()
+                let result = await batteryPolicyCoordinator.startTopUpNow()
                 return result.accepted
                 ? .success("Top Up started.")
                 : .failure(result.message ?? "Failed to start Top Up.")
             case .startDischarge(let target):
-                let result = batteryPolicyCoordinator.startDischargeNow(targetPercent: target)
+                let result = await batteryPolicyCoordinator.startDischargeNow(targetPercent: target)
                 return result.accepted
                 ? .success("Discharge started toward \(min(max(target, 50), 95))%.")
                 : .failure(result.message ?? "Failed to start discharge.")
@@ -137,11 +142,15 @@ final class AppContainer {
     func start() {
         menuBarController.install()
         batteryPolicyCoordinator.start()
-        batteryScheduleCoordinator.start()
+        Task { [weak self] in
+            await self?.batteryScheduleCoordinator.start()
+        }
         batterySnapshotCancellable = metricsEngine.$latestSnapshot
             .compactMap { $0?.battery }
             .sink { [weak self] snapshot in
-                self?.batteryPolicyCoordinator.handle(snapshot: snapshot)
+                Task { [weak self] in
+                    await self?.batteryPolicyCoordinator.handle(snapshot: snapshot)
+                }
             }
         summaryViewModel.start()
         ramPolicyMonitor.start()

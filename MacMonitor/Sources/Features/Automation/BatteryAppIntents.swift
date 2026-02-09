@@ -15,9 +15,7 @@ struct SetBatteryChargeLimitIntent: AppIntent {
             return .result(value: "Charge limit must be between 50 and 95 percent.")
         }
 
-        let response = await MainActor.run {
-            BatteryIntentBridge.shared.perform(.setChargeLimit(chargeLimit))
-        }
+        let response = await BatteryIntentBridge.shared.perform(.setChargeLimit(chargeLimit))
         return .result(value: response.message)
     }
 }
@@ -28,9 +26,7 @@ struct PauseBatteryChargingIntent: AppIntent {
     static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let response = await MainActor.run {
-            BatteryIntentBridge.shared.perform(.pauseCharging)
-        }
+        let response = await BatteryIntentBridge.shared.perform(.pauseCharging)
         return .result(value: response.message)
     }
 }
@@ -41,9 +37,7 @@ struct StartBatteryTopUpIntent: AppIntent {
     static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let response = await MainActor.run {
-            BatteryIntentBridge.shared.perform(.startTopUp)
-        }
+        let response = await BatteryIntentBridge.shared.perform(.startTopUp)
         return .result(value: response.message)
     }
 }
@@ -62,9 +56,7 @@ struct StartBatteryDischargeIntent: AppIntent {
             return .result(value: "Target must be between 50 and 95 percent.")
         }
 
-        let response = await MainActor.run {
-            BatteryIntentBridge.shared.perform(.startDischarge(targetPercent))
-        }
+        let response = await BatteryIntentBridge.shared.perform(.startDischarge(targetPercent))
         return .result(value: response.message)
     }
 }
@@ -75,10 +67,7 @@ struct GetBatteryControlStateIntent: AppIntent {
     static let openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let response = await MainActor.run {
-            BatteryIntentBridge.shared.perform(.getState)
-        }
-
+        let response = await BatteryIntentBridge.shared.perform(.getState)
         return .result(value: response.message)
     }
 }

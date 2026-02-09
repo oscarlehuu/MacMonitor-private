@@ -3,9 +3,9 @@ import XCTest
 
 @MainActor
 final class BatteryScheduleCoordinatorTests: XCTestCase {
-    func testStartupExecutesDueTasksAndPersistsFutureTasks() {
+    func testStartupExecutesDueTasksAndPersistsFutureTasks() async {
         let now = Date(timeIntervalSince1970: 5_000_000)
-        let context = makeContext(now: { now }, staleTaskThreshold: 60 * 60)
+        let context = await makeContext(now: { now }, staleTaskThreshold: 60 * 60)
 
         let dueTask = BatteryScheduledTask(
             action: .setChargeLimit(80),
@@ -19,7 +19,7 @@ final class BatteryScheduleCoordinatorTests: XCTestCase {
         )
         context.store.tasks = [dueTask, futureTask]
 
-        context.scheduleCoordinator.start()
+        await context.scheduleCoordinator.start()
 
         XCTAssertEqual(context.backend.executedCommands, [.setChargeLimit(80)])
         XCTAssertEqual(context.scheduleCoordinator.pendingTasks.map(\.id), [futureTask.id])
@@ -28,9 +28,9 @@ final class BatteryScheduleCoordinatorTests: XCTestCase {
         context.scheduleCoordinator.stop()
     }
 
-    func testStartupDropsStaleTasks() {
+    func testStartupDropsStaleTasks() async {
         let now = Date(timeIntervalSince1970: 5_100_000)
-        let context = makeContext(now: { now }, staleTaskThreshold: 60)
+        let context = await makeContext(now: { now }, staleTaskThreshold: 60)
 
         let staleTask = BatteryScheduledTask(
             action: .startTopUp,
@@ -39,7 +39,7 @@ final class BatteryScheduleCoordinatorTests: XCTestCase {
         )
         context.store.tasks = [staleTask]
 
-        context.scheduleCoordinator.start()
+        await context.scheduleCoordinator.start()
 
         XCTAssertTrue(context.backend.executedCommands.isEmpty)
         XCTAssertTrue(context.scheduleCoordinator.pendingTasks.isEmpty)
@@ -52,7 +52,7 @@ final class BatteryScheduleCoordinatorTests: XCTestCase {
     private func makeContext(
         now: @escaping () -> Date,
         staleTaskThreshold: TimeInterval
-    ) -> (
+    ) async -> (
         scheduleCoordinator: BatteryScheduleCoordinator,
         store: MemoryBatteryScheduleStore,
         backend: ScheduleCoordinatorBackend
@@ -70,7 +70,7 @@ final class BatteryScheduleCoordinatorTests: XCTestCase {
             reconciliationManager: manager
         )
         policyCoordinator.start()
-        policyCoordinator.handle(snapshot: makeSnapshot(percent: 80))
+        await policyCoordinator.handle(snapshot: makeSnapshot(percent: 80))
 
         let store = MemoryBatteryScheduleStore()
         let queueEngine = BatteryScheduleEngine(queueCap: 32, staleTaskThreshold: staleTaskThreshold)

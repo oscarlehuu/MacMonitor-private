@@ -29,17 +29,19 @@ final class BatteryScheduleCoordinator: ObservableObject {
         self.now = now
     }
 
-    func start() {
+    func start() async {
         guard !hasStarted else { return }
         hasStarted = true
 
         pendingTasks = store.loadTasks()
-        processMissedAndReadyTasks(trigger: "startup")
+        await processMissedAndReadyTasks(trigger: "startup")
 
         timerCancellable = Timer.publish(every: checkInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.processMissedAndReadyTasks(trigger: "timer")
+                Task { [weak self] in
+                    await self?.processMissedAndReadyTasks(trigger: "timer")
+                }
             }
     }
 
@@ -72,10 +74,12 @@ final class BatteryScheduleCoordinator: ObservableObject {
     }
 
     func processWakeCatchUp() {
-        processMissedAndReadyTasks(trigger: "wake")
+        Task { [weak self] in
+            await self?.processMissedAndReadyTasks(trigger: "wake")
+        }
     }
 
-    private func processMissedAndReadyTasks(trigger: String) {
+    private func processMissedAndReadyTasks(trigger: String) async {
         let referenceDate = now()
         var futureTasks: [BatteryScheduledTask] = []
 
@@ -106,7 +110,7 @@ final class BatteryScheduleCoordinator: ObservableObject {
             return
         }
 
-        execute(tasks: readyTasks, trigger: trigger, staleDroppedCount: staleDroppedCount, replacedCount: replacedCount)
+        await execute(tasks: readyTasks, trigger: trigger, staleDroppedCount: staleDroppedCount, replacedCount: replacedCount)
     }
 
     private func execute(
@@ -114,11 +118,11 @@ final class BatteryScheduleCoordinator: ObservableObject {
         trigger: String,
         staleDroppedCount: Int,
         replacedCount: Int
-    ) {
+    ) async {
         var failedCount = 0
 
         for task in tasks {
-            let result = policyCoordinator.applyScheduledAction(task.action)
+            let result = await policyCoordinator.applyScheduledAction(task.action)
             if !result.accepted {
                 failedCount += 1
             }

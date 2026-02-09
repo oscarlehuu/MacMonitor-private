@@ -262,9 +262,14 @@ final class BatteryCollector: BatteryCollecting {
     }
 
     private static func normalizeTemperature(_ rawValue: Int) -> Int {
-        // AppleSmartBattery temperature is typically reported in centi-degrees Celsius.
+        // AppleSmartBattery temperature is typically reported in centi-degrees Celsius
+        // (e.g. 2930 for 29.3°C), but some hardware uses deci-degrees Celsius
+        // (e.g. 293 for 29.3°C).
         if rawValue >= 1000 {
             return Int((Double(rawValue) / 100.0).rounded())
+        }
+        if rawValue >= 100 {
+            return Int((Double(rawValue) / 10.0).rounded())
         }
         return rawValue
     }

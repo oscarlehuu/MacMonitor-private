@@ -75,6 +75,28 @@ struct BatteryPolicyEngine {
 
         // Priority 5: sailing mode keeps battery in configured range.
         if config.sailingModeEnabled {
+            if config.sailingLowerPercent == config.sailingUpperPercent {
+                // Equal bounds: maintain exact target without oscillation.
+                if currentPercent > config.sailingUpperPercent {
+                    return BatteryPolicyDecision(
+                        state: .sailing,
+                        command: .startDischarge(targetPercent: config.sailingLowerPercent),
+                        reason: "Sailing mode discharging to target."
+                    )
+                }
+                if currentPercent < config.sailingLowerPercent {
+                    return BatteryPolicyDecision(
+                        state: .chargingToLimit,
+                        command: .setChargeLimit(config.sailingUpperPercent),
+                        reason: "Sailing mode charging to target."
+                    )
+                }
+                return BatteryPolicyDecision(
+                    state: .sailing,
+                    command: nil,
+                    reason: "Sailing mode at target."
+                )
+            }
             if currentPercent >= config.sailingUpperPercent {
                 return BatteryPolicyDecision(
                     state: .sailing,

@@ -31,13 +31,18 @@ final class BatteryControlService: ObservableObject {
         source: BatteryControlEventSource,
         reason: String,
         batteryPercent: Int?
-    ) -> BatteryControlCommandResult {
+    ) async -> BatteryControlCommandResult {
         availability = backend.availability
         let result: BatteryControlCommandResult
 
         switch availability {
         case .available:
-            result = backend.execute(command)
+            let backend = self.backend
+            result = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    continuation.resume(returning: backend.execute(command))
+                }
+            }
         case .unavailable(let unavailableReason):
             result = .failure(unavailableReason)
         }

@@ -25,14 +25,14 @@ struct BatteryIntentResponse {
 final class BatteryIntentBridge {
     static let shared = BatteryIntentBridge()
 
-    var handler: ((BatteryIntentCommand) -> BatteryIntentResponse)?
+    var handler: ((BatteryIntentCommand) async -> BatteryIntentResponse)?
 
     private init() {}
 
-    func perform(_ command: BatteryIntentCommand) -> BatteryIntentResponse {
+    func perform(_ command: BatteryIntentCommand) async -> BatteryIntentResponse {
         guard let handler else {
             return .failure("Battery control is not initialized yet.")
         }
-        return handler(command)
+        return await handler(command)
     }
 }

@@ -3,24 +3,24 @@ import XCTest
 
 @MainActor
 final class BatteryPolicyCoordinatorTests: XCTestCase {
-    func testSetChargeLimitClampsToValidatedBoundsAndSendsCommand() {
+    func testSetChargeLimitClampsToValidatedBoundsAndSendsCommand() async {
         let context = makeContext()
         context.coordinator.start()
-        context.coordinator.handle(snapshot: makeSnapshot(percent: 60))
+        await context.coordinator.handle(snapshot: makeSnapshot(percent: 60))
 
-        let result = context.coordinator.setChargeLimit(120)
+        let result = await context.coordinator.setChargeLimit(120)
 
         XCTAssertTrue(result.accepted)
         XCTAssertEqual(context.settings.batteryPolicyConfiguration.chargeLimitPercent, 95)
         XCTAssertEqual(context.backend.executedCommands.last, .setChargeLimit(95))
     }
 
-    func testStartDischargeUpdatesPolicyAndSendsCommand() {
+    func testStartDischargeUpdatesPolicyAndSendsCommand() async {
         let context = makeContext()
         context.coordinator.start()
-        context.coordinator.handle(snapshot: makeSnapshot(percent: 90))
+        await context.coordinator.handle(snapshot: makeSnapshot(percent: 90))
 
-        let result = context.coordinator.startDischargeNow(targetPercent: 70)
+        let result = await context.coordinator.startDischargeNow(targetPercent: 70)
 
         XCTAssertTrue(result.accepted)
         XCTAssertTrue(context.settings.batteryPolicyConfiguration.manualDischargeEnabled)
@@ -56,30 +56,30 @@ final class BatteryPolicyCoordinatorTests: XCTestCase {
         XCTAssertFalse(context.settings.batteryPolicyConfiguration.manualDischargeEnabled)
     }
 
-    func testLifecycleWakeForcesPolicyReplay() {
+    func testLifecycleWakeForcesPolicyReplay() async {
         let context = makeContext()
         var config = context.settings.batteryPolicyConfiguration
         config.chargeLimitPercent = 80
         context.settings.batteryPolicyConfiguration = config
 
         context.coordinator.start()
-        context.coordinator.handle(snapshot: makeSnapshot(percent: 70))
+        await context.coordinator.handle(snapshot: makeSnapshot(percent: 70))
         let firstCommandCount = context.backend.executedCommands.count
 
-        context.coordinator.handleLifecycleEvent(.didWake)
+        await context.coordinator.handleLifecycleEvent(.didWake)
 
         XCTAssertEqual(context.backend.executedCommands.count, firstCommandCount + 1)
         XCTAssertEqual(context.backend.executedCommands.last, .setChargeLimit(80))
     }
 
-    func testStartChargingStartsTopUpAndClearsManualDischarge() {
+    func testStartChargingStartsTopUpAndClearsManualDischarge() async {
         let context = makeContext()
         context.coordinator.start()
         context.coordinator.updateConfiguration { configuration in
             configuration.manualDischargeEnabled = true
         }
 
-        let result = context.coordinator.startChargingNow()
+        let result = await context.coordinator.startChargingNow()
 
         XCTAssertTrue(result.accepted)
         XCTAssertTrue(context.settings.batteryPolicyConfiguration.topUpEnabled)
@@ -87,7 +87,7 @@ final class BatteryPolicyCoordinatorTests: XCTestCase {
         XCTAssertEqual(context.backend.executedCommands.last, .startTopUp)
     }
 
-    func testPauseChargingClearsTopUpAndManualDischarge() {
+    func testPauseChargingClearsTopUpAndManualDischarge() async {
         let context = makeContext()
         context.coordinator.start()
         context.coordinator.updateConfiguration { configuration in
@@ -95,7 +95,7 @@ final class BatteryPolicyCoordinatorTests: XCTestCase {
             configuration.manualDischargeEnabled = true
         }
 
-        let result = context.coordinator.pauseChargingNow()
+        let result = await context.coordinator.pauseChargingNow()
 
         XCTAssertTrue(result.accepted)
         XCTAssertFalse(context.settings.batteryPolicyConfiguration.topUpEnabled)

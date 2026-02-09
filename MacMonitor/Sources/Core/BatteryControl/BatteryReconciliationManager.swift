@@ -31,7 +31,7 @@ final class BatteryReconciliationManager {
         source: BatteryControlEventSource,
         reason: String,
         force: Bool = false
-    ) -> Result {
+    ) async -> Result {
         let decision = policyEngine.evaluate(snapshot: snapshot, configuration: configuration)
         let signature = Signature(state: decision.state, command: decision.command)
         let shouldApply = force || signature != lastAppliedSignature
@@ -39,7 +39,7 @@ final class BatteryReconciliationManager {
 
         var commandResult: BatteryControlCommandResult?
         if let command = decision.command, shouldApply {
-            commandResult = controlService.execute(
+            commandResult = await controlService.execute(
                 command,
                 resultingState: decision.state,
                 source: source,
