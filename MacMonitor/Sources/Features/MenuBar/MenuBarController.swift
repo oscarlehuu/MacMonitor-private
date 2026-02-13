@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
+    private let storageManagementViewModel: StorageManagementViewModel
     private let batteryPolicyCoordinator: BatteryPolicyCoordinator
     private let appUpdateController: AppUpdateController
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -19,12 +20,14 @@ final class MenuBarController: NSObject {
         viewModel: SystemSummaryViewModel,
         ramDetailsViewModel: RAMDetailsViewModel,
         ramPolicyViewModel: RAMPolicySettingsViewModel,
+        storageManagementViewModel: StorageManagementViewModel,
         batteryPolicyCoordinator: BatteryPolicyCoordinator,
         appUpdateController: AppUpdateController
     ) {
         self.viewModel = viewModel
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
+        self.storageManagementViewModel = storageManagementViewModel
         self.batteryPolicyCoordinator = batteryPolicyCoordinator
         self.appUpdateController = appUpdateController
         super.init()
@@ -38,6 +41,7 @@ final class MenuBarController: NSObject {
                 viewModel: viewModel,
                 ramDetailsViewModel: ramDetailsViewModel,
                 ramPolicyViewModel: ramPolicyViewModel,
+                storageManagementViewModel: storageManagementViewModel,
                 batteryPolicyCoordinator: batteryPolicyCoordinator,
                 settings: viewModel.settings,
                 appUpdateController: appUpdateController

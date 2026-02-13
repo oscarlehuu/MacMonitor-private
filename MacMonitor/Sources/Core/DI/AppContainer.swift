@@ -10,12 +10,14 @@ final class AppContainer {
     private let summaryViewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
+    private let storageManagementViewModel: StorageManagementViewModel
     private let ramPolicyMonitor: RAMPolicyMonitor
     private let batteryPolicyCoordinator: BatteryPolicyCoordinator
     private let batteryScheduleCoordinator: BatteryScheduleCoordinator
     private let batteryLifecycleCoordinator: BatteryLifecycleCoordinator
     private let menuBarController: MenuBarController
     private var batterySnapshotCancellable: AnyCancellable?
+    private var storageSnapshotCancellable: AnyCancellable?
 
     init() {
         let settings = SettingsStore(launchAtLoginManager: LaunchAtLoginManager())
@@ -35,6 +37,7 @@ final class AppContainer {
 
         let store = SnapshotStore()
         let viewModel = SystemSummaryViewModel(engine: engine, snapshotStore: store, settings: settings)
+        let storageManagementViewModel = StorageManagementViewModel(storageManager: LocalStorageManager())
         let processProtectionPolicy = DefaultProcessProtectionPolicy()
         let processCollector = LibprocProcessListCollector(protectionPolicy: processProtectionPolicy)
         let processTerminator = SignalProcessTerminator()
@@ -125,6 +128,7 @@ final class AppContainer {
             viewModel: viewModel,
             ramDetailsViewModel: ramDetails,
             ramPolicyViewModel: policyViewModel,
+            storageManagementViewModel: storageManagementViewModel,
             batteryPolicyCoordinator: batteryPolicyCoordinator,
             appUpdateController: appUpdateController
         )
@@ -136,6 +140,7 @@ final class AppContainer {
         self.summaryViewModel = viewModel
         self.ramDetailsViewModel = ramDetails
         self.ramPolicyViewModel = policyViewModel
+        self.storageManagementViewModel = storageManagementViewModel
         self.ramPolicyMonitor = policyMonitor
         self.batteryPolicyCoordinator = batteryPolicyCoordinator
         self.batteryScheduleCoordinator = batteryScheduleCoordinator
@@ -157,18 +162,33 @@ final class AppContainer {
                 }
             }
         summaryViewModel.start()
+        if let storage = summaryViewModel.snapshot?.storage {
+            storageManagementViewModel.updateDiskUsageSnapshot(
+                StorageDiskUsage(usedBytes: storage.usedBytes, totalBytes: storage.totalBytes)
+            )
+        }
+        storageSnapshotCancellable = summaryViewModel.$snapshot
+            .compactMap { $0?.storage }
+            .sink { [weak self] storage in
+                self?.storageManagementViewModel.updateDiskUsageSnapshot(
+                    StorageDiskUsage(usedBytes: storage.usedBytes, totalBytes: storage.totalBytes)
+                )
+            }
         ramPolicyMonitor.start()
         batteryLifecycleCoordinator.start()
     }
 
     func stop() {
         batteryLifecycleCoordinator.stop()
+        storageSnapshotCancellable?.cancel()
+        storageSnapshotCancellable = nil
         batterySnapshotCancellable?.cancel()
         batterySnapshotCancellable = nil
         batteryScheduleCoordinator.stop()
         batteryPolicyCoordinator.stop()
         summaryViewModel.stop()
         ramDetailsViewModel.stop()
+        storageManagementViewModel.stop()
         ramPolicyMonitor.stop()
         menuBarController.uninstall()
     }
