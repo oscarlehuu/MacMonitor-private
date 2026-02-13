@@ -1,0 +1,26 @@
+# Changelog
+
+## [0.2.0](https://github.com/oscarlehuu/macmonitor/compare/v0.1.0...v0.2.0) (2026-02-09)
+
+
+### Features
+
+* add helper-backed battery management and battery UI ([4c69c5b](https://github.com/oscarlehuu/macmonitor/commit/4c69c5b3d148df6853201c9325140efcce9b54fa))
+* add RAM details process management and compact settings UI ([81e6b73](https://github.com/oscarlehuu/macmonitor/commit/81e6b73e44bbc858777ad8c39645821fcaa2a911))
+* add RAM policy management and redesign popover UI ([2937e38](https://github.com/oscarlehuu/macmonitor/commit/2937e38c4f5a9b01987ad6c7e5ae9ec8182a380e))
+* add Sparkle updater and automated release pipeline ([f84bb69](https://github.com/oscarlehuu/macmonitor/commit/f84bb69d126a477e817e2d5994193b4b9cbd2e09))
+* **battery:** implement helper-backed battery management ([d66e840](https://github.com/oscarlehuu/macmonitor/commit/d66e8407cb812897d9b89f9904c82e2912de0602))
+* menu bar icon metrics + settings redesign ([9cc7682](https://github.com/oscarlehuu/macmonitor/commit/9cc76821f7834dafdeda942d3c31418f4dafac54))
+* **menu-bar:** add icon-based metric display and settings redesign ([b3edb30](https://github.com/oscarlehuu/macmonitor/commit/b3edb30fc2cb0e2e5037c8776d6c1c6d41f05052))
+* **ram:** add process management view and compact settings ([10cd015](https://github.com/oscarlehuu/macmonitor/commit/10cd01565f1e1706eb82d2565f092995a27f811a))
+* ship menubar thermal monitor v1 with tests and CI ([7ddb0e4](https://github.com/oscarlehuu/macmonitor/commit/7ddb0e422f5b1d8a34254cd2b8cf4d05c2c00d64))
+* **updates:** add Sparkle updater and automated releases ([07c89f5](https://github.com/oscarlehuu/macmonitor/commit/07c89f5986ef1ecd07841fa36387c4df34a00626))
+
+
+### Bug Fixes
+
+* address 4 bugs in battery control subsystem ([c94538e](https://github.com/oscarlehuu/macmonitor/commit/c94538ecc1060513c04b99146bc276a7a1838575))
+* address 6 bugs in battery control subsystem ([e72e2eb](https://github.com/oscarlehuu/macmonitor/commit/e72e2eb7890e58b36c62a19bba2e3ea92de0783d))
+* **ram:** match redesign mock and correct usage formula ([0d90899](https://github.com/oscarlehuu/macmonitor/commit/0d90899a50a7a67e1360e51fe296104f6fd5c7db))
+* remove fabricated storage breakdown and use per-trigger-kind cooldown tracking ([e80ce25](https://github.com/oscarlehuu/macmonitor/commit/e80ce254f2f6e8e1b6d929afaa4d5ca229c03201))
+* **ui:** replace settings modal with in-popover screen ([8a05606](https://github.com/oscarlehuu/macmonitor/commit/8a056068ab0ebcdd438c779010ba9ab1ac273db7))
