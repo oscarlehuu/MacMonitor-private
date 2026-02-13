@@ -12,7 +12,7 @@ struct DefaultStorageProtectionPolicy: StorageProtecting {
     init(
         currentApplicationPath: String = Bundle.main.bundleURL.standardizedFileURL.path,
         protectedRootPaths: Set<String> = ["/", "/System", "/usr", "/bin", "/sbin", "/private"],
-        protectedPathPrefixes: [String] = ["/System/", "/usr/", "/bin/", "/sbin/"]
+        protectedPathPrefixes: [String] = ["/System/", "/usr/", "/bin/", "/sbin/", "/private/"]
     ) {
         self.currentApplicationPath = currentApplicationPath
         self.protectedRootPaths = protectedRootPaths

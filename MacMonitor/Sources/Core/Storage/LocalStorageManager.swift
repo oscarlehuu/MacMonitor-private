@@ -11,8 +11,10 @@ struct LocalStorageManager: StorageManaging {
 
     private let protectionPolicy: StorageProtecting
     private static let scanCacheLock = NSLock()
+    private static let scanCacheTTL: TimeInterval = 30
     nonisolated(unsafe) private static var cachedScanFingerprint: String?
     nonisolated(unsafe) private static var cachedScanResult: StorageScanResult?
+    nonisolated(unsafe) private static var cachedScanTimestamp: Date?
 
     init(protectionPolicy: StorageProtecting = DefaultStorageProtectionPolicy()) {
         self.protectionPolicy = protectionPolicy
@@ -704,7 +706,9 @@ struct LocalStorageManager: StorageManaging {
         Self.scanCacheLock.lock()
         defer { Self.scanCacheLock.unlock() }
 
-        guard Self.cachedScanFingerprint == fingerprint else {
+        guard Self.cachedScanFingerprint == fingerprint,
+              let timestamp = Self.cachedScanTimestamp,
+              Date().timeIntervalSince(timestamp) < Self.scanCacheTTL else {
             return nil
         }
         return Self.cachedScanResult
@@ -715,6 +719,7 @@ struct LocalStorageManager: StorageManaging {
         defer { Self.scanCacheLock.unlock() }
         Self.cachedScanFingerprint = fingerprint
         Self.cachedScanResult = result
+        Self.cachedScanTimestamp = Date()
     }
 
     private func invalidateCachedResult() {
@@ -722,6 +727,7 @@ struct LocalStorageManager: StorageManaging {
         defer { Self.scanCacheLock.unlock() }
         Self.cachedScanFingerprint = nil
         Self.cachedScanResult = nil
+        Self.cachedScanTimestamp = nil
     }
 
     private func scanFingerprint(
