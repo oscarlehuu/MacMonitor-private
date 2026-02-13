@@ -4,6 +4,7 @@ struct PopoverRootView: View {
     @ObservedObject var viewModel: SystemSummaryViewModel
     @ObservedObject var ramDetailsViewModel: RAMDetailsViewModel
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
+    @ObservedObject var storageManagementViewModel: StorageManagementViewModel
     @ObservedObject var batteryPolicyCoordinator: BatteryPolicyCoordinator
     @ObservedObject var settings: SettingsStore
     @ObservedObject var appUpdateController: AppUpdateController
@@ -51,7 +52,7 @@ struct PopoverRootView: View {
             navButton(
                 symbol: "internaldrive",
                 helpText: "Storage",
-                isActive: viewModel.screen == .storage,
+                isActive: viewModel.screen == .storage || viewModel.screen == .storageManagement,
                 action: viewModel.showStorage
             )
 
@@ -106,6 +107,8 @@ struct PopoverRootView: View {
                         ramScreen
                     case .storage:
                         storageScreen
+                    case .storageManagement:
+                        storageManagementScreen
                     case .settings:
                         settingsScreen
                     case .ramPolicyManager:
@@ -415,11 +418,55 @@ struct PopoverRootView: View {
             if let snapshot = viewModel.snapshot {
                 VStack(alignment: .leading, spacing: 0) {
                     storageSummaryCard(snapshot.storage)
+
+                    sectionSeparator
+
+                    storageManageCard
                 }
             } else {
                 collectingCard(text: "Collecting storage metrics...")
             }
         }
+    }
+
+    private var storageManageCard: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Storage Manager")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                Text("Scan apps, cache folders, and custom folders. Move selected items to Trash.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                viewModel.showStorageManagement()
+            } label: {
+                Text("Manage")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.accentContrastText)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(PopoverTheme.accent)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
     }
 
     private func storageSummaryCard(_ storage: StorageSnapshot) -> some View {
@@ -495,6 +542,13 @@ struct PopoverRootView: View {
         )
     }
 
+    private var storageManagementScreen: some View {
+        StorageManagementView(
+            viewModel: storageManagementViewModel,
+            onBack: viewModel.showStorage
+        )
+    }
+
     private var footer: some View {
         HStack(spacing: 12) {
             if appUpdateController.canRestartToInstallUpdate {
@@ -563,6 +617,8 @@ struct PopoverRootView: View {
             return "RAM"
         case .storage:
             return "Storage"
+        case .storageManagement:
+            return "Storage Manager"
         case .settings:
             return "Settings"
         case .ramPolicyManager:

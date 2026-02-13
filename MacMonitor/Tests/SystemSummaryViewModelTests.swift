@@ -24,6 +24,9 @@ final class SystemSummaryViewModelTests: XCTestCase {
         viewModel.showStorage()
         XCTAssertEqual(viewModel.screen, .storage)
 
+        viewModel.showStorageManagement()
+        XCTAssertEqual(viewModel.screen, .storageManagement)
+
         viewModel.showRAMPolicyManager()
         XCTAssertEqual(viewModel.screen, .ramPolicyManager)
 

@@ -8,6 +8,7 @@ final class SystemSummaryViewModel: ObservableObject {
         case battery
         case ram
         case storage
+        case storageManagement
         case settings
         case ramPolicyManager
     }
@@ -89,6 +90,10 @@ final class SystemSummaryViewModel: ObservableObject {
 
     func showStorage() {
         screen = .storage
+    }
+
+    func showStorageManagement() {
+        screen = .storageManagement
     }
 
     func showRAMPolicyManager() {
