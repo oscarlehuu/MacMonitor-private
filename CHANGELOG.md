@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/oscarlehuu/macmonitor/compare/v0.2.0...v0.3.0) (2026-02-13)
+
+
+### Features
+
+* add storage manager cleanup workflow ([6d64f25](https://github.com/oscarlehuu/macmonitor/commit/6d64f250bde4eb665748fd6a83077283d3b8b0f1))
+* add storage manager cleanup workflow ([7eb7baa](https://github.com/oscarlehuu/macmonitor/commit/7eb7baaf2d1e68eccdcec8c2c8526ac2d2affb57))
+
+
+### Bug Fixes
+
+* address scan cache staleness, /private protection gap, and relaunch guard ([69fc09a](https://github.com/oscarlehuu/macmonitor/commit/69fc09a76676605754fe744789d9119bd289fdc0))
+* normalize ring chart slices to prevent exceeding 360 degrees ([faaaa56](https://github.com/oscarlehuu/macmonitor/commit/faaaa56369a52c1864b18fc4f15295ffb8cbf1b4))
+* remove .skipsPackageDescendants from directorySize enumerator so app bundle sizes are computed correctly ([a41b82c](https://github.com/oscarlehuu/macmonitor/commit/a41b82cd45f4be5175a39d14e83e35a4e875e444))
+
 ## [0.2.0](https://github.com/oscarlehuu/macmonitor/compare/v0.1.0...v0.2.0) (2026-02-09)
 
 
