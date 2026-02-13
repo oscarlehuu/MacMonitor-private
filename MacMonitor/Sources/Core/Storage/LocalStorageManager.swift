@@ -654,7 +654,7 @@ struct LocalStorageManager: StorageManaging {
         guard let enumerator = fileManager.enumerator(
             at: url,
             includingPropertiesForKeys: Array(keySet),
-            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            options: [.skipsHiddenFiles],
             errorHandler: { _, _ in true }
         ) else {
             return 0
