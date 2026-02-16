@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/oscarlehuu/macmonitor/compare/v0.3.0...v0.3.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* **release:** correct Sparkle download prefix in appcast generation ([49008c7](https://github.com/oscarlehuu/macmonitor/commit/49008c7abe08893479986006a687d5ac995201d5))
+* **release:** correct Sparkle download prefix in appcast generation ([00ce6fb](https://github.com/oscarlehuu/macmonitor/commit/00ce6fbc06404e94e0d990e562292d3f9bc4d612))
+
 ## [0.3.0](https://github.com/oscarlehuu/macmonitor/compare/v0.2.0...v0.3.0) (2026-02-13)
 
 
