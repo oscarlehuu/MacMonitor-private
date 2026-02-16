@@ -222,6 +222,7 @@ jobs:
           fi
 
           notes_stub="${archives_dir}/${asset_name%.zip}.txt"
+          notes_file_name="${asset_name%.zip}.txt"
           {
             echo "MacMonitor ${tag}"
             echo
@@ -244,11 +245,12 @@ jobs:
             "${archives_dir}"
 
           cp "${archives_dir}/appcast.xml" "${updates_dir}/appcast.xml"
+          cp "${notes_stub}" "${updates_dir}/${notes_file_name}"
 
           git -C "${updates_dir}" config user.name "github-actions[bot]"
           git -C "${updates_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git -C "${updates_dir}" diff --quiet -- appcast.xml; then
-            git -C "${updates_dir}" add appcast.xml
+          if [[ -n "$(git -C "${updates_dir}" status --porcelain -- appcast.xml "${notes_file_name}")" ]]; then
+            git -C "${updates_dir}" add appcast.xml "${notes_file_name}"
             git -C "${updates_dir}" commit -m "chore: update appcast for ${tag}"
             git -C "${updates_dir}" push origin main
           fi
