@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.2](https://github.com/oscarlehuu/macmonitor/compare/v0.3.1...v0.3.2) (2026-02-16)
+
+
+### Bug Fixes
+
+* **ci:** publish Sparkle release notes and reduce duplicate CI runs ([54c6f60](https://github.com/oscarlehuu/macmonitor/commit/54c6f60cf19beb24da646d974a158b89af355ba1))
+* **ci:** publish Sparkle release notes file and reduce duplicate runs ([05bbcf6](https://github.com/oscarlehuu/macmonitor/commit/05bbcf6bc8e9c182ecb20cc45951e3ce3ba47ed6))
+* detect untracked release notes changes ([90f4c80](https://github.com/oscarlehuu/macmonitor/commit/90f4c80e6fd682d2571f27e7e34078cd08e10c82))
+
 ## [0.3.1](https://github.com/oscarlehuu/macmonitor/compare/v0.3.0...v0.3.1) (2026-02-16)
 
 
