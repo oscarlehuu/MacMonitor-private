@@ -5,13 +5,6 @@ import XCTest
 
 @MainActor
 final class MetricsEngineTests: XCTestCase {
-    private var cancellables = Set<AnyCancellable>()
-
-    override func tearDown() {
-        cancellables.removeAll()
-        super.tearDown()
-    }
-
     func testStartPublishesStartupSnapshot() {
         let engine = makeEngine()
 
@@ -32,6 +25,7 @@ final class MetricsEngineTests: XCTestCase {
     func testThermalChangePublishesThermalNotificationSnapshot() {
         let thermalCollector = FakeThermalCollector(initial: .nominal)
         let engine = makeEngine(thermalCollector: thermalCollector)
+        var cancellables = Set<AnyCancellable>()
 
         var refreshReasons: [RefreshReason] = []
         let expectation = expectation(description: "collect startup and thermal change snapshots")
@@ -57,6 +51,7 @@ final class MetricsEngineTests: XCTestCase {
     func testBatteryChangePublishesBatteryNotificationSnapshot() {
         let batteryCollector = FakeBatteryCollector(initial: .unavailable)
         let engine = makeEngine(batteryCollector: batteryCollector)
+        var cancellables = Set<AnyCancellable>()
 
         var refreshReasons: [RefreshReason] = []
         let expectation = expectation(description: "collect startup and battery change snapshots")
