@@ -211,7 +211,7 @@ jobs:
 
           updates_dir="${RUNNER_TEMP}/updates-repo"
           archives_dir="${RUNNER_TEMP}/sparkle-archives"
-          download_prefix="https://github.com/${UPDATES_REPO}/releases/download/${tag}"
+          download_prefix="https://github.com/${UPDATES_REPO}/releases/download/${tag}/"
 
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${UPDATES_REPO}.git" "${updates_dir}"
           mkdir -p "${archives_dir}"
