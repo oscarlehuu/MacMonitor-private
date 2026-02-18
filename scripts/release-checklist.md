@@ -12,12 +12,13 @@ Two workflows now own release automation:
 
 2. `.github/workflows/release.yml` (trigger: GitHub Release `published`)
    - Builds release zip from tag version.
+   - Requires Developer ID signing secrets and refuses to publish ad-hoc/unsigned app builds.
    - Sets app version at build time:
      - `MARKETING_VERSION = X.Y.Z` (from tag)
      - `CURRENT_PROJECT_VERSION = $GITHUB_RUN_NUMBER`
    - Uploads zip asset to source release.
    - Uploads same zip to `oscarlehuu/macmonitor-updates` release.
-   - Regenerates and commits `appcast.xml` in `macmonitor-updates` (GitHub Pages feed).
+   - Regenerates and commits `appcast.xml` + per-release notes in `macmonitor-updates` (GitHub Pages feed).
 
 ## Conventional Commit mapping
 
@@ -33,10 +34,9 @@ Use these commit types on merge PRs to `main`:
 - `RELEASE_PLEASE_TOKEN`: PAT for this source repo (`contents:write`, `pull_requests:write`, `issues:write`). Needed so release creation can trigger downstream workflows.
 - `SPARKLE_PRIVATE_KEY`: export from Sparkle `generate_keys -x`.
 - `UPDATES_REPO_TOKEN`: PAT with push + release access to `oscarlehuu/macmonitor-updates`.
-- Optional signing secrets for production-grade updates:
-  - `APPLE_CERTIFICATE_P12_BASE64`
-  - `APPLE_CERTIFICATE_PASSWORD`
-  - `APPLE_SIGNING_IDENTITY`
+- `APPLE_CERTIFICATE_P12_BASE64`: Developer ID Application certificate (base64-encoded `.p12`).
+- `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
+- `APPLE_SIGNING_IDENTITY`: signing identity name (for example: `Developer ID Application: Your Name (TEAMID)`).
 
 ## Manual fallback
 
