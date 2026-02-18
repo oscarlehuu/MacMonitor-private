@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/oscarlehuu/macmonitor/compare/v0.3.2...v0.3.3) (2026-02-18)
+
+
+### Bug Fixes
+
+* enforce signed sparkle releases and real updater notes ([#17](https://github.com/oscarlehuu/macmonitor/issues/17)) ([a3dc19a](https://github.com/oscarlehuu/macmonitor/commit/a3dc19a83016b9a6fbc85391754ecda47bc1f5b1))
+
 ## [0.3.2](https://github.com/oscarlehuu/macmonitor/compare/v0.3.1...v0.3.2) (2026-02-16)
 
 
