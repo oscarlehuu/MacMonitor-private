@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/oscarlehuu/macmonitor/compare/v0.3.3...v0.4.0) (2026-02-20)
+
+
+### Features
+
+* implement next-wave roadmap and mock-aligned UI updates ([#19](https://github.com/oscarlehuu/macmonitor/issues/19)) ([51c0891](https://github.com/oscarlehuu/macmonitor/commit/51c089161e099975a56561cdc8b1cd95cf7b08bb))
+
 ## [0.3.3](https://github.com/oscarlehuu/macmonitor/compare/v0.3.2...v0.3.3) (2026-02-18)
 
 
