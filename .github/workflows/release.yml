@@ -147,7 +147,6 @@ jobs:
             MARKETING_VERSION="${short_version}" \
             CURRENT_PROJECT_VERSION="${build_version}" \
             ENABLE_HARDENED_RUNTIME=YES \
-            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
             "${signing_args[@]}"
 
           app_path="${archive_path}/Products/Applications/MacMonitor.app"
