@@ -134,18 +134,23 @@ jobs:
             CODE_SIGN_IDENTITY="${APPLE_SIGNING_IDENTITY}"
           )
 
+          archive_path="${RUNNER_TEMP}/MacMonitor.xcarchive"
+
           xcodebuild \
             -project MacMonitor.xcodeproj \
             -scheme MacMonitor \
             -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath "${derived_data}" \
-            build \
+            -archivePath "${archive_path}" \
+            archive \
             MARKETING_VERSION="${short_version}" \
             CURRENT_PROJECT_VERSION="${build_version}" \
+            ENABLE_HARDENED_RUNTIME=YES \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
             "${signing_args[@]}"
 
-          app_path="${derived_data}/Build/Products/Release/MacMonitor.app"
+          app_path="${archive_path}/Products/Applications/MacMonitor.app"
           if [[ ! -d "${app_path}" ]]; then
             echo "Built app not found at ${app_path}" >&2
             exit 1
