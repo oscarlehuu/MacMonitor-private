@@ -72,7 +72,15 @@ struct BatterySnapshot: Codable, Equatable {
 
     var healthPercent: Int? {
         guard let health else { return nil }
-        let digits = health.filter(\.isNumber)
+        let candidateRange = health.range(
+            of: #"\b\d{1,3}\s*%"#,
+            options: .regularExpression
+        ) ?? health.range(
+            of: #"\b\d{1,3}\b"#,
+            options: .regularExpression
+        )
+        guard let candidateRange else { return nil }
+        let digits = health[candidateRange].filter(\.isNumber)
         guard let numericValue = Int(digits) else { return nil }
         return min(max(numericValue, 0), 100)
     }

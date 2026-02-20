@@ -337,23 +337,23 @@ final class BatteryPolicyCoordinator: ObservableObject {
 
         switch event {
         case .willSleep:
-            if flags.sleepAwareStopChargingEnabled {
+            let chargeLimit = settings.batteryPolicyConfiguration.chargeLimitPercent
+            let shouldBlockSleepUntilLimit = flags.blockSleepUntilLimitEnabled
+                && (latestBatterySnapshot.percentage ?? chargeLimit) < chargeLimit
+
+            if shouldBlockSleepUntilLimit {
+                _ = await directCommand(
+                    .setChargeLimit(chargeLimit),
+                    state: .chargingToLimit,
+                    source: .lifecycle,
+                    reason: "Advanced policy: block-sleep-until-limit requested."
+                )
+            } else if flags.sleepAwareStopChargingEnabled {
                 _ = await directCommand(
                     .setChargingPaused(true),
                     state: .pausedAtLimit,
                     source: .lifecycle,
                     reason: "Advanced policy: sleep-aware stop charging."
-                )
-            }
-
-            if flags.blockSleepUntilLimitEnabled,
-               let percent = latestBatterySnapshot.percentage,
-               percent < settings.batteryPolicyConfiguration.chargeLimitPercent {
-                _ = await directCommand(
-                    .setChargeLimit(settings.batteryPolicyConfiguration.chargeLimitPercent),
-                    state: .chargingToLimit,
-                    source: .lifecycle,
-                    reason: "Advanced policy: block-sleep-until-limit requested."
                 )
             }
         case .didWake:

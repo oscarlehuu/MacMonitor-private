@@ -78,7 +78,7 @@ final class BatteryControlSafetyMonitor: ObservableObject {
         }
 
         if !disabled.isEmpty {
-            autoDisabledFeatures = disabled
+            autoDisabledFeatures.formUnion(disabled)
             lastAutoDisableReason = "Auto-disabled \(disabled.count) advanced feature(s) after repeated failures."
         }
 

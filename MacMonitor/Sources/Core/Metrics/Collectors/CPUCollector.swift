@@ -55,9 +55,14 @@ final class CPUCollector: CPUCollecting {
         var cpuInfoPointer: processor_info_array_t?
         var cpuInfoCount: mach_msg_type_number_t = 0
         var processorCount: natural_t = 0
+        let hostPort = mach_host_self()
+
+        defer {
+            mach_port_deallocate(mach_task_self_, hostPort)
+        }
 
         let result = host_processor_info(
-            mach_host_self(),
+            hostPort,
             PROCESSOR_CPU_LOAD_INFO,
             &processorCount,
             &cpuInfoPointer,
