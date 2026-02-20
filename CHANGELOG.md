@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/oscarlehuu/macmonitor/compare/v0.4.0...v0.4.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* **release:** enable hardened runtime for notarization ([#21](https://github.com/oscarlehuu/macmonitor/issues/21)) ([5eac369](https://github.com/oscarlehuu/macmonitor/commit/5eac36947520384b0bdc67d8bb80ea9336e93e13))
+
 ## [0.4.0](https://github.com/oscarlehuu/macmonitor/compare/v0.3.3...v0.4.0) (2026-02-20)
 
 
