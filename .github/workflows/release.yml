@@ -312,7 +312,7 @@ jobs:
           git -C "${updates_dir}" config user.name "github-actions[bot]"
           git -C "${updates_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           notes_basename="$(basename "${notes_stub}")"
-          if ! git -C "${updates_dir}" diff --quiet -- appcast.xml "${notes_basename}"; then
+          if git -C "${updates_dir}" status --porcelain -- appcast.xml "${notes_basename}" | grep -q .; then
             git -C "${updates_dir}" add appcast.xml "${notes_basename}"
             git -C "${updates_dir}" commit -m "chore: update appcast for ${tag}"
             git -C "${updates_dir}" push origin main

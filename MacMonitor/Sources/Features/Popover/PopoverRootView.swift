@@ -281,13 +281,24 @@ struct PopoverRootView: View {
                     trendsOverviewScreen
                 case .settings:
                     settingsOverviewScreen
-                case .temperature, .battery, .ram:
+                case .battery:
+                    batteryOverviewScreen
+                case .temperature, .ram:
                     memoryOverviewScreen
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
+    }
+
+    private var batteryOverviewScreen: some View {
+        BatteryScreenView(
+            battery: viewModel.snapshot?.battery,
+            settings: settings,
+            coordinator: batteryPolicyCoordinator,
+            scheduleViewModel: batteryScheduleViewModel
+        )
     }
 
     private var memoryOverviewScreen: some View {
@@ -1542,9 +1553,9 @@ struct PopoverRootView: View {
         hasNormalizedLegacyScreen = true
 
         switch viewModel.screen {
-        case .battery, .temperature:
+        case .temperature:
             viewModel.showRAM()
-        case .ram, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
+        case .battery, .ram, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
             break
         }
     }
