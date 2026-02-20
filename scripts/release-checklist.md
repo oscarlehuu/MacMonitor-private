@@ -12,10 +12,11 @@ Two workflows now own release automation:
 
 2. `.github/workflows/release.yml` (trigger: GitHub Release `published`)
    - Builds release zip from tag version.
-   - Requires Developer ID signing secrets and refuses to publish ad-hoc/unsigned app builds.
+   - Requires Developer ID signing + Apple notarization secrets and refuses to publish ad-hoc/unsigned app builds.
    - Sets app version at build time:
      - `MARKETING_VERSION = X.Y.Z` (from tag)
      - `CURRENT_PROJECT_VERSION = $GITHUB_RUN_NUMBER`
+   - Submits the release bundle to Apple notarization, waits for acceptance, and staples the ticket to `MacMonitor.app`.
    - Uploads zip asset to source release.
    - Uploads same zip to `oscarlehuu/macmonitor-updates` release.
    - Regenerates and commits `appcast.xml` + per-release notes in `macmonitor-updates` (GitHub Pages feed).
@@ -37,6 +38,9 @@ Use these commit types on merge PRs to `main`:
 - `APPLE_CERTIFICATE_P12_BASE64`: Developer ID Application certificate (base64-encoded `.p12`).
 - `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
 - `APPLE_SIGNING_IDENTITY`: signing identity name (for example: `Developer ID Application: Your Name (TEAMID)`).
+- `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID used by `notarytool`.
+- `APPLE_NOTARY_ISSUER_ID`: App Store Connect issuer UUID paired with the API key.
+- `APPLE_NOTARY_API_KEY_BASE64`: base64-encoded contents of `AuthKey_<APPLE_NOTARY_KEY_ID>.p8`.
 
 ## Manual fallback
 

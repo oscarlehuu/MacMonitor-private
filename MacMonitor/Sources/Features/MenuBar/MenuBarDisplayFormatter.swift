@@ -4,40 +4,43 @@ enum MenuBarDisplayFormatter {
     static func valueText(
         for snapshot: SystemSnapshot?,
         mode: MenuBarDisplayMode,
-        valueMode: MenuBarMetricValueMode,
-        format: MenuBarMetricFormat
+        memoryFormat: MenuBarMetricDisplayFormat,
+        storageFormat: MenuBarMetricDisplayFormat
     ) -> String? {
+        let memoryText = metricText(
+            usedBytes: snapshot?.memory.usedBytes,
+            totalBytes: snapshot?.memory.totalBytes,
+            format: memoryFormat
+        )
+        let storageText = metricText(
+            usedBytes: snapshot?.storage.usedBytes,
+            totalBytes: snapshot?.storage.totalBytes,
+            format: storageFormat
+        )
+        let cpuText = MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent)
+        let networkDownText = MetricFormatter.bytesPerSecond(snapshot?.network.downloadBytesPerSecond)
+        let networkUpText = MetricFormatter.bytesPerSecond(snapshot?.network.uploadBytesPerSecond)
+
         switch mode {
+        case .memory:
+            return "RAM: \(memoryText)"
+        case .storage:
+            return "SSD: \(storageText)"
+        case .cpu:
+            return "CPU: \(cpuText)"
+        case .network:
+            return "NET: D \(networkDownText) U \(networkUpText)"
+        case .both:
+            return "RAM: \(memoryText) | SSD: \(storageText)"
         case .icon:
             return nil
-        case .battery:
-            guard let battery = snapshot?.battery,
-                  let percentage = battery.percentage else {
-                return "--"
-            }
-            return "\(percentage)%\(batteryDirectionSuffix(for: battery.chargeState))"
-        case .ram:
-            return metricValue(
-                usedBytes: snapshot?.memory.usedBytes,
-                totalBytes: snapshot?.memory.totalBytes,
-                valueMode: valueMode,
-                format: format
-            )
-        case .storage:
-            return metricValue(
-                usedBytes: snapshot?.storage.usedBytes,
-                totalBytes: snapshot?.storage.totalBytes,
-                valueMode: valueMode,
-                format: format
-            )
         }
     }
 
-    private static func metricValue(
+    private static func metricText(
         usedBytes: UInt64?,
         totalBytes: UInt64?,
-        valueMode: MenuBarMetricValueMode,
-        format: MenuBarMetricFormat
+        format: MenuBarMetricDisplayFormat
     ) -> String {
         guard let usedBytes, let totalBytes else {
             return "--"
@@ -45,31 +48,14 @@ enum MenuBarDisplayFormatter {
 
         let normalizedUsedBytes = min(usedBytes, totalBytes)
         let freeBytes = totalBytes > normalizedUsedBytes ? totalBytes - normalizedUsedBytes : 0
-        let valueBytes = valueMode == .used ? normalizedUsedBytes : freeBytes
 
-        let valueText: String
         switch format {
-        case .percent:
-            valueText = MetricFormatter.percent(used: valueBytes, total: totalBytes)
-        case .number:
-            valueText = MetricFormatter.bytes(valueBytes)
-        }
-
-        return valueText
-    }
-
-    private static func batteryDirectionSuffix(for chargeState: BatteryChargeState) -> String {
-        switch chargeState {
-        case .charging:
-            return "\u{2191}"
-        case .discharging:
-            return "\u{2193}"
-        case .charged:
-            return "\u{2713}"
-        case .notCharging:
-            return "\u{2022}"
-        case .unknown:
-            return ""
+        case .percentUsage:
+            return MetricFormatter.percent(used: normalizedUsedBytes, total: totalBytes)
+        case .numberUsage:
+            return MetricFormatter.bytes(normalizedUsedBytes)
+        case .numberLeft:
+            return "\(MetricFormatter.bytes(freeBytes)) left"
         }
     }
 }

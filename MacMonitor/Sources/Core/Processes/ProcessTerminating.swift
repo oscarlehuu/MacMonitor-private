@@ -1,9 +1,25 @@
 import Darwin
 import Foundation
 
+enum ProcessTerminationSignal: Equatable {
+    case terminate
+    case kill
+
+    var rawSignal: Int32 {
+        switch self {
+        case .terminate:
+            return SIGTERM
+        case .kill:
+            return SIGKILL
+        }
+    }
+}
+
 enum ProcessTerminationOutcome: Equatable {
     case terminated
     case skippedProtected(ProcessProtectionReason)
+    case skippedForceDeclined
+    case stillRunning
     case permissionDenied
     case notFound
     case failed(errno: Int32)
@@ -22,10 +38,12 @@ struct ProcessTerminationResult: Equatable {
     }
 
     var isSkipped: Bool {
-        if case .skippedProtected = outcome {
+        switch outcome {
+        case .skippedProtected, .skippedForceDeclined:
             return true
+        case .terminated, .stillRunning, .permissionDenied, .notFound, .failed:
+            return false
         }
-        return false
     }
 }
 
@@ -44,13 +62,49 @@ struct ProcessTerminationSummary: Equatable {
         results.count - terminatedCount - skippedCount
     }
 
+    var stillRunningCount: Int {
+        results.filter { result in
+            if case .stillRunning = result.outcome {
+                return true
+            }
+            return false
+        }.count
+    }
+
+    var forceDeclinedCount: Int {
+        results.filter { result in
+            if case .skippedForceDeclined = result.outcome {
+                return true
+            }
+            return false
+        }.count
+    }
+
     var message: String {
-        "Terminated \(terminatedCount), skipped \(skippedCount), failed \(failedCount)."
+        var components = ["Terminated \(terminatedCount), skipped \(skippedCount), failed \(failedCount)."]
+        if stillRunningCount > 0 {
+            components.append("Still running: \(stillRunningCount).")
+        }
+        if forceDeclinedCount > 0 {
+            components.append("Force declined: \(forceDeclinedCount).")
+        }
+        return components.joined(separator: " ")
     }
 }
 
 protocol ProcessTerminating {
-    func terminate(processes: [ProcessMemoryItem], selectedProcessIDs: Set<Int32>) -> ProcessTerminationSummary
+    func terminate(
+        processes: [ProcessMemoryItem],
+        selectedProcessIDs: Set<Int32>,
+        signal: ProcessTerminationSignal
+    ) -> ProcessTerminationSummary
+    func aliveProcessIDs(in processIDs: Set<Int32>) -> Set<Int32>
+}
+
+extension ProcessTerminating {
+    func terminate(processes: [ProcessMemoryItem], selectedProcessIDs: Set<Int32>) -> ProcessTerminationSummary {
+        terminate(processes: processes, selectedProcessIDs: selectedProcessIDs, signal: .terminate)
+    }
 }
 
 struct SignalProcessTerminator: ProcessTerminating {
@@ -62,7 +116,11 @@ struct SignalProcessTerminator: ProcessTerminating {
         self.signalSender = signalSender
     }
 
-    func terminate(processes: [ProcessMemoryItem], selectedProcessIDs: Set<Int32>) -> ProcessTerminationSummary {
+    func terminate(
+        processes: [ProcessMemoryItem],
+        selectedProcessIDs: Set<Int32>,
+        signal: ProcessTerminationSignal
+    ) -> ProcessTerminationSummary {
         let targets = processes.filter { selectedProcessIDs.contains($0.pid) }
 
         var results: [ProcessTerminationResult] = []
@@ -80,7 +138,7 @@ struct SignalProcessTerminator: ProcessTerminating {
                 continue
             }
 
-            let signalResult = signalSender(process.pid, SIGTERM)
+            let signalResult = signalSender(process.pid, signal.rawSignal)
             if signalResult.result == 0 {
                 results.append(
                     ProcessTerminationResult(
@@ -112,6 +170,18 @@ struct SignalProcessTerminator: ProcessTerminating {
         }
 
         return ProcessTerminationSummary(results: results)
+    }
+
+    func aliveProcessIDs(in processIDs: Set<Int32>) -> Set<Int32> {
+        Set(
+            processIDs.compactMap { pid in
+                let result = signalSender(pid, 0)
+                if result.result == 0 || result.errno == EPERM {
+                    return pid
+                }
+                return nil
+            }
+        )
     }
 
     private static func defaultSignalSender(pid: Int32, signal: Int32) -> (result: Int32, errno: Int32) {

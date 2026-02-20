@@ -23,7 +23,7 @@ Open-source macOS (Apple Silicon) menu bar monitor.
   - `feat!:` or `BREAKING CHANGE:` => major
 - Docs/chore/test-only merges do not create a release.
 - Sparkle update assets + appcast are published automatically when a GitHub Release is published.
-- Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `UPDATES_REPO_TOKEN`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`).
+- Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `UPDATES_REPO_TOKEN`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `APPLE_NOTARY_API_KEY_BASE64`).
 - See `scripts/release-checklist.md` for full release flow and secrets.
 
 ## Install new build

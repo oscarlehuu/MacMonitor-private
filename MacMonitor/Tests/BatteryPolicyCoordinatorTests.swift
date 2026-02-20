@@ -72,6 +72,26 @@ final class BatteryPolicyCoordinatorTests: XCTestCase {
         XCTAssertEqual(context.backend.executedCommands.last, .setChargeLimit(80))
     }
 
+    func testSleepAwareWillSleepDoesNotImmediatelyReconcileAwayPause() async {
+        let context = makeContext()
+        var config = context.settings.batteryPolicyConfiguration
+        config.chargeLimitPercent = 80
+        context.settings.batteryPolicyConfiguration = config
+
+        var flags = context.settings.batteryAdvancedControlFeatureFlags
+        flags.sleepAwareStopChargingEnabled = true
+        context.settings.batteryAdvancedControlFeatureFlags = flags
+
+        context.coordinator.start()
+        await context.coordinator.handle(snapshot: makeSnapshot(percent: 60))
+        let firstCommandCount = context.backend.executedCommands.count
+
+        await context.coordinator.handleLifecycleEvent(.willSleep)
+
+        XCTAssertEqual(context.backend.executedCommands.count, firstCommandCount + 1)
+        XCTAssertEqual(context.backend.executedCommands.last, .setChargingPaused(true))
+    }
+
     func testStartChargingStartsTopUpAndClearsManualDischarge() async {
         let context = makeContext()
         context.coordinator.start()

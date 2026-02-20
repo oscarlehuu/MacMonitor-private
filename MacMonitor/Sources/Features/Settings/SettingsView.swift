@@ -158,41 +158,43 @@ struct SettingsView: View {
                 .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
             }
 
-            if settings.menuBarDisplayMode == .ram || settings.menuBarDisplayMode == .storage {
-                settingDivider
+            settingDivider
 
-                settingRow(
-                    title: "Metric scope",
-                    subtitle: "Glass half full or half empty"
-                ) {
-                    optionGroup(
-                        selection: $settings.menuBarMetricValueMode,
-                        options: MenuBarMetricValueMode.allCases
-                    ) { mode, isSelected in
-                        Text(mode.title)
+            settingRow(
+                title: "Memory format",
+                subtitle: "How RAM appears in menu bar"
+            ) {
+                optionGroup(
+                    selection: $settings.menuBarMemoryFormat,
+                    options: MenuBarMetricDisplayFormat.allCases
+                ) { format, isSelected in
+                    HStack(spacing: 4) {
+                        Text(menuBarFormatBadge(for: format))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        Text(format.title)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
                     }
+                    .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
                 }
+            }
 
-                settingDivider
+            settingDivider
 
-                settingRow(
-                    title: "Format",
-                    subtitle: "Numbers or vibes"
-                ) {
-                    optionGroup(
-                        selection: $settings.menuBarMetricFormat,
-                        options: MenuBarMetricFormat.allCases
-                    ) { format, isSelected in
-                        HStack(spacing: 4) {
-                            Text(menuBarFormatBadge(for: format))
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            Text(format.title)
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
+            settingRow(
+                title: "Storage format",
+                subtitle: "How SSD appears in menu bar"
+            ) {
+                optionGroup(
+                    selection: $settings.menuBarStorageFormat,
+                    options: MenuBarMetricDisplayFormat.allCases
+                ) { format, isSelected in
+                    HStack(spacing: 4) {
+                        Text(menuBarFormatBadge(for: format))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        Text(format.title)
+                            .font(.system(size: 11, weight: .semibold))
                     }
+                    .foregroundStyle(isSelected ? PopoverTheme.accentContrastText : PopoverTheme.textSecondary)
                 }
             }
         }
@@ -360,23 +362,29 @@ struct SettingsView: View {
 
     private func menuBarDisplaySymbol(for mode: MenuBarDisplayMode) -> String {
         switch mode {
-        case .icon:
-            return "app.fill"
-        case .battery:
-            return "battery.100"
-        case .ram:
+        case .memory:
             return "memorychip.fill"
         case .storage:
             return "internaldrive.fill"
+        case .cpu:
+            return "cpu.fill"
+        case .network:
+            return "network"
+        case .both:
+            return "rectangle.3.group"
+        case .icon:
+            return "app.fill"
         }
     }
 
-    private func menuBarFormatBadge(for format: MenuBarMetricFormat) -> String {
+    private func menuBarFormatBadge(for format: MenuBarMetricDisplayFormat) -> String {
         switch format {
-        case .percent:
+        case .percentUsage:
             return "%"
-        case .number:
+        case .numberUsage:
             return "123"
+        case .numberLeft:
+            return "LFT"
         }
     }
 }

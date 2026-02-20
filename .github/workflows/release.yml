@@ -58,6 +58,9 @@ jobs:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_API_KEY_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_BASE64 }}
         run: |
           set -euo pipefail
           [[ -n "${SPARKLE_PRIVATE_KEY:-}" ]] || (echo "Missing required secret: SPARKLE_PRIVATE_KEY" && exit 1)
@@ -65,6 +68,9 @@ jobs:
           [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_P12_BASE64" && exit 1)
           [[ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_PASSWORD" && exit 1)
           [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] || (echo "Missing required secret: APPLE_SIGNING_IDENTITY" && exit 1)
+          [[ -n "${APPLE_NOTARY_KEY_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_KEY_ID" && exit 1)
+          [[ -n "${APPLE_NOTARY_ISSUER_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_ISSUER_ID" && exit 1)
+          [[ -n "${APPLE_NOTARY_API_KEY_BASE64:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_API_KEY_BASE64" && exit 1)
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -92,6 +98,9 @@ jobs:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_API_KEY_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_BASE64 }}
         shell: bash
         run: |
           set -euo pipefail
@@ -166,6 +175,35 @@ jobs:
             exit 1
           fi
 
+          notary_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          if echo "${APPLE_NOTARY_API_KEY_BASE64}" | base64 --decode > "${notary_key_path}" 2>/dev/null; then
+            :
+          else
+            echo "${APPLE_NOTARY_API_KEY_BASE64}" | base64 -D > "${notary_key_path}"
+          fi
+          chmod 600 "${notary_key_path}"
+
+          notary_submission_path="${RUNNER_TEMP}/MacMonitor-${built_short_version}-${built_build_version}-notary.zip"
+          ditto -c -k --sequesterRsrc --keepParent "${app_path}" "${notary_submission_path}"
+
+          notary_result_path="${RUNNER_TEMP}/notary-result.json"
+          xcrun notarytool submit "${notary_submission_path}" \
+            --key "${notary_key_path}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --output-format json > "${notary_result_path}"
+
+          cat "${notary_result_path}"
+          if ! grep -q '"status"[[:space:]]*:[[:space:]]*"Accepted"' "${notary_result_path}"; then
+            echo "Notarization did not return Accepted status." >&2
+            exit 1
+          fi
+
+          xcrun stapler staple -v "${app_path}"
+          xcrun stapler validate -v "${app_path}"
+          spctl --assess --type execute --verbose=2 "${app_path}"
+
           asset_name="MacMonitor-${built_short_version}-${built_build_version}.zip"
           asset_path="${RUNNER_TEMP}/${asset_name}"
 
@@ -178,6 +216,7 @@ jobs:
             echo "- Tag: ${tag}"
             echo "- Version: ${built_short_version} (${built_build_version})"
             echo "- Signing identity: ${APPLE_SIGNING_IDENTITY}"
+            echo "- Notarized: yes"
             echo "- Sparkle appcast: https://oscarlehuu.github.io/macmonitor-updates/appcast.xml"
           } > "${notes_path}"
 
@@ -233,8 +272,8 @@ jobs:
             cp "${updates_dir}/appcast.xml" "${archives_dir}/appcast.xml"
           fi
 
-          notes_file_name="${asset_name%.zip}.txt"
-          notes_stub="${archives_dir}/${notes_file_name}"
+          notes_stub="${archives_dir}/${asset_name%.zip}.txt"
+          notes_target="${updates_dir}/$(basename "${notes_stub}")"
           release_notes="${SOURCE_RELEASE_NOTES:-}"
           release_url="${SOURCE_RELEASE_URL:-https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}}"
 
@@ -249,6 +288,7 @@ jobs:
             echo
             echo "Full release notes: ${release_url}"
           } > "${notes_stub}"
+          cp "${notes_stub}" "${notes_target}"
 
           if gh release view "${tag}" --repo "${UPDATES_REPO}" >/dev/null 2>&1; then
             gh release upload "${tag}" "${asset_path}#${asset_name}" --repo "${UPDATES_REPO}" --clobber
@@ -268,12 +308,12 @@ jobs:
             "${archives_dir}"
 
           cp "${archives_dir}/appcast.xml" "${updates_dir}/appcast.xml"
-          cp "${notes_stub}" "${updates_dir}/${notes_file_name}"
 
           git -C "${updates_dir}" config user.name "github-actions[bot]"
           git -C "${updates_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [[ -n "$(git -C "${updates_dir}" status --porcelain -- appcast.xml "${notes_file_name}")" ]]; then
-            git -C "${updates_dir}" add appcast.xml "${notes_file_name}"
+          notes_basename="$(basename "${notes_stub}")"
+          if git -C "${updates_dir}" status --porcelain -- appcast.xml "${notes_basename}" | grep -q .; then
+            git -C "${updates_dir}" add appcast.xml "${notes_basename}"
             git -C "${updates_dir}" commit -m "chore: update appcast for ${tag}"
             git -C "${updates_dir}" push origin main
           fi

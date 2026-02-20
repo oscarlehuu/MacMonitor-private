@@ -206,6 +206,8 @@ struct StorageScanResult: Equatable, Sendable {
 enum StorageDeletionOutcome: Equatable, Sendable {
     case deleted
     case skippedProtected(StorageProtectionReason)
+    case skippedStillRunning
+    case skippedForceDeclined
     case permissionDenied
     case notFound
     case failed(code: Int32)
@@ -224,10 +226,12 @@ struct StorageDeletionResult: Equatable, Sendable {
     }
 
     var isSkipped: Bool {
-        if case .skippedProtected = outcome {
+        switch outcome {
+        case .skippedProtected, .skippedStillRunning, .skippedForceDeclined:
             return true
+        case .deleted, .permissionDenied, .notFound, .failed:
+            return false
         }
-        return false
     }
 }
 
@@ -246,8 +250,33 @@ struct StorageDeletionSummary: Equatable, Sendable {
         results.count - deletedCount - skippedCount
     }
 
+    var skippedStillRunningCount: Int {
+        results.filter { result in
+            if case .skippedStillRunning = result.outcome {
+                return true
+            }
+            return false
+        }.count
+    }
+
+    var skippedForceDeclinedCount: Int {
+        results.filter { result in
+            if case .skippedForceDeclined = result.outcome {
+                return true
+            }
+            return false
+        }.count
+    }
+
     var message: String {
-        "Deleted \(deletedCount), skipped \(skippedCount), failed \(failedCount)."
+        var components = ["Deleted \(deletedCount), skipped \(skippedCount), failed \(failedCount)."]
+        if skippedStillRunningCount > 0 {
+            components.append("Still running: \(skippedStillRunningCount).")
+        }
+        if skippedForceDeclinedCount > 0 {
+            components.append("Force declined: \(skippedForceDeclinedCount).")
+        }
+        return components.joined(separator: " ")
     }
 }
 

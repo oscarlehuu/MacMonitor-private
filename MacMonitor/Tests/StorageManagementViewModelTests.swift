@@ -88,6 +88,7 @@ final class StorageManagementViewModelTests: XCTestCase {
 
     func testDeleteSelectedSendsOnlyAllowedIDs() async {
         let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
         let protected = makeItem(
             path: "/System/Library",
             name: "Library",
@@ -111,7 +112,7 @@ final class StorageManagementViewModelTests: XCTestCase {
             ]
         )
 
-        let viewModel = makeViewModel(manager: manager)
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
         await viewModel.performRefresh()
         viewModel.selectedItemIDs = [protected.id, allowed.id]
 
@@ -197,11 +198,241 @@ final class StorageManagementViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentTotalBytes, 1_500)
     }
 
-    private func makeViewModel(manager: FakeStorageManager) -> StorageManagementViewModel {
+    func testDeleteSelectedShowsForcePromptWhenAppStillRunning() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let app = makeItem(
+            path: "/Applications/Editor.app",
+            name: "Editor.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 200,
+            protected: false,
+            bundleIdentifier: "com.test.editor"
+        )
+        let cache = makeItem(
+            path: "/tmp/EditorCache",
+            name: "EditorCache",
+            category: .cache,
+            kind: .looseCache,
+            sizeBytes: 20,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [app, cache])
+        coordinator.gracefulSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [app.id, cache.id]
+
+        await viewModel.deleteSelected()
+
+        XCTAssertTrue(viewModel.showingForceQuitConfirmation)
+        XCTAssertEqual(viewModel.forceQuitCandidateNames, [app.displayName])
+        XCTAssertEqual(manager.lastDeletedIDs, [])
+    }
+
+    func testSkipForceQuitDeletesOtherItemsAndReportsDeclined() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let app = makeItem(
+            path: "/Applications/Editor.app",
+            name: "Editor.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 200,
+            protected: false,
+            bundleIdentifier: "com.test.editor"
+        )
+        let cache = makeItem(
+            path: "/tmp/EditorCache",
+            name: "EditorCache",
+            category: .cache,
+            kind: .looseCache,
+            sizeBytes: 20,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [app, cache])
+        manager.deleteSummary = StorageDeletionSummary(
+            results: [
+                StorageDeletionResult(id: cache.id, displayName: cache.displayName, outcome: .deleted)
+            ]
+        )
+        coordinator.gracefulSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [app.id, cache.id]
+
+        await viewModel.deleteSelected()
+        await viewModel.skipForceQuitAndDelete()
+        await viewModel.pendingTask?.value
+
+        XCTAssertEqual(manager.lastDeletedIDs, [cache.id])
+        XCTAssertEqual(viewModel.resultMessage, "Deleted 1, skipped 1, failed 0. Force declined: 1.")
+    }
+
+    func testConfirmForceQuitDeletesRecoveredApps() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let app = makeItem(
+            path: "/Applications/Editor.app",
+            name: "Editor.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 200,
+            protected: false,
+            bundleIdentifier: "com.test.editor"
+        )
+        let cache = makeItem(
+            path: "/tmp/EditorCache",
+            name: "EditorCache",
+            category: .cache,
+            kind: .looseCache,
+            sizeBytes: 20,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [app, cache])
+        manager.deleteSummary = StorageDeletionSummary(
+            results: [
+                StorageDeletionResult(id: app.id, displayName: app.displayName, outcome: .deleted),
+                StorageDeletionResult(id: cache.id, displayName: cache.displayName, outcome: .deleted)
+            ]
+        )
+        coordinator.gracefulSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+        coordinator.forceSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .forceTerminated)
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [app.id, cache.id]
+
+        await viewModel.deleteSelected()
+        await viewModel.confirmForceQuitAndDelete()
+        await viewModel.pendingTask?.value
+
+        XCTAssertEqual(manager.lastDeletedIDs, [app.id, cache.id])
+        XCTAssertEqual(viewModel.resultMessage, "Deleted 2, skipped 0, failed 0.")
+    }
+
+    func testConfirmForceQuitSkipsAppsStillRunningAfterForce() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let app = makeItem(
+            path: "/Applications/Editor.app",
+            name: "Editor.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 200,
+            protected: false,
+            bundleIdentifier: "com.test.editor"
+        )
+        let cache = makeItem(
+            path: "/tmp/EditorCache",
+            name: "EditorCache",
+            category: .cache,
+            kind: .looseCache,
+            sizeBytes: 20,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [app, cache])
+        manager.deleteSummary = StorageDeletionSummary(
+            results: [
+                StorageDeletionResult(id: cache.id, displayName: cache.displayName, outcome: .deleted)
+            ]
+        )
+        coordinator.gracefulSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+        coordinator.forceSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [app.id, cache.id]
+
+        await viewModel.deleteSelected()
+        await viewModel.confirmForceQuitAndDelete()
+        await viewModel.pendingTask?.value
+
+        XCTAssertEqual(manager.lastDeletedIDs, [cache.id])
+        XCTAssertEqual(viewModel.resultMessage, "Deleted 1, skipped 1, failed 0. Still running: 1.")
+    }
+
+    func testGrantInitialAccessPersistsPromptStateAcrossRestart() {
+        let manager = FakeStorageManager()
+        let suiteName = "StorageManagementViewModelTests.InitialAccess.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MacMonitor-InitialAccess-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let firstViewModel = StorageManagementViewModel(storageManager: manager, userDefaults: defaults)
+        XCTAssertTrue(firstViewModel.shouldRequestInitialAccess())
+
+        firstViewModel.grantInitialAccess(to: tempRoot)
+        XCTAssertFalse(firstViewModel.shouldRequestInitialAccess())
+
+        let secondViewModel = StorageManagementViewModel(storageManager: manager, userDefaults: defaults)
+        XCTAssertFalse(secondViewModel.shouldRequestInitialAccess())
+    }
+
+    func testShouldRequestInitialAccessReadsLatestPersistedFlag() {
+        let manager = FakeStorageManager()
+        let suiteName = "StorageManagementViewModelTests.InitialAccessFlag.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let viewModel = StorageManagementViewModel(storageManager: manager, userDefaults: defaults)
+        XCTAssertTrue(viewModel.shouldRequestInitialAccess())
+
+        defaults.set(true, forKey: "storage.initialAccessPromptShown")
+        defaults.synchronize()
+
+        XCTAssertFalse(viewModel.shouldRequestInitialAccess())
+    }
+
+    private func makeViewModel(
+        manager: FakeStorageManager,
+        preflightCoordinator: FakeRunningAppPreflightCoordinator = FakeRunningAppPreflightCoordinator()
+    ) -> StorageManagementViewModel {
         let suiteName = "StorageManagementViewModelTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        return StorageManagementViewModel(storageManager: manager, userDefaults: defaults)
+        return StorageManagementViewModel(
+            storageManager: manager,
+            runningAppPreflightCoordinator: preflightCoordinator,
+            userDefaults: defaults
+        )
     }
 
     private func makeItem(
@@ -267,5 +498,33 @@ private final class FakeStorageManager: StorageManaging, @unchecked Sendable {
         defer { lock.unlock() }
         lastDeletedIDs = selectedItemIDs
         return deleteSummary
+    }
+}
+
+@MainActor
+private final class FakeRunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
+    var gracefulSummary = RunningAppPreflightSummary(results: [])
+    var forceSummary = RunningAppPreflightSummary(results: [])
+
+    func gracefulQuitPreflight(for items: [StorageManagedItem]) async -> RunningAppPreflightSummary {
+        if !gracefulSummary.results.isEmpty {
+            return gracefulSummary
+        }
+        return RunningAppPreflightSummary(
+            results: items.map { item in
+                RunningAppPreflightResult(itemID: item.id, displayName: item.displayName, outcome: .notRunning)
+            }
+        )
+    }
+
+    func forceQuit(for items: [StorageManagedItem]) async -> RunningAppPreflightSummary {
+        if !forceSummary.results.isEmpty {
+            return forceSummary
+        }
+        return RunningAppPreflightSummary(
+            results: items.map { item in
+                RunningAppPreflightResult(itemID: item.id, displayName: item.displayName, outcome: .forceTerminated)
+            }
+        )
     }
 }

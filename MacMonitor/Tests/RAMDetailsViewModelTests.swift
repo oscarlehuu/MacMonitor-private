@@ -158,6 +158,232 @@ final class RAMDetailsViewModelTests: XCTestCase {
         XCTAssertEqual(collector.callCount, 4)
     }
 
+    func testSetModeToPortsLoadsListeningRows() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        portsCollector.rows = [
+            makePort(
+                endpoint: "127.0.0.1:3000",
+                port: 3000,
+                pid: 600,
+                processName: "node",
+                userID: 501,
+                protected: false
+            )
+        ]
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+
+        XCTAssertEqual(viewModel.mode, .ports)
+        XCTAssertEqual(viewModel.listeningPorts.count, 1)
+        XCTAssertEqual(viewModel.listeningPorts.first?.port, 3000)
+    }
+
+    func testTerminateSelectedPortsDeduplicatesPIDsAndShowsForcePrompt() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        let sleeper = FakePollSleeper()
+        let first = makePort(
+            endpoint: "127.0.0.1:3000",
+            port: 3000,
+            pid: 700,
+            processName: "node",
+            userID: 501,
+            protected: false
+        )
+        let duplicatePID = makePort(
+            endpoint: "127.0.0.1:3001",
+            port: 3001,
+            pid: 700,
+            processName: "node",
+            userID: 501,
+            protected: false
+        )
+        let second = makePort(
+            endpoint: "127.0.0.1:5432",
+            port: 5432,
+            pid: 701,
+            processName: "postgres",
+            userID: 501,
+            protected: false
+        )
+        portsCollector.rows = [first, duplicatePID, second]
+        terminator.summariesBySignal[.terminate] = ProcessTerminationSummary(
+            results: [
+                ProcessTerminationResult(pid: 700, processName: "node", outcome: .terminated),
+                ProcessTerminationResult(pid: 701, processName: "postgres", outcome: .terminated)
+            ]
+        )
+        terminator.aliveResponses = [[700], [700]]
+
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501,
+            gracefulTimeoutSeconds: 0.01,
+            pollIntervalSeconds: 0.01,
+            pollSleeper: sleeper
+        )
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+        viewModel.selectedPortIDs = [first.id, duplicatePID.id, second.id]
+
+        await viewModel.terminateSelected()
+
+        XCTAssertEqual(terminator.lastSelectedProcessIDs, [700, 701])
+        XCTAssertEqual(terminator.lastSignals, [.terminate])
+        XCTAssertTrue(viewModel.showingForceKillConfirmation)
+        XCTAssertEqual(viewModel.pendingForceKillPIDCount, 1)
+    }
+
+    func testSkipForceKillRemainingPortsReportsDeclined() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        let sleeper = FakePollSleeper()
+        let first = makePort(
+            endpoint: "127.0.0.1:3000",
+            port: 3000,
+            pid: 800,
+            processName: "node",
+            userID: 501,
+            protected: false
+        )
+        let second = makePort(
+            endpoint: "127.0.0.1:5432",
+            port: 5432,
+            pid: 801,
+            processName: "postgres",
+            userID: 501,
+            protected: false
+        )
+        portsCollector.rows = [first, second]
+        terminator.summariesBySignal[.terminate] = ProcessTerminationSummary(
+            results: [
+                ProcessTerminationResult(pid: 800, processName: "node", outcome: .terminated),
+                ProcessTerminationResult(pid: 801, processName: "postgres", outcome: .terminated)
+            ]
+        )
+        terminator.aliveResponses = [[800], [800]]
+
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501,
+            gracefulTimeoutSeconds: 0.01,
+            pollIntervalSeconds: 0.01,
+            pollSleeper: sleeper
+        )
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+        viewModel.selectedPortIDs = [first.id, second.id]
+
+        await viewModel.terminateSelected()
+        viewModel.skipForceKillRemainingPorts()
+        await viewModel.pendingRefreshTask?.value
+
+        XCTAssertEqual(viewModel.resultMessage, "Ports: 2 selected, 2 unique PID(s). Terminated 1, skipped 1, failed 0. Force declined: 1.")
+        XCTAssertTrue(viewModel.selectedPortIDs.isEmpty)
+    }
+
+    func testConfirmForceKillRemainingPortsUsesKillSignalForSurvivors() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        let sleeper = FakePollSleeper()
+        let first = makePort(
+            endpoint: "127.0.0.1:3000",
+            port: 3000,
+            pid: 900,
+            processName: "node",
+            userID: 501,
+            protected: false
+        )
+        let second = makePort(
+            endpoint: "127.0.0.1:5432",
+            port: 5432,
+            pid: 901,
+            processName: "postgres",
+            userID: 501,
+            protected: false
+        )
+        portsCollector.rows = [first, second]
+        terminator.summariesBySignal[.terminate] = ProcessTerminationSummary(
+            results: [
+                ProcessTerminationResult(pid: 900, processName: "node", outcome: .terminated),
+                ProcessTerminationResult(pid: 901, processName: "postgres", outcome: .terminated)
+            ]
+        )
+        terminator.summariesBySignal[.kill] = ProcessTerminationSummary(
+            results: [
+                ProcessTerminationResult(pid: 900, processName: "node", outcome: .terminated)
+            ]
+        )
+        terminator.aliveResponses = [[900], [900], [900], []]
+
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501,
+            gracefulTimeoutSeconds: 0.01,
+            pollIntervalSeconds: 0.01,
+            pollSleeper: sleeper
+        )
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+        viewModel.selectedPortIDs = [first.id, second.id]
+
+        await viewModel.terminateSelected()
+        await viewModel.confirmForceKillRemainingPorts()
+        await viewModel.pendingRefreshTask?.value
+
+        XCTAssertEqual(terminator.lastSignals, [.terminate, .kill])
+        XCTAssertEqual(viewModel.resultMessage, "Ports: 2 selected, 2 unique PID(s). Terminated 2, skipped 0, failed 0.")
+    }
+
+    private func makePort(
+        endpoint: String,
+        port: Int,
+        pid: Int32,
+        processName: String,
+        userID: uid_t,
+        protected: Bool
+    ) -> ListeningPort {
+        ListeningPort(
+            protocolName: "TCP",
+            endpoint: endpoint,
+            port: port,
+            pid: pid,
+            processName: processName,
+            userID: userID,
+            userName: "oscar",
+            protectionReason: protected ? .systemProcess : nil
+        )
+    }
+
     private func makeProcess(pid: Int32, name: String, userID: uid_t, protected: Bool, rankingBytes: UInt64 = 120) -> ProcessMemoryItem {
         ProcessMemoryItem(
             pid: pid,
@@ -194,10 +420,40 @@ private final class FakeProcessCollector: ProcessListCollecting, @unchecked Send
 
 private final class FakeProcessTerminator: ProcessTerminating {
     var summary = ProcessTerminationSummary(results: [])
+    var summariesBySignal: [ProcessTerminationSignal: ProcessTerminationSummary] = [:]
+    var aliveProcessIDsResult: Set<Int32> = []
+    var aliveResponses: [Set<Int32>] = []
     private(set) var lastSelectedProcessIDs: Set<Int32> = []
+    private(set) var lastSignals: [ProcessTerminationSignal] = []
 
-    func terminate(processes: [ProcessMemoryItem], selectedProcessIDs: Set<Int32>) -> ProcessTerminationSummary {
+    func terminate(
+        processes: [ProcessMemoryItem],
+        selectedProcessIDs: Set<Int32>,
+        signal: ProcessTerminationSignal
+    ) -> ProcessTerminationSummary {
         lastSelectedProcessIDs = selectedProcessIDs
-        return summary
+        lastSignals.append(signal)
+        return summariesBySignal[signal] ?? summary
     }
+
+    func aliveProcessIDs(in processIDs: Set<Int32>) -> Set<Int32> {
+        if !aliveResponses.isEmpty {
+            let next = aliveResponses.removeFirst()
+            return processIDs.intersection(next)
+        }
+        return processIDs.intersection(aliveProcessIDsResult)
+    }
+}
+
+private final class FakeListeningPortCollector: ListeningPortCollecting, @unchecked Sendable {
+    var rows: [ListeningPort] = []
+
+    func collectListeningPorts() throws -> [ListeningPort] {
+        rows
+    }
+}
+
+@MainActor
+private struct FakePollSleeper: TerminationPollSleeping {
+    func sleep(seconds: TimeInterval) async {}
 }

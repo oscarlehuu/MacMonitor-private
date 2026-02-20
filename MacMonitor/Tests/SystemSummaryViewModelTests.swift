@@ -44,6 +44,8 @@ final class SystemSummaryViewModelTests: XCTestCase {
                 storageCollector: DummyStorageCollector(),
                 batteryCollector: DummyBatteryCollector(),
                 thermalCollector: DummyThermalCollector(),
+                cpuCollector: DummyCPUCollector(),
+                networkCollector: DummyNetworkCollector(),
                 settings: settings
             ),
             snapshotStore: SnapshotStore(baseDirectoryURL: FileManager.default.temporaryDirectory),
@@ -81,6 +83,18 @@ private struct DummyThermalCollector: ThermalCollecting {
 
     var stateDidChangePublisher: AnyPublisher<ThermalState, Never> {
         Empty<ThermalState, Never>().eraseToAnyPublisher()
+    }
+}
+
+private struct DummyCPUCollector: CPUCollecting {
+    func collect() -> CPUSnapshot {
+        CPUSnapshot(usagePercent: 12)
+    }
+}
+
+private struct DummyNetworkCollector: NetworkCollecting {
+    func collect() -> NetworkSnapshot {
+        NetworkSnapshot(downloadBytesPerSecond: 1_000, uploadBytesPerSecond: 500)
     }
 }
 

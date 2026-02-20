@@ -5,11 +5,13 @@ struct BatteryScreenView: View {
 
     @ObservedObject var settings: SettingsStore
     @ObservedObject var coordinator: BatteryPolicyCoordinator
+    @ObservedObject var scheduleViewModel: BatteryScheduleViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             summaryCard
             controlsCard
+            scheduleCard
             statusCard
         }
     }
@@ -268,6 +270,164 @@ struct BatteryScreenView: View {
         )
         .toggleStyle(.switch)
         .tint(PopoverTheme.accent)
+    }
+
+    private var scheduleCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            helpLabel(
+                "Schedule",
+                help: "Create one-shot battery actions that run at a specific date and time."
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(PopoverTheme.textPrimary)
+
+            scheduleFieldRow("Action") {
+                Picker("Action", selection: $scheduleViewModel.draftAction) {
+                    ForEach(BatteryScheduleDraftAction.allCases) { action in
+                        Text(action.title).tag(action)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            scheduleFieldRow("Run At") {
+                DatePicker(
+                    "Run At",
+                    selection: $scheduleViewModel.draftScheduledAt,
+                    in: scheduleViewModel.minimumAllowedDate...Date.distantFuture,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if scheduleViewModel.draftAction.usesTargetPercent {
+                scheduleFieldRow("Target") {
+                    HStack(spacing: 8) {
+                        Slider(
+                            value: draftTargetPercentBinding,
+                            in: 50...95,
+                            step: 1
+                        )
+                        .tint(PopoverTheme.accent)
+
+                        Text("\(scheduleViewModel.draftTargetPercent)%")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(PopoverTheme.textSecondary)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                actionButton(title: "Schedule Task", tint: PopoverTheme.accent) {
+                    _ = scheduleViewModel.scheduleDraftTask()
+                }
+
+                Text("At least 1 minute ahead.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+
+            if let errorMessage = scheduleViewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.red)
+            }
+
+            Rectangle()
+                .fill(PopoverTheme.borderSubtle)
+                .frame(height: 1)
+
+            Text("Pending Tasks")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(PopoverTheme.textSecondary)
+
+            if scheduleViewModel.pendingTasks.isEmpty {
+                Text("No pending schedule tasks.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            } else {
+                ForEach(Array(scheduleViewModel.pendingTasks.prefix(4))) { task in
+                    scheduledTaskRow(task)
+                }
+            }
+
+            if let summary = scheduleViewModel.lastExecutionSummary {
+                Text("Last run: \(summary)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+                    .lineLimit(2)
+            }
+
+            if let lastFailureReason = scheduleViewModel.lastFailureReason {
+                Text("Last schedule failure: \(lastFailureReason)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.red)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func scheduledTaskRow(_ task: BatteryScheduledTask) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scheduleViewModel.formattedAction(task.action))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+
+                Text("\(scheduleViewModel.formattedScheduledTime(task.scheduledAt)) (\(scheduleViewModel.formattedRelativeTime(task.scheduledAt)))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            Button("Cancel") {
+                scheduleViewModel.cancelTask(task.id)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(PopoverTheme.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(PopoverTheme.orangeDim)
+            )
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func scheduleFieldRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(PopoverTheme.textSecondary)
+                .frame(width: 44, alignment: .leading)
+
+            content()
+        }
+    }
+
+    private var draftTargetPercentBinding: Binding<Double> {
+        Binding(
+            get: { Double(scheduleViewModel.draftTargetPercent) },
+            set: { scheduleViewModel.draftTargetPercent = Int($0.rounded()) }
+        )
     }
 
     private var statusCard: some View {

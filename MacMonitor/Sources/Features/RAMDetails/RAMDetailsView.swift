@@ -20,7 +20,11 @@ struct RAMDetailsView: View {
                 summaryStrip(memorySnapshot)
             }
 
-            scopeControls
+            modeControls
+
+            if viewModel.mode == .processes {
+                scopeControls
+            }
 
             Text(listSummaryText)
                 .font(.system(size: 10))
@@ -40,7 +44,11 @@ struct RAMDetailsView: View {
                     .lineLimit(2)
             }
 
-            processList
+            if viewModel.mode == .processes {
+                processList
+            } else {
+                portsList
+            }
 
             terminateBar
         }
@@ -50,13 +58,33 @@ struct RAMDetailsView: View {
         .onDisappear {
             viewModel.stop()
         }
-        .alert("Terminate selected processes?", isPresented: $viewModel.showingTerminateConfirmation) {
+        .alert(
+            viewModel.mode == .ports ? "Terminate selected port owners?" : "Terminate selected processes?",
+            isPresented: $viewModel.showingTerminateConfirmation
+        ) {
             Button("Cancel", role: .cancel) {}
-            Button("Terminate", role: .destructive) {
+            Button(viewModel.mode == .ports ? "Terminate Owners" : "Terminate", role: .destructive) {
                 Task { await viewModel.terminateSelected() }
             }
         } message: {
-            Text("MacMonitor will proceed with allowed processes only. Protected items are skipped.")
+            Text(
+                viewModel.mode == .ports
+                    ? "MacMonitor will deduplicate selected ports into unique PIDs and terminate allowed owners only. Protected owners are skipped."
+                    : "MacMonitor will proceed with allowed processes only. Protected items are skipped."
+            )
+        }
+        .alert("Force kill remaining processes?", isPresented: $viewModel.showingForceKillConfirmation) {
+            Button("Force Kill Remaining", role: .destructive) {
+                Task { await viewModel.confirmForceKillRemainingPorts() }
+            }
+            Button("Skip Remaining") {
+                viewModel.skipForceKillRemainingPorts()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelForceKillPrompt()
+            }
+        } message: {
+            Text(viewModel.forceKillPromptMessage)
         }
     }
 
@@ -316,6 +344,39 @@ struct RAMDetailsView: View {
         return String(format: "%0.*f%%", fractionDigits, ratio)
     }
 
+    private var modeControls: some View {
+        HStack(spacing: 2) {
+            modeButton(mode: .processes)
+            modeButton(mode: .ports)
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func modeButton(mode: RAMDetailsMode) -> some View {
+        Button {
+            viewModel.setMode(mode)
+        } label: {
+            Text(mode.title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(viewModel.mode == mode ? PopoverTheme.accentContrastText : PopoverTheme.textMuted)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(viewModel.mode == mode ? PopoverTheme.accent : Color.white.opacity(0.001))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     private var scopeControls: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 2) {
@@ -403,9 +464,44 @@ struct RAMDetailsView: View {
         }
     }
 
+    private var portsList: some View {
+        Group {
+            if viewModel.isLoading {
+                ProgressView("Loading listening ports...")
+                    .tint(PopoverTheme.blue)
+                    .font(.system(size: 11))
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity)
+                    .background(listCardBackground)
+            } else if viewModel.listeningPorts.isEmpty {
+                Text("No listening TCP ports found.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity)
+                    .background(listCardBackground)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(viewModel.listeningPorts) { row in
+                            PortRowView(
+                                row: row,
+                                isSelected: viewModel.selectedPortIDs.contains(row.id),
+                                onToggle: {
+                                    viewModel.togglePortSelection(for: row.id)
+                                }
+                            )
+                        }
+                    }
+                }
+                .frame(minHeight: 160, maxHeight: 255, alignment: .top)
+            }
+        }
+    }
+
     private var terminateBar: some View {
         HStack {
-            Text("\(viewModel.selectedAllowedCount) selected • \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))")
+            Text(terminateSummaryText)
                 .font(.system(size: 10))
                 .foregroundStyle(PopoverTheme.textMuted)
 
@@ -414,7 +510,7 @@ struct RAMDetailsView: View {
             Button {
                 viewModel.requestTerminateSelected()
             } label: {
-                Text(viewModel.isTerminating ? "Terminating..." : "Terminate (\(viewModel.selectedAllowedCount))")
+                Text(terminateButtonTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(viewModel.canTerminateSelection ? Color.white : PopoverTheme.textMuted)
                     .padding(.horizontal, 12)
@@ -426,6 +522,7 @@ struct RAMDetailsView: View {
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canTerminateSelection)
+            .help(viewModel.terminationInfoTooltip)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -437,6 +534,23 @@ struct RAMDetailsView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
+    }
+
+    private var terminateSummaryText: String {
+        if viewModel.mode == .processes {
+            return "\(viewModel.selectedAllowedCount) selected • \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))"
+        }
+        return "\(viewModel.selectedAllowedCount) ports selected • \(viewModel.selectedAllowedPIDCount) PID(s)"
+    }
+
+    private var terminateButtonTitle: String {
+        if viewModel.isTerminating {
+            return "Terminating..."
+        }
+        if viewModel.mode == .processes {
+            return "Terminate (\(viewModel.selectedAllowedCount))"
+        }
+        return "Terminate Owners (\(viewModel.selectedAllowedCount))"
     }
 
     private var listCardBackground: some View {
@@ -484,6 +598,11 @@ struct RAMDetailsView: View {
     }
 
     private var listSummaryText: String {
+        if viewModel.mode == .ports {
+            let selectableRows = viewModel.listeningPorts.filter { !$0.isProtected }.count
+            return "TCP LISTEN rows \(viewModel.listeningPorts.count) • Selectable \(selectableRows)"
+        }
+
         let listed = MetricFormatter.bytes(viewModel.listedRowsBytes)
         if viewModel.scopeMode == .sameUserOnly && viewModel.showAllMine {
             return "All mine \(viewModel.processes.count) of \(viewModel.myProcessCount) • Listed \(listed)"
@@ -586,6 +705,95 @@ private struct ProcessRowView: View {
             return "\(MetricFormatter.bytes(footprintBytes)) PSS"
         }
         return "\(MetricFormatter.bytes(process.residentBytes)) Resident"
+    }
+}
+
+private struct PortRowView: View {
+    let row: ListeningPort
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(alignment: .center, spacing: 8) {
+                checkbox
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.processName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(processNameColor)
+                        .lineLimit(1)
+
+                    Text(metaLine)
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(row.protocolName) :\(row.port)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+
+                    Text("PID \(row.pid)")
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? PopoverTheme.accentDim : PopoverTheme.bgCard)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(row.isProtected)
+    }
+
+    private var checkbox: some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(isSelected ? PopoverTheme.accent : .clear)
+            .frame(width: 16, height: 16)
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(isSelected ? PopoverTheme.accent : PopoverTheme.textMuted, lineWidth: 1.5)
+            }
+            .overlay {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(PopoverTheme.accentContrastText)
+                }
+            }
+            .opacity(row.isProtected ? 0.3 : 1)
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return PopoverTheme.borderActive
+        }
+        if row.isProtected {
+            return PopoverTheme.orange.opacity(0.2)
+        }
+        return PopoverTheme.borderSubtle
+    }
+
+    private var processNameColor: Color {
+        row.isProtected ? PopoverTheme.textMuted : PopoverTheme.textPrimary
+    }
+
+    private var metaLine: String {
+        if let reason = row.protectionReason {
+            return "\(row.endpoint) • \(row.userName) • \(reason.description)"
+        }
+        return "\(row.endpoint) • \(row.userName)"
     }
 }
 

@@ -65,6 +65,23 @@ struct StorageManagementView: View {
         } message: {
             Text("Selected: \(viewModel.selectedAllowedCount) • \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))")
         }
+        .confirmationDialog(
+            "Force quit still-running apps?",
+            isPresented: $viewModel.showingForceQuitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Force Quit and Move to Trash", role: .destructive) {
+                Task { await viewModel.confirmForceQuitAndDelete() }
+            }
+            Button("Skip Running Apps") {
+                Task { await viewModel.skipForceQuitAndDelete() }
+            }
+            Button("Cancel Cleanup", role: .cancel) {
+                viewModel.cancelForceQuitPrompt()
+            }
+        } message: {
+            Text(viewModel.forceQuitPromptMessage)
+        }
     }
 
     private var actionHeader: some View {
