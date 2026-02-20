@@ -96,13 +96,23 @@ struct StorageRingChartView: View {
         let sum = buckets.reduce(UInt64(0)) { $0 + $1.sizeBytes }
         guard sum > 0 else { return [] }
 
+        let activeBuckets = buckets.filter { $0.sizeBytes > 0 }
+        var spans = activeBuckets.map { bucket -> Double in
+            let fraction = Double(bucket.sizeBytes) / Double(sum)
+            return max(2.0, fraction * 360.0)
+        }
+
+        let total = spans.reduce(0.0, +)
+        if total > 360.0 {
+            let scale = 360.0 / total
+            spans = spans.map { $0 * scale }
+        }
+
         var startDegrees = -90.0
         var output: [(bucket: StorageRingBucket, startAngle: Angle, endAngle: Angle)] = []
-        output.reserveCapacity(buckets.count)
+        output.reserveCapacity(activeBuckets.count)
 
-        for bucket in buckets where bucket.sizeBytes > 0 {
-            let fraction = Double(bucket.sizeBytes) / Double(sum)
-            let span = max(2.0, fraction * 360.0)
+        for (bucket, span) in zip(activeBuckets, spans) {
             let endDegrees = startDegrees + span
             output.append(
                 (
