@@ -32,6 +32,10 @@ targets:
         MARKETING_VERSION: 0.1.0
         SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor-updates/appcast.xml"
         SPARKLE_PUBLIC_ED_KEY: "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU="
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: MacMonitor/Config/Release.entitlements
+          ENABLE_HARDENED_RUNTIME: YES
     postBuildScripts:
       - name: Embed Battery Helper
         script: |
