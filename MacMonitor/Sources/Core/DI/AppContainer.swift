@@ -7,6 +7,8 @@ final class AppContainer {
     private let appUpdateController: AppUpdateController
     private let metricsEngine: MetricsEngine
     private let snapshotStore: SnapshotStore
+    private let appGroupSnapshotStore: AppGroupSnapshotStore
+    private let diagnosticsExporter: DiagnosticsExporter
     private let summaryViewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
@@ -14,6 +16,7 @@ final class AppContainer {
     private let ramPolicyMonitor: RAMPolicyMonitor
     private let batteryPolicyCoordinator: BatteryPolicyCoordinator
     private let batteryScheduleCoordinator: BatteryScheduleCoordinator
+    private let batteryScheduleViewModel: BatteryScheduleViewModel
     private let batteryLifecycleCoordinator: BatteryLifecycleCoordinator
     private let menuBarController: MenuBarController
     private var batterySnapshotCancellable: AnyCancellable?
@@ -26,24 +29,42 @@ final class AppContainer {
         let storageCollector = StorageCollector()
         let batteryCollector = BatteryCollector()
         let thermalCollector = ThermalCollector()
+        let cpuCollector = CPUCollector()
+        let networkCollector = NetworkCollector()
+        let gpuCollector = DefaultGPUCollector()
 
         let engine = MetricsEngine(
             memoryCollector: memoryCollector,
             storageCollector: storageCollector,
             batteryCollector: batteryCollector,
             thermalCollector: thermalCollector,
+            cpuCollector: cpuCollector,
+            networkCollector: networkCollector,
+            gpuCollector: gpuCollector,
             settings: settings
         )
 
         let store = SnapshotStore()
-        let viewModel = SystemSummaryViewModel(engine: engine, snapshotStore: store, settings: settings)
-        let storageManagementViewModel = StorageManagementViewModel(storageManager: LocalStorageManager())
+        let appGroupSnapshotStore = AppGroupSnapshotStore()
+        let diagnosticsExporter = DiagnosticsExporter()
+        let viewModel = SystemSummaryViewModel(
+            engine: engine,
+            snapshotStore: store,
+            settings: settings,
+            appGroupSnapshotStore: appGroupSnapshotStore
+        )
+        let storageManagementViewModel = StorageManagementViewModel(
+            storageManager: LocalStorageManager(),
+            runningAppPreflightCoordinator: RunningAppPreflightCoordinator()
+        )
         let processProtectionPolicy = DefaultProcessProtectionPolicy()
         let processCollector = LibprocProcessListCollector(protectionPolicy: processProtectionPolicy)
+        let listeningPortCollector = LsofListeningPortCollector(protectionPolicy: processProtectionPolicy)
         let processTerminator = SignalProcessTerminator()
         let ramDetails = RAMDetailsViewModel(
             processCollector: processCollector,
-            processTerminator: processTerminator
+            processTerminator: processTerminator,
+            listeningPortCollector: listeningPortCollector
         )
         let policyStore = FileRAMPolicyStore()
         let eventStore = FileRAMPolicyEventStore()
@@ -83,6 +104,10 @@ final class AppContainer {
         let batteryScheduleCoordinator = BatteryScheduleCoordinator(
             store: FileBatteryScheduleStore(),
             queueEngine: BatteryScheduleEngine(),
+            policyCoordinator: batteryPolicyCoordinator
+        )
+        let batteryScheduleViewModel = BatteryScheduleViewModel(
+            scheduleCoordinator: batteryScheduleCoordinator,
             policyCoordinator: batteryPolicyCoordinator
         )
         let batteryLifecycleCoordinator = BatteryLifecycleCoordinator { [weak batteryPolicyCoordinator, weak batteryScheduleCoordinator] event in
@@ -130,13 +155,17 @@ final class AppContainer {
             ramPolicyViewModel: policyViewModel,
             storageManagementViewModel: storageManagementViewModel,
             batteryPolicyCoordinator: batteryPolicyCoordinator,
-            appUpdateController: appUpdateController
+            batteryScheduleViewModel: batteryScheduleViewModel,
+            appUpdateController: appUpdateController,
+            diagnosticsExporter: diagnosticsExporter
         )
 
         self.settingsStore = settings
         self.appUpdateController = appUpdateController
         self.metricsEngine = engine
         self.snapshotStore = store
+        self.appGroupSnapshotStore = appGroupSnapshotStore
+        self.diagnosticsExporter = diagnosticsExporter
         self.summaryViewModel = viewModel
         self.ramDetailsViewModel = ramDetails
         self.ramPolicyViewModel = policyViewModel
@@ -144,6 +173,7 @@ final class AppContainer {
         self.ramPolicyMonitor = policyMonitor
         self.batteryPolicyCoordinator = batteryPolicyCoordinator
         self.batteryScheduleCoordinator = batteryScheduleCoordinator
+        self.batteryScheduleViewModel = batteryScheduleViewModel
         self.batteryLifecycleCoordinator = batteryLifecycleCoordinator
         self.menuBarController = menuBar
     }

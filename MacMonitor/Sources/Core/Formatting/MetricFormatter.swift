@@ -19,6 +19,16 @@ enum MetricFormatter {
         return formatter
     }
 
+    private static func makeDataRateFormatter() -> ByteCountFormatter {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        formatter.countStyle = .binary
+        formatter.includesUnit = true
+        formatter.includesCount = true
+        formatter.isAdaptive = true
+        return formatter
+    }
+
     private static func makeRelativeFormatter() -> RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
@@ -46,5 +56,17 @@ enum MetricFormatter {
 
     static func relativeTime(from date: Date, reference: Date = Date()) -> String {
         makeRelativeFormatter().localizedString(for: date, relativeTo: reference)
+    }
+
+    static func bytesPerSecond(_ value: Double?) -> String {
+        guard let value else { return "--/s" }
+        let sanitized = Int64(max(0, value).rounded())
+        return "\(makeDataRateFormatter().string(fromByteCount: sanitized))/s"
+    }
+
+    static func percentValue(_ value: Double?) -> String {
+        guard let value else { return "--" }
+        let clamped = min(max(value, 0), 100)
+        return "\(Int(clamped.rounded()))%"
     }
 }

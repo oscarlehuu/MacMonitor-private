@@ -29,16 +29,30 @@ final class SettingsStoreTests: XCTestCase {
         let manager = MutableLaunchManager()
         let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
 
-        store.menuBarDisplayMode = .storage
-        store.menuBarMetricValueMode = .free
-        store.menuBarMetricFormat = .number
+        store.menuBarDisplayMode = .both
+        store.menuBarMemoryFormat = .numberUsage
+        store.menuBarStorageFormat = .numberLeft
 
-        XCTAssertEqual(defaults.string(forKey: "settings.menuBarDisplayMode"), "storage")
-        XCTAssertEqual(defaults.string(forKey: "settings.menuBarMetricValueMode"), "free")
-        XCTAssertEqual(defaults.string(forKey: "settings.menuBarMetricFormat"), "number")
+        XCTAssertEqual(defaults.string(forKey: "settings.menuBarDisplayMode"), "both")
+        XCTAssertEqual(defaults.string(forKey: "settings.menuBarMemoryFormat"), "numberUsage")
+        XCTAssertEqual(defaults.string(forKey: "settings.menuBarStorageFormat"), "numberLeft")
     }
 
     func testHydratesPersistedMenuBarDisplaySettings() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        defaults.set("storage", forKey: "settings.menuBarDisplayMode")
+        defaults.set("numberUsage", forKey: "settings.menuBarMemoryFormat")
+        defaults.set("percentUsage", forKey: "settings.menuBarStorageFormat")
+        let manager = MutableLaunchManager()
+
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        XCTAssertEqual(store.menuBarDisplayMode, .storage)
+        XCTAssertEqual(store.menuBarMemoryFormat, .numberUsage)
+        XCTAssertEqual(store.menuBarStorageFormat, .percentUsage)
+    }
+
+    func testMigratesLegacyMenuBarFormatSettings() {
         let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
         defaults.set("ram", forKey: "settings.menuBarDisplayMode")
         defaults.set("free", forKey: "settings.menuBarMetricValueMode")
@@ -47,9 +61,9 @@ final class SettingsStoreTests: XCTestCase {
 
         let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
 
-        XCTAssertEqual(store.menuBarDisplayMode, .ram)
-        XCTAssertEqual(store.menuBarMetricValueMode, .free)
-        XCTAssertEqual(store.menuBarMetricFormat, .number)
+        XCTAssertEqual(store.menuBarDisplayMode, .memory)
+        XCTAssertEqual(store.menuBarMemoryFormat, .numberLeft)
+        XCTAssertEqual(store.menuBarStorageFormat, .numberLeft)
     }
 
     func testPersistsBatteryPolicyConfiguration() throws {

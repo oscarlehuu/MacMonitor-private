@@ -1,6 +1,17 @@
 import AppIntents
 import Foundation
 
+enum TrendSummaryWindowIntent: String, AppEnum {
+    case last24Hours
+    case last7Days
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Trend Window")
+    static let caseDisplayRepresentations: [TrendSummaryWindowIntent: DisplayRepresentation] = [
+        .last24Hours: "Last 24 Hours",
+        .last7Days: "Last 7 Days"
+    ]
+}
+
 struct SetBatteryChargeLimitIntent: AppIntent {
     static let title: LocalizedStringResource = "Set Battery Charge Limit"
     static let description = IntentDescription("Set MacMonitor battery charge limit between 50% and 95%.")
@@ -72,6 +83,68 @@ struct GetBatteryControlStateIntent: AppIntent {
     }
 }
 
+struct GetMacMonitorStatusIntent: AppIntent {
+    static let title: LocalizedStringResource = "Get MacMonitor Status"
+    static let description = IntentDescription("Return read-only summary metrics from the latest shared snapshot.")
+    static let openAppWhenRun = false
+
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let store = AppGroupSnapshotStore()
+        guard let summary = store.loadSummary() else {
+            return .result(value: "No shared snapshot available yet.")
+        }
+
+        let latest = summary.latest
+        let batteryText = latest.batteryPercent.map { "\($0)%" } ?? "Unavailable"
+        let cpuText = latest.cpuUsagePercent.map { "\(Int($0.rounded()))%" } ?? "--"
+        let result = [
+            "Thermal: \(latest.thermalState.title)",
+            "RAM: \(Int(latest.memoryUsagePercent.rounded()))%",
+            "Storage: \(Int(latest.storageUsagePercent.rounded()))%",
+            "CPU: \(cpuText)",
+            "Battery: \(batteryText)"
+        ].joined(separator: " | ")
+        return .result(value: result)
+    }
+}
+
+struct GetMacMonitorTrendSummaryIntent: AppIntent {
+    static let title: LocalizedStringResource = "Get MacMonitor Trend Summary"
+    static let description = IntentDescription("Return read-only trend averages from shared snapshots.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Window", default: .last24Hours)
+    var window: TrendSummaryWindowIntent
+
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let store = AppGroupSnapshotStore()
+        guard let summary = store.loadSummary() else {
+            return .result(value: "No trend data available yet.")
+        }
+
+        let points: [SharedSnapshotPoint]
+        switch window {
+        case .last24Hours:
+            points = summary.trend24Hours
+        case .last7Days:
+            points = summary.trend7Days
+        }
+
+        guard !points.isEmpty else {
+            return .result(value: "No trend samples available for this window.")
+        }
+
+        let memoryAverage = points.map(\.memoryUsagePercent).reduce(0, +) / Double(points.count)
+        let storageAverage = points.map(\.storageUsagePercent).reduce(0, +) / Double(points.count)
+        let cpuValues = points.compactMap(\.cpuUsagePercent)
+        let cpuAverage = cpuValues.isEmpty ? nil : cpuValues.reduce(0, +) / Double(cpuValues.count)
+
+        let cpuText = cpuAverage.map { "\(Int($0.rounded()))%" } ?? "--"
+        let trendText = "Trend \(window.rawValue): RAM avg \(Int(memoryAverage.rounded()))%, Storage avg \(Int(storageAverage.rounded()))%, CPU avg \(cpuText), Samples \(points.count)."
+        return .result(value: trendText)
+    }
+}
+
 struct BatteryAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -122,6 +195,26 @@ struct BatteryAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Battery State",
             systemImageName: "battery.100"
+        )
+
+        AppShortcut(
+            intent: GetMacMonitorStatusIntent(),
+            phrases: [
+                "Get status from \(.applicationName)",
+                "Read system status in \(.applicationName)"
+            ],
+            shortTitle: "Status",
+            systemImageName: "chart.bar"
+        )
+
+        AppShortcut(
+            intent: GetMacMonitorTrendSummaryIntent(),
+            phrases: [
+                "Get trend summary from \(.applicationName)",
+                "Read trends in \(.applicationName)"
+            ],
+            shortTitle: "Trend Summary",
+            systemImageName: "chart.line.uptrend.xyaxis"
         )
     }
 }

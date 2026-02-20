@@ -21,6 +21,12 @@ final class StorageManagementViewModel: ObservableObject {
         let bookmarkData: Data?
     }
 
+    private struct PendingDeletionContext {
+        let snapshotItems: [StorageManagedItem]
+        let baseDeletionIDs: Set<String>
+        let stillRunningItems: [StorageManagedItem]
+    }
+
     @Published private(set) var diskUsage: StorageDiskUsage?
     @Published private(set) var summaryDiskUsage: StorageDiskUsage?
     @Published private(set) var appGroups: [StorageAppGroup] = []
@@ -39,8 +45,11 @@ final class StorageManagementViewModel: ObservableObject {
     @Published var expandedItemIDs: Set<String> = []
     @Published var searchQuery: String = ""
     @Published var showingDeleteConfirmation = false
+    @Published var showingForceQuitConfirmation = false
+    @Published private(set) var forceQuitCandidateNames: [String] = []
 
     private let storageManager: StorageManaging
+    private let runningAppPreflightCoordinator: RunningAppPreflightCoordinating
     private let userDefaults: UserDefaults
     private var hasLoaded = false
     private var scanGeneration = 0
@@ -49,14 +58,20 @@ final class StorageManagementViewModel: ObservableObject {
     private var trackedFolderAccesses: [TrackedFolderAccess] = []
     private var primaryAccessBookmarkData: Data?
     private var initialAccessPromptShown = false
+    private var pendingDeletionContext: PendingDeletionContext?
     private(set) var pendingTask: Task<Void, Never>?
 
     private let trackedFolderAccessesKey = "storage.trackedFolderAccesses"
     private let primaryAccessBookmarkKey = "storage.primaryAccessBookmark"
     private let initialAccessPromptShownKey = "storage.initialAccessPromptShown"
 
-    init(storageManager: StorageManaging, userDefaults: UserDefaults = .standard) {
+    init(
+        storageManager: StorageManaging,
+        runningAppPreflightCoordinator: RunningAppPreflightCoordinating = RunningAppPreflightCoordinator(),
+        userDefaults: UserDefaults = .standard
+    ) {
         self.storageManager = storageManager
+        self.runningAppPreflightCoordinator = runningAppPreflightCoordinator
         self.userDefaults = userDefaults
         loadPersistedAccessState()
     }
@@ -69,6 +84,7 @@ final class StorageManagementViewModel: ObservableObject {
         }
         childLoadTasks.removeAll()
         loadingParentItemIDs.removeAll()
+        resetPendingForceQuitContext()
     }
 
     func loadIfNeeded() {
@@ -78,12 +94,14 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func shouldRequestInitialAccess() -> Bool {
-        !initialAccessPromptShown && primaryAccessBookmarkData == nil
+        refreshPersistedInitialAccessState()
+        return !initialAccessPromptShown
     }
 
     func markInitialAccessPromptHandled() {
         initialAccessPromptShown = true
         userDefaults.set(true, forKey: initialAccessPromptShownKey)
+        userDefaults.synchronize()
     }
 
     func grantInitialAccess(to url: URL) {
@@ -91,6 +109,7 @@ final class StorageManagementViewModel: ObservableObject {
         guard let bookmarkData = makeBookmarkData(for: normalized) else {
             initialAccessPromptShown = true
             userDefaults.set(true, forKey: initialAccessPromptShownKey)
+            userDefaults.synchronize()
             errorMessage = "Could not persist storage access bookmark."
             return
         }
@@ -99,6 +118,7 @@ final class StorageManagementViewModel: ObservableObject {
         initialAccessPromptShown = true
         userDefaults.set(bookmarkData, forKey: primaryAccessBookmarkKey)
         userDefaults.set(true, forKey: initialAccessPromptShownKey)
+        userDefaults.synchronize()
 
         if hasLoaded {
             refresh()
@@ -155,6 +175,8 @@ final class StorageManagementViewModel: ObservableObject {
             normalizeSelection()
         }
 
+        resetPendingForceQuitContext()
+        showingForceQuitConfirmation = false
         isScanning = false
     }
 
@@ -303,20 +325,97 @@ final class StorageManagementViewModel: ObservableObject {
         showingDeleteConfirmation = false
         isDeleting = true
         errorMessage = nil
-
-        let manager = storageManager
         let snapshotItems = Array(itemIndex.values)
-
-        let summary = await Task.detached(priority: .userInitiated) {
-            manager.delete(items: snapshotItems, selectedItemIDs: normalizedIDs)
-        }.value
-
+        let preflightSummary = await runningAppPreflightCoordinator.gracefulQuitPreflight(for: normalizedItems)
         guard !Task.isCancelled else { return }
 
-        resultMessage = summary.message
-        selectedItemIDs.removeAll()
+        let stillRunningIDs = preflightSummary.itemIDs(matching: .stillRunning)
+        if stillRunningIDs.isEmpty {
+            await executeDeletion(
+                snapshotItems: snapshotItems,
+                selectedIDs: normalizedIDs,
+                extraSkippedResults: []
+            )
+            return
+        }
+
+        let stillRunningItems = normalizedItems.filter { stillRunningIDs.contains($0.id) }
+        pendingDeletionContext = PendingDeletionContext(
+            snapshotItems: snapshotItems,
+            baseDeletionIDs: normalizedIDs.subtracting(stillRunningIDs),
+            stillRunningItems: stillRunningItems
+        )
+        forceQuitCandidateNames = stillRunningItems.map(\.displayName).sorted()
+        showingForceQuitConfirmation = true
         isDeleting = false
-        refresh()
+    }
+
+    func confirmForceQuitAndDelete() async {
+        guard let context = pendingDeletionContext else {
+            showingForceQuitConfirmation = false
+            return
+        }
+
+        showingForceQuitConfirmation = false
+        isDeleting = true
+
+        let forceSummary = await runningAppPreflightCoordinator.forceQuit(for: context.stillRunningItems)
+        guard !Task.isCancelled else { return }
+
+        let stillRunningAfterForceIDs = forceSummary.itemIDs(matching: .stillRunning)
+        let forceSucceededIDs = forceSummary.results.compactMap { result -> String? in
+            switch result.outcome {
+            case .notRunning, .forceTerminated, .terminatedGracefully:
+                return result.itemID
+            case .notAppBundle, .stillRunning:
+                return nil
+            }
+        }
+
+        let extraSkippedResults = context.stillRunningItems.compactMap { item -> StorageDeletionResult? in
+            guard stillRunningAfterForceIDs.contains(item.id) else { return nil }
+            return StorageDeletionResult(
+                id: item.id,
+                displayName: item.displayName,
+                outcome: .skippedStillRunning
+            )
+        }
+
+        await executeDeletion(
+            snapshotItems: context.snapshotItems,
+            selectedIDs: context.baseDeletionIDs.union(forceSucceededIDs),
+            extraSkippedResults: extraSkippedResults
+        )
+    }
+
+    func skipForceQuitAndDelete() async {
+        guard let context = pendingDeletionContext else {
+            showingForceQuitConfirmation = false
+            return
+        }
+
+        showingForceQuitConfirmation = false
+        isDeleting = true
+
+        let extraSkippedResults = context.stillRunningItems.map { item in
+            StorageDeletionResult(
+                id: item.id,
+                displayName: item.displayName,
+                outcome: .skippedForceDeclined
+            )
+        }
+
+        await executeDeletion(
+            snapshotItems: context.snapshotItems,
+            selectedIDs: context.baseDeletionIDs,
+            extraSkippedResults: extraSkippedResults
+        )
+    }
+
+    func cancelForceQuitPrompt() {
+        showingForceQuitConfirmation = false
+        isDeleting = false
+        resetPendingForceQuitContext()
     }
 
     var selectedAllowedCount: Int {
@@ -327,8 +426,22 @@ final class StorageManagementViewModel: ObservableObject {
         normalizedSelectedItems.reduce(0) { $0 + $1.sizeBytes }
     }
 
+    var forceQuitPromptMessage: String {
+        if forceQuitCandidateNames.isEmpty {
+            return "Some selected apps are still running. Force quitting may lose unsaved work."
+        }
+        if forceQuitCandidateNames.count == 1, let name = forceQuitCandidateNames.first {
+            return "\(name) is still running. Force quitting may lose unsaved work."
+        }
+        if forceQuitCandidateNames.count <= 3 {
+            let joinedNames = forceQuitCandidateNames.joined(separator: ", ")
+            return "\(joinedNames) are still running. Force quitting may lose unsaved work."
+        }
+        return "\(forceQuitCandidateNames.count) selected apps are still running. Force quitting may lose unsaved work."
+    }
+
     var canDeleteSelection: Bool {
-        selectedAllowedCount > 0 && !isDeleting
+        selectedAllowedCount > 0 && !isDeleting && pendingDeletionContext == nil
     }
 
     var deleteInfoTooltip: String {
@@ -441,6 +554,45 @@ final class StorageManagementViewModel: ObservableObject {
 
     var hasLooseItems: Bool {
         !visibleLooseItems.isEmpty
+    }
+
+    private func executeDeletion(
+        snapshotItems: [StorageManagedItem],
+        selectedIDs: Set<String>,
+        extraSkippedResults: [StorageDeletionResult]
+    ) async {
+        let manager = storageManager
+        let summary = await Task.detached(priority: .userInitiated) {
+            manager.delete(items: snapshotItems, selectedItemIDs: selectedIDs)
+        }.value
+
+        guard !Task.isCancelled else { return }
+
+        var mergedResultsByID: [String: StorageDeletionResult] = [:]
+        for result in summary.results {
+            mergedResultsByID[result.id] = result
+        }
+        for result in extraSkippedResults where mergedResultsByID[result.id] == nil {
+            mergedResultsByID[result.id] = result
+        }
+
+        let mergedSummary = StorageDeletionSummary(results: mergedResultsByID.values.sorted { lhs, rhs in
+            if lhs.id.count == rhs.id.count {
+                return lhs.id.localizedCaseInsensitiveCompare(rhs.id) == .orderedAscending
+            }
+            return lhs.id.count < rhs.id.count
+        })
+
+        resultMessage = mergedSummary.message
+        selectedItemIDs.removeAll()
+        isDeleting = false
+        resetPendingForceQuitContext()
+        refresh()
+    }
+
+    private func resetPendingForceQuitContext() {
+        pendingDeletionContext = nil
+        forceQuitCandidateNames = []
     }
 
     private func applyPreset(_ preset: StorageCleanupPreset, keepPresetActive: Bool) {
@@ -658,8 +810,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     private func loadPersistedAccessState() {
-        initialAccessPromptShown = userDefaults.bool(forKey: initialAccessPromptShownKey)
-        primaryAccessBookmarkData = userDefaults.data(forKey: primaryAccessBookmarkKey)
+        refreshPersistedInitialAccessState()
 
         guard let storedData = userDefaults.data(forKey: trackedFolderAccessesKey),
               let decoded = try? JSONDecoder().decode([TrackedFolderAccess].self, from: storedData) else {
@@ -684,6 +835,21 @@ final class StorageManagementViewModel: ObservableObject {
             return
         }
         userDefaults.set(encoded, forKey: trackedFolderAccessesKey)
+    }
+
+    private func refreshPersistedInitialAccessState() {
+        let persistedPromptShown = userDefaults.bool(forKey: initialAccessPromptShownKey)
+        if let persistedBookmarkData = userDefaults.data(forKey: primaryAccessBookmarkKey) {
+            primaryAccessBookmarkData = persistedBookmarkData
+            initialAccessPromptShown = true
+            if !persistedPromptShown {
+                userDefaults.set(true, forKey: initialAccessPromptShownKey)
+                userDefaults.synchronize()
+            }
+        } else {
+            primaryAccessBookmarkData = nil
+            initialAccessPromptShown = persistedPromptShown
+        }
     }
 
     private func reloadTrackedFolders() {

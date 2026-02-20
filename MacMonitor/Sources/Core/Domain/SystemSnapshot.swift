@@ -1,5 +1,10 @@
 import Foundation
 
+enum SnapshotSchemaVersion: Int, Codable, Equatable {
+    case v1 = 1
+    case v2 = 2
+}
+
 enum BatteryPowerSource: String, Codable, Equatable {
     case ac
     case battery
@@ -65,6 +70,13 @@ struct BatterySnapshot: Codable, Equatable {
         return Int((Double(currentCapacity) / Double(maxCapacity) * 100).rounded())
     }
 
+    var healthPercent: Int? {
+        guard let health else { return nil }
+        let digits = health.filter(\.isNumber)
+        guard let numericValue = Int(digits) else { return nil }
+        return min(max(numericValue, 0), 100)
+    }
+
     var chargeState: BatteryChargeState {
         if isCharging {
             return .charging
@@ -101,7 +113,7 @@ struct BatterySnapshot: Codable, Equatable {
     )
 }
 
-enum ThermalState: String, Codable, CaseIterable {
+enum ThermalState: String, Codable, CaseIterable, Identifiable {
     case nominal
     case fair
     case serious
@@ -137,6 +149,8 @@ enum ThermalState: String, Codable, CaseIterable {
             return 4
         }
     }
+
+    var id: String { rawValue }
 }
 
 enum MemoryPressureLevel: String, Codable {
@@ -202,6 +216,39 @@ struct ThermalSnapshot: Codable, Equatable {
     let state: ThermalState
 }
 
+struct CPUSnapshot: Codable, Equatable {
+    let usagePercent: Double?
+
+    static let unavailable = CPUSnapshot(usagePercent: nil)
+
+    var normalizedPercent: Double? {
+        guard let usagePercent else { return nil }
+        return min(max(usagePercent, 0), 100)
+    }
+}
+
+struct NetworkSnapshot: Codable, Equatable {
+    let downloadBytesPerSecond: Double?
+    let uploadBytesPerSecond: Double?
+
+    static let unavailable = NetworkSnapshot(
+        downloadBytesPerSecond: nil,
+        uploadBytesPerSecond: nil
+    )
+}
+
+enum GPUMetricAvailability: String, Codable, Equatable {
+    case available
+    case unavailable
+}
+
+struct GPUSnapshot: Codable, Equatable {
+    let availability: GPUMetricAvailability
+    let usagePercent: Double?
+
+    static let unavailable = GPUSnapshot(availability: .unavailable, usagePercent: nil)
+}
+
 enum RefreshReason: String, Codable {
     case startup
     case interval
@@ -212,60 +259,84 @@ enum RefreshReason: String, Codable {
 
 struct SystemSnapshot: Identifiable, Codable, Equatable {
     let id: UUID
+    let schemaVersion: SnapshotSchemaVersion
     let timestamp: Date
     let memory: MemorySnapshot
     let storage: StorageSnapshot
     let battery: BatterySnapshot
     let thermal: ThermalSnapshot
+    let cpu: CPUSnapshot
+    let network: NetworkSnapshot
+    let gpu: GPUSnapshot
     let refreshReason: RefreshReason
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case schemaVersion
         case timestamp
         case memory
         case storage
         case battery
         case thermal
+        case cpu
+        case network
+        case gpu
         case refreshReason
     }
 
     init(
         id: UUID = UUID(),
+        schemaVersion: SnapshotSchemaVersion = .v2,
         timestamp: Date,
         memory: MemorySnapshot,
         storage: StorageSnapshot,
         battery: BatterySnapshot = .unavailable,
         thermal: ThermalSnapshot,
+        cpu: CPUSnapshot = .unavailable,
+        network: NetworkSnapshot = .unavailable,
+        gpu: GPUSnapshot = .unavailable,
         refreshReason: RefreshReason
     ) {
         self.id = id
+        self.schemaVersion = schemaVersion
         self.timestamp = timestamp
         self.memory = memory
         self.storage = storage
         self.battery = battery
         self.thermal = thermal
+        self.cpu = cpu
+        self.network = network
+        self.gpu = gpu
         self.refreshReason = refreshReason
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        schemaVersion = try container.decodeIfPresent(SnapshotSchemaVersion.self, forKey: .schemaVersion) ?? .v1
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         memory = try container.decode(MemorySnapshot.self, forKey: .memory)
         storage = try container.decode(StorageSnapshot.self, forKey: .storage)
         battery = try container.decodeIfPresent(BatterySnapshot.self, forKey: .battery) ?? .unavailable
         thermal = try container.decode(ThermalSnapshot.self, forKey: .thermal)
+        cpu = try container.decodeIfPresent(CPUSnapshot.self, forKey: .cpu) ?? .unavailable
+        network = try container.decodeIfPresent(NetworkSnapshot.self, forKey: .network) ?? .unavailable
+        gpu = try container.decodeIfPresent(GPUSnapshot.self, forKey: .gpu) ?? .unavailable
         refreshReason = try container.decode(RefreshReason.self, forKey: .refreshReason)
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
         try container.encode(timestamp, forKey: .timestamp)
         try container.encode(memory, forKey: .memory)
         try container.encode(storage, forKey: .storage)
         try container.encode(battery, forKey: .battery)
         try container.encode(thermal, forKey: .thermal)
+        try container.encode(cpu, forKey: .cpu)
+        try container.encode(network, forKey: .network)
+        try container.encode(gpu, forKey: .gpu)
         try container.encode(refreshReason, forKey: .refreshReason)
     }
 

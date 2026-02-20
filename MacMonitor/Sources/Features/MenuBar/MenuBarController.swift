@@ -9,10 +9,11 @@ final class MenuBarController: NSObject {
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
     private let storageManagementViewModel: StorageManagementViewModel
     private let batteryPolicyCoordinator: BatteryPolicyCoordinator
+    private let batteryScheduleViewModel: BatteryScheduleViewModel
     private let appUpdateController: AppUpdateController
+    private let diagnosticsExporter: DiagnosticsExporter
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
-    private let statusIconRenderer = MenuBarStatusIconRenderer.shared
     private var cancellables = Set<AnyCancellable>()
     private var appearanceObserver: NSObjectProtocol?
 
@@ -22,14 +23,18 @@ final class MenuBarController: NSObject {
         ramPolicyViewModel: RAMPolicySettingsViewModel,
         storageManagementViewModel: StorageManagementViewModel,
         batteryPolicyCoordinator: BatteryPolicyCoordinator,
-        appUpdateController: AppUpdateController
+        batteryScheduleViewModel: BatteryScheduleViewModel,
+        appUpdateController: AppUpdateController,
+        diagnosticsExporter: DiagnosticsExporter
     ) {
         self.viewModel = viewModel
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
         self.storageManagementViewModel = storageManagementViewModel
         self.batteryPolicyCoordinator = batteryPolicyCoordinator
+        self.batteryScheduleViewModel = batteryScheduleViewModel
         self.appUpdateController = appUpdateController
+        self.diagnosticsExporter = diagnosticsExporter
         super.init()
     }
 
@@ -43,8 +48,10 @@ final class MenuBarController: NSObject {
                 ramPolicyViewModel: ramPolicyViewModel,
                 storageManagementViewModel: storageManagementViewModel,
                 batteryPolicyCoordinator: batteryPolicyCoordinator,
+                batteryScheduleViewModel: batteryScheduleViewModel,
                 settings: viewModel.settings,
-                appUpdateController: appUpdateController
+                appUpdateController: appUpdateController,
+                diagnosticsExporter: diagnosticsExporter
             )
         )
 
@@ -94,8 +101,8 @@ final class MenuBarController: NSObject {
 
         Publishers.CombineLatest3(
             viewModel.settings.$menuBarDisplayMode,
-            viewModel.settings.$menuBarMetricValueMode,
-            viewModel.settings.$menuBarMetricFormat
+            viewModel.settings.$menuBarMemoryFormat,
+            viewModel.settings.$menuBarStorageFormat
         )
         .receive(on: RunLoop.main)
         .sink { [weak self] _, _, _ in
@@ -113,14 +120,13 @@ final class MenuBarController: NSObject {
             statusItem.length = NSStatusItem.squareLength
             button.title = ""
             button.imagePosition = .imageOnly
-            button.image = statusIconRenderer.icon(
-                for: statusIconVariant(for: button, thermalState: viewModel.thermalState),
-                pointSize: iconPointSize(for: button)
-            )
-        case .battery, .ram, .storage:
+            button.imageScaling = .scaleProportionallyDown
+            button.image = iconOnlySymbol()
+        case .memory, .storage, .cpu, .network, .both:
             statusItem.length = NSStatusItem.variableLength
             button.imagePosition = .imageLeft
-            button.image = metricIcon(for: settings.menuBarDisplayMode, in: button)
+            button.imageScaling = .scaleProportionallyDown
+            button.image = metricPrefixIcon()
             button.font = NSFont.monospacedDigitSystemFont(
                 ofSize: NSFont.systemFontSize(for: .small),
                 weight: .semibold
@@ -128,88 +134,87 @@ final class MenuBarController: NSObject {
             button.title = MenuBarDisplayFormatter.valueText(
                 for: viewModel.snapshot,
                 mode: settings.menuBarDisplayMode,
-                valueMode: settings.menuBarMetricValueMode,
-                format: settings.menuBarMetricFormat
+                memoryFormat: settings.menuBarMemoryFormat,
+                storageFormat: settings.menuBarStorageFormat
             ) ?? ""
         }
 
+        applyBackgroundStyle(to: button, mode: settings.menuBarDisplayMode)
         button.contentTintColor = nil
     }
 
-    private func metricIcon(for mode: MenuBarDisplayMode, in button: NSStatusBarButton) -> NSImage? {
-        let symbolName: String
-        switch mode {
-        case .icon:
-            return nil
-        case .battery:
-            symbolName = batterySymbolName(for: viewModel.snapshot?.battery)
-        case .ram:
-            symbolName = "memorychip.fill"
-        case .storage:
-            symbolName = "internaldrive.fill"
-        }
-
-        guard let symbolImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+    private func metricPrefixIcon() -> NSImage? {
+        guard let symbolImage = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil) else {
             return nil
         }
 
         let configured = symbolImage.withSymbolConfiguration(
             NSImage.SymbolConfiguration(
-                pointSize: max(10, iconPointSize(for: button) - 4),
-                weight: .medium
+                pointSize: 11,
+                weight: .medium,
+                scale: .small
             )
         )
-        guard let configured else {
-            symbolImage.isTemplate = true
-            return symbolImage
-        }
-        configured.isTemplate = true
-        return configured
+        let image = configured ?? symbolImage
+        image.isTemplate = true
+        return image
     }
 
-    private func batterySymbolName(for battery: BatterySnapshot?) -> String {
-        guard let battery else {
-            return "battery.0"
+    private func iconOnlySymbol() -> NSImage? {
+        guard let symbolImage = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil) else {
+            return nil
         }
 
-        if battery.isCharging {
-            return "battery.100.bolt"
-        }
-
-        guard let percent = battery.percentage else {
-            return "battery.0"
-        }
-
-        switch percent {
-        case ..<13:
-            return "battery.0"
-        case ..<38:
-            return "battery.25"
-        case ..<63:
-            return "battery.50"
-        case ..<88:
-            return "battery.75"
-        default:
-            return "battery.100"
-        }
+        let configured = symbolImage.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(
+                pointSize: 10,
+                weight: .medium,
+                scale: .small
+            )
+        )
+        let image = configured ?? symbolImage
+        image.isTemplate = true
+        return image
     }
 
-    private func statusIconVariant(for button: NSStatusBarButton, thermalState: ThermalState) -> MenuBarIconVariant {
-        if popover.isShown {
-            return .premiumGlass(thermalState)
-        }
+    private func applyBackgroundStyle(to button: NSStatusBarButton, mode: MenuBarDisplayMode) {
+        switch mode {
+        case .icon:
+            button.wantsLayer = true
+            guard let layer = button.layer else { return }
 
-        let bestAppearance = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
-        if bestAppearance == .darkAqua {
-            return .white
-        }
-        return .black
-    }
+            let bestAppearance = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+            if bestAppearance == .darkAqua {
+                layer.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+                layer.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+            } else {
+                layer.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
+                layer.borderColor = NSColor.black.withAlphaComponent(0.10).cgColor
+            }
+            layer.borderWidth = 0.5
+            layer.cornerRadius = 6
+            layer.masksToBounds = true
+        case .memory, .storage, .cpu, .network, .both:
+            button.wantsLayer = true
+            guard let layer = button.layer else { return }
 
-    private func iconPointSize(for button: NSStatusBarButton) -> CGFloat {
-        let side = min(button.bounds.width, button.bounds.height)
-        guard side > 8 else { return 18 }
-        return max(side - 4, 14)
+            let bestAppearance = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+            let fillColor: NSColor
+            let borderColor: NSColor
+            if bestAppearance == .darkAqua {
+                fillColor = NSColor.white.withAlphaComponent(0.14)
+                borderColor = NSColor.white.withAlphaComponent(0.24)
+            } else {
+                fillColor = NSColor.black.withAlphaComponent(0.10)
+                borderColor = NSColor.black.withAlphaComponent(0.16)
+            }
+
+            layer.backgroundColor = fillColor.cgColor
+            layer.borderColor = borderColor.cgColor
+            layer.borderWidth = 0.5
+            layer.cornerRadius = 6
+            layer.masksToBounds = true
+        }
     }
 
     private func installAppearanceObserver() {

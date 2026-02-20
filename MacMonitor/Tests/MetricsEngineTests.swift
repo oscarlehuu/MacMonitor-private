@@ -107,6 +107,8 @@ final class MetricsEngineTests: XCTestCase {
             storageCollector: FakeStorageCollector(),
             batteryCollector: batteryCollector,
             thermalCollector: thermalCollector,
+            cpuCollector: FakeCPUCollector(),
+            networkCollector: FakeNetworkCollector(),
             settings: settings,
             now: { Date(timeIntervalSince1970: 1_234_567) }
         )
@@ -134,6 +136,18 @@ private struct FakeMemoryCollector: MemoryCollecting {
 private struct FakeStorageCollector: StorageCollecting {
     func collect() -> StorageSnapshot? {
         StorageSnapshot(usedBytes: 10, totalBytes: 20)
+    }
+}
+
+private struct FakeCPUCollector: CPUCollecting {
+    func collect() -> CPUSnapshot {
+        CPUSnapshot(usagePercent: 22)
+    }
+}
+
+private struct FakeNetworkCollector: NetworkCollecting {
+    func collect() -> NetworkSnapshot {
+        NetworkSnapshot(downloadBytesPerSecond: 120_000, uploadBytesPerSecond: 80_000)
     }
 }
 

@@ -15,10 +15,10 @@ enum AppTheme: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .lime: return "Lime"
+        case .lime: return "Dark"
         case .midnight: return "Midnight"
         case .cyber: return "Cyberpunk"
-        case .daylight: return "Daylight"
+        case .daylight: return "Light"
         case .arctic: return "Arctic"
         case .sand: return "Sand"
         }
@@ -56,56 +56,113 @@ enum RefreshInterval: Int, CaseIterable, Codable, Identifiable {
 }
 
 enum MenuBarDisplayMode: String, CaseIterable, Codable, Identifiable {
-    case icon
-    case battery
-    case ram
+    case memory
     case storage
+    case cpu
+    case network
+    case both
+    case icon
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .icon:
-            return "Icon"
-        case .battery:
-            return "Battery"
-        case .ram:
-            return "RAM"
+        case .memory:
+            return "Memory"
         case .storage:
             return "Storage"
+        case .cpu:
+            return "CPU"
+        case .network:
+            return "Network"
+        case .both:
+            return "Both"
+        case .icon:
+            return "Icon Only"
         }
     }
 }
 
-enum MenuBarMetricValueMode: String, CaseIterable, Codable, Identifiable {
-    case used
-    case free
+enum MenuBarMetricDisplayFormat: String, CaseIterable, Codable, Identifiable {
+    case percentUsage
+    case numberUsage
+    case numberLeft
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .used:
-            return "Used"
-        case .free:
-            return "Free"
+        case .percentUsage:
+            return "% Usage"
+        case .numberUsage:
+            return "Number (Usage)"
+        case .numberLeft:
+            return "Number (Left)"
         }
     }
 }
 
-enum MenuBarMetricFormat: String, CaseIterable, Codable, Identifiable {
-    case percent
-    case number
+struct SystemAlertSettings: Codable, Equatable {
+    var thermalAlertEnabled: Bool
+    var thermalThreshold: ThermalState
+    var storageAlertEnabled: Bool
+    var storageUsagePercentThreshold: Int
+    var batteryHealthDropAlertEnabled: Bool
+    var batteryHealthDropPercentThreshold: Int
+    var cooldownMinutes: Int
 
-    var id: String { rawValue }
+    static let `default` = SystemAlertSettings(
+        thermalAlertEnabled: true,
+        thermalThreshold: .serious,
+        storageAlertEnabled: true,
+        storageUsagePercentThreshold: 90,
+        batteryHealthDropAlertEnabled: true,
+        batteryHealthDropPercentThreshold: 15,
+        cooldownMinutes: 45
+    )
 
-    var title: String {
-        switch self {
-        case .percent:
-            return "Percent"
-        case .number:
-            return "Number"
+    func normalized() -> SystemAlertSettings {
+        let normalizedThreshold: ThermalState
+        switch thermalThreshold {
+        case .nominal, .fair, .serious, .critical:
+            normalizedThreshold = thermalThreshold
+        case .unknown:
+            normalizedThreshold = .serious
         }
+
+        return SystemAlertSettings(
+            thermalAlertEnabled: thermalAlertEnabled,
+            thermalThreshold: normalizedThreshold,
+            storageAlertEnabled: storageAlertEnabled,
+            storageUsagePercentThreshold: min(max(storageUsagePercentThreshold, 60), 99),
+            batteryHealthDropAlertEnabled: batteryHealthDropAlertEnabled,
+            batteryHealthDropPercentThreshold: min(max(batteryHealthDropPercentThreshold, 5), 40),
+            cooldownMinutes: min(max(cooldownMinutes, 5), 360)
+        )
+    }
+}
+
+struct BatteryAdvancedControlFeatureFlags: Codable, Equatable {
+    var sleepAwareStopChargingEnabled: Bool
+    var blockSleepUntilLimitEnabled: Bool
+    var calibrationWorkflowEnabled: Bool
+    var hardwarePercentageRefinementEnabled: Bool
+    var magsafeLEDControlEnabled: Bool
+
+    static let `default` = BatteryAdvancedControlFeatureFlags(
+        sleepAwareStopChargingEnabled: false,
+        blockSleepUntilLimitEnabled: false,
+        calibrationWorkflowEnabled: false,
+        hardwarePercentageRefinementEnabled: false,
+        magsafeLEDControlEnabled: false
+    )
+
+    var anyEnabled: Bool {
+        sleepAwareStopChargingEnabled
+            || blockSleepUntilLimitEnabled
+            || calibrationWorkflowEnabled
+            || hardwarePercentageRefinementEnabled
+            || magsafeLEDControlEnabled
     }
 }
 
@@ -138,17 +195,17 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published var menuBarMetricValueMode: MenuBarMetricValueMode {
+    @Published var menuBarMemoryFormat: MenuBarMetricDisplayFormat {
         didSet {
             guard !isHydrating else { return }
-            defaults.set(menuBarMetricValueMode.rawValue, forKey: Keys.menuBarMetricValueMode)
+            defaults.set(menuBarMemoryFormat.rawValue, forKey: Keys.menuBarMemoryFormat)
         }
     }
 
-    @Published var menuBarMetricFormat: MenuBarMetricFormat {
+    @Published var menuBarStorageFormat: MenuBarMetricDisplayFormat {
         didSet {
             guard !isHydrating else { return }
-            defaults.set(menuBarMetricFormat.rawValue, forKey: Keys.menuBarMetricFormat)
+            defaults.set(menuBarStorageFormat.rawValue, forKey: Keys.menuBarStorageFormat)
         }
     }
 
@@ -161,6 +218,25 @@ final class SettingsStore: ObservableObject {
                 return
             }
             persistBatteryPolicyConfiguration(normalized)
+        }
+    }
+
+    @Published var systemAlertSettings: SystemAlertSettings {
+        didSet {
+            guard !isHydrating else { return }
+            let normalized = systemAlertSettings.normalized()
+            if normalized != systemAlertSettings {
+                systemAlertSettings = normalized
+                return
+            }
+            persistSystemAlertSettings(normalized)
+        }
+    }
+
+    @Published var batteryAdvancedControlFeatureFlags: BatteryAdvancedControlFeatureFlags {
+        didSet {
+            guard !isHydrating else { return }
+            persistBatteryAdvancedControlFeatureFlags(batteryAdvancedControlFeatureFlags)
         }
     }
 
@@ -183,9 +259,16 @@ final class SettingsStore: ObservableObject {
         static let appTheme = "settings.appTheme"
         static let refreshInterval = "settings.refreshIntervalMinutes"
         static let menuBarDisplayMode = "settings.menuBarDisplayMode"
-        static let menuBarMetricValueMode = "settings.menuBarMetricValueMode"
-        static let menuBarMetricFormat = "settings.menuBarMetricFormat"
+        static let menuBarMemoryFormat = "settings.menuBarMemoryFormat"
+        static let menuBarStorageFormat = "settings.menuBarStorageFormat"
+
+        // Legacy keys kept for migration.
+        static let legacyMenuBarDisplayMode = "settings.menuBarDisplayMode"
+        static let legacyMenuBarMetricValueMode = "settings.menuBarMetricValueMode"
+        static let legacyMenuBarMetricFormat = "settings.menuBarMetricFormat"
         static let batteryPolicyConfiguration = "settings.batteryPolicyConfiguration"
+        static let systemAlertSettings = "settings.systemAlertSettings"
+        static let batteryAdvancedControlFeatureFlags = "settings.batteryAdvancedControlFeatureFlags"
         static let launchAtLogin = "settings.launchAtLogin"
     }
 
@@ -203,17 +286,21 @@ final class SettingsStore: ObservableObject {
         let persistedInterval = defaults.integer(forKey: Keys.refreshInterval)
         self.refreshInterval = RefreshInterval(rawValue: persistedInterval) ?? .threeMinutes
 
-        self.menuBarDisplayMode = MenuBarDisplayMode(
-            rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? ""
-        ) ?? .icon
-        self.menuBarMetricValueMode = MenuBarMetricValueMode(
-            rawValue: defaults.string(forKey: Keys.menuBarMetricValueMode) ?? ""
-        ) ?? .used
-        self.menuBarMetricFormat = MenuBarMetricFormat(
-            rawValue: defaults.string(forKey: Keys.menuBarMetricFormat) ?? ""
-        ) ?? .percent
+        self.menuBarDisplayMode = Self.loadMenuBarDisplayMode(defaults: defaults)
+        self.menuBarMemoryFormat = Self.loadMenuBarMetricFormat(
+            defaults: defaults,
+            key: Keys.menuBarMemoryFormat,
+            defaultFormat: .percentUsage
+        )
+        self.menuBarStorageFormat = Self.loadMenuBarMetricFormat(
+            defaults: defaults,
+            key: Keys.menuBarStorageFormat,
+            defaultFormat: .numberLeft
+        )
 
         self.batteryPolicyConfiguration = Self.loadBatteryPolicyConfiguration(defaults: defaults)
+        self.systemAlertSettings = Self.loadSystemAlertSettings(defaults: defaults)
+        self.batteryAdvancedControlFeatureFlags = Self.loadBatteryAdvancedControlFeatureFlags(defaults: defaults)
 
         if defaults.object(forKey: Keys.launchAtLogin) == nil {
             self.launchAtLoginEnabled = launchAtLoginManager.isEnabled()
@@ -235,11 +322,91 @@ final class SettingsStore: ObservableObject {
         return decoded.normalized()
     }
 
+    private static func loadSystemAlertSettings(defaults: UserDefaults) -> SystemAlertSettings {
+        guard let data = defaults.data(forKey: Keys.systemAlertSettings),
+              let decoded = try? JSONDecoder().decode(SystemAlertSettings.self, from: data) else {
+            return .default
+        }
+        return decoded.normalized()
+    }
+
+    private static func loadBatteryAdvancedControlFeatureFlags(defaults: UserDefaults) -> BatteryAdvancedControlFeatureFlags {
+        guard let data = defaults.data(forKey: Keys.batteryAdvancedControlFeatureFlags),
+              let decoded = try? JSONDecoder().decode(BatteryAdvancedControlFeatureFlags.self, from: data) else {
+            return .default
+        }
+        return decoded
+    }
+
+    private static func loadMenuBarDisplayMode(defaults: UserDefaults) -> MenuBarDisplayMode {
+        if let persisted = defaults.string(forKey: Keys.menuBarDisplayMode),
+           let mode = MenuBarDisplayMode(rawValue: persisted) {
+            return mode
+        }
+
+        if let legacyMode = defaults.string(forKey: Keys.legacyMenuBarDisplayMode) {
+            switch legacyMode {
+            case "ram":
+                return .memory
+            case "storage":
+                return .storage
+            case "icon":
+                return .icon
+            case "battery":
+                return .memory
+            case "both":
+                return .both
+            default:
+                break
+            }
+        }
+
+        return .memory
+    }
+
+    private static func loadMenuBarMetricFormat(
+        defaults: UserDefaults,
+        key: String,
+        defaultFormat: MenuBarMetricDisplayFormat
+    ) -> MenuBarMetricDisplayFormat {
+        if let persisted = defaults.string(forKey: key),
+           let format = MenuBarMetricDisplayFormat(rawValue: persisted) {
+            return format
+        }
+
+        let legacyValueMode = defaults.string(forKey: Keys.legacyMenuBarMetricValueMode)
+        let legacyFormat = defaults.string(forKey: Keys.legacyMenuBarMetricFormat)
+        switch (legacyValueMode, legacyFormat) {
+        case ("free", "number"):
+            return .numberLeft
+        case ("used", "number"):
+            return .numberUsage
+        case (_, "percent"):
+            return .percentUsage
+        default:
+            return defaultFormat
+        }
+    }
+
     private func persistBatteryPolicyConfiguration(_ configuration: BatteryPolicyConfiguration) {
         guard let data = try? JSONEncoder().encode(configuration) else {
             return
         }
         defaults.set(data, forKey: Keys.batteryPolicyConfiguration)
+    }
+
+    private func persistSystemAlertSettings(_ configuration: SystemAlertSettings) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+        defaults.set(data, forKey: Keys.systemAlertSettings)
+    }
+
+    private func persistBatteryAdvancedControlFeatureFlags(_ configuration: BatteryAdvancedControlFeatureFlags) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+        defaults.set(data, forKey: Keys.batteryAdvancedControlFeatureFlags)
     }
 
     private func applyLaunchAtLoginToggle() {

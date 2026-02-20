@@ -1,153 +1,202 @@
 import SwiftUI
 
+private enum MainPopoverTab: CaseIterable, Hashable {
+    case memory
+    case storageApps
+    case trends
+    case settings
+
+    var title: String {
+        switch self {
+        case .memory:
+            return "Memory"
+        case .storageApps:
+            return "Storage & Apps"
+        case .trends:
+            return "Trends"
+        case .settings:
+            return "Settings"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .memory:
+            return "cpu"
+        case .storageApps:
+            return "internaldrive"
+        case .trends:
+            return "chart.line.uptrend.xyaxis"
+        case .settings:
+            return "gearshape"
+        }
+    }
+}
+
+private struct MemoryUsageSegment: Identifiable {
+    let id: String
+    let title: String
+    let bytes: UInt64
+    let ratio: Double
+    let color: Color
+}
+
+private struct StorageUsageSegment: Identifiable {
+    let id: String
+    let title: String
+    let bytes: UInt64
+    let ratio: Double
+    let color: Color
+}
+
 struct PopoverRootView: View {
     @ObservedObject var viewModel: SystemSummaryViewModel
     @ObservedObject var ramDetailsViewModel: RAMDetailsViewModel
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
     @ObservedObject var storageManagementViewModel: StorageManagementViewModel
     @ObservedObject var batteryPolicyCoordinator: BatteryPolicyCoordinator
+    @ObservedObject var batteryScheduleViewModel: BatteryScheduleViewModel
     @ObservedObject var settings: SettingsStore
     @ObservedObject var appUpdateController: AppUpdateController
+    let diagnosticsExporter: DiagnosticsExporter
 
-    @State private var simulatedThermalState: ThermalState?
+    @State private var hasNormalizedLegacyScreen = false
+    @State private var diagnosticsStatusMessage: String?
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            content
-        }
-        .frame(width: 480, height: 560)
-        .background(PopoverTheme.bgDeep)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.5), radius: 30, y: 16)
-        .preferredColorScheme(settings.appTheme.isDark ? .dark : .light)
-        .id(settings.appTheme)
-        .onChange(of: viewModel.screen) { _, screen in
-            if screen != .temperature {
-                simulatedThermalState = nil
-            }
-        }
-    }
-
-    private var sidebar: some View {
-        VStack(spacing: 2) {
-            navButton(
-                symbol: "battery.100",
-                helpText: "Battery",
-                isActive: viewModel.screen == .battery,
-                action: viewModel.showBattery
-            )
-
-            navButton(
-                symbol: "memorychip",
-                helpText: "RAM",
-                isActive: viewModel.screen == .ram,
-                action: viewModel.showRAM
-            )
-
-            navButton(
-                symbol: "internaldrive",
-                helpText: "Storage",
-                isActive: viewModel.screen == .storage || viewModel.screen == .storageManagement,
-                action: viewModel.showStorage
-            )
-
-            Spacer(minLength: 0)
-
-            navButton(
-                symbol: "gearshape",
-                helpText: "Settings",
-                isActive: viewModel.screen == .settings || viewModel.screen == .ramPolicyManager,
-                action: viewModel.showSettings
-            )
-        }
-        .padding(.vertical, 10)
-        .frame(width: 48)
-        .background(PopoverTheme.bgPanel)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(PopoverTheme.borderSubtle)
-                .frame(width: 1)
-        }
-    }
-
-    private func navButton(symbol: String, helpText: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(isActive ? PopoverTheme.accent : PopoverTheme.textMuted)
-                .frame(width: 32, height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isActive ? PopoverTheme.accentDim : Color.white.opacity(0.001))
-                )
-        }
-        .frame(width: 40, height: 40)
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .buttonStyle(.plain)
-        .help(helpText)
-    }
-
-    private var content: some View {
         VStack(spacing: 0) {
             header
-
-            ScrollView(showsIndicators: true) {
-                Group {
-                    switch viewModel.screen {
-                    case .temperature:
-                        temperatureScreen
-                    case .battery:
-                        batteryScreen
-                    case .ram:
-                        ramScreen
-                    case .storage:
-                        storageScreen
-                    case .storageManagement:
-                        storageManagementScreen
-                    case .settings:
-                        settingsScreen
-                    case .ramPolicyManager:
-                        policiesScreen
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-            }
-
+            content
             footer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(width: 440, height: 620)
+        .background(popoverBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.45), radius: 28, y: 14)
+        .preferredColorScheme(settings.appTheme.isDark ? .dark : .light)
+        .id(settings.appTheme)
+        .onAppear {
+            normalizeLegacyScreenIfNeeded()
+            ramDetailsViewModel.setMode(.processes)
+            ramDetailsViewModel.start()
+            storageManagementViewModel.loadIfNeeded()
+        }
+        .onDisappear {
+            ramDetailsViewModel.stop()
+        }
+        .alert("Terminate selected processes?", isPresented: $ramDetailsViewModel.showingTerminateConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Terminate", role: .destructive) {
+                Task { await ramDetailsViewModel.terminateSelected() }
+            }
+        } message: {
+            Text("MacMonitor proceeds with allowed processes only. Protected processes are skipped.")
+        }
+        .confirmationDialog(
+            "Move selected items to Trash?",
+            isPresented: $storageManagementViewModel.showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                Task { await storageManagementViewModel.deleteSelected() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Selected: \(storageManagementViewModel.selectedAllowedCount) • " +
+                    MetricFormatter.bytes(storageManagementViewModel.selectedAllowedBytes)
+            )
+        }
+        .confirmationDialog(
+            "Force quit still-running apps?",
+            isPresented: $storageManagementViewModel.showingForceQuitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Force Quit and Move to Trash", role: .destructive) {
+                Task { await storageManagementViewModel.confirmForceQuitAndDelete() }
+            }
+            Button("Skip Running Apps") {
+                Task { await storageManagementViewModel.skipForceQuitAndDelete() }
+            }
+            Button("Cancel Cleanup", role: .cancel) {
+                storageManagementViewModel.cancelForceQuitPrompt()
+            }
+        } message: {
+            Text(storageManagementViewModel.forceQuitPromptMessage)
+        }
+    }
+
+    private var popoverBackground: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+
+            LinearGradient(
+                colors: settings.appTheme.isDark
+                    ? [Color.black.opacity(0.52), Color.black.opacity(0.34)]
+                    : [Color.white.opacity(0.72), Color.white.opacity(0.54)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            LinearGradient(
+                colors: settings.appTheme.isDark
+                    ? [Color.white.opacity(0.05), Color.clear, Color(hex: 0x5E5CE6, opacity: 0.12)]
+                    : [Color.white.opacity(0.38), Color.clear, Color(hex: 0x5E5CE6, opacity: 0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(screenTitle)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(PopoverTheme.textPrimary)
+        VStack(spacing: 16) {
+            HStack(spacing: 10) {
+                Label {
+                    Text("MacMonitor")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+                } icon: {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.accent)
+                }
+                .labelStyle(.titleAndIcon)
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            if viewModel.isStale {
-                Text("Stale")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(PopoverTheme.orange)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(PopoverTheme.orangeDim)
-                    )
+                thermalStatusBadge
+
+                Button {
+                    toggleTheme()
+                } label: {
+                    Image(systemName: settings.appTheme.isDark ? "sun.max" : "moon")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .frame(width: 26, height: 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(PopoverTheme.bgCard.opacity(0.6))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Toggle Light/Dark Theme")
+            }
+
+            HStack(spacing: 6) {
+                ForEach(MainPopoverTab.allCases, id: \.self) { tab in
+                    mainTabButton(tab)
+                }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .background(PopoverTheme.bgPanel.opacity(0.72))
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(PopoverTheme.borderSubtle)
@@ -155,391 +204,1076 @@ struct PopoverRootView: View {
         }
     }
 
-    private var temperatureScreen: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            thermalCard
+    private var thermalStatusBadge: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(thermalColor(for: viewModel.thermalState))
+                .frame(width: 8, height: 8)
+                .shadow(color: thermalColor(for: viewModel.thermalState).opacity(0.6), radius: 6)
 
-            sectionSeparator
+            Text(viewModel.thermalState.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(PopoverTheme.textSecondary)
 
-            if let snapshot = viewModel.snapshot {
-                metricProgressCard(
-                    title: "RAM",
-                    usageText: MetricFormatter.usage(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
-                    percentText: MetricFormatter.percent(used: snapshot.memory.usedBytes, total: snapshot.memory.totalBytes),
-                    ratio: snapshot.memory.usageRatio,
-                    color: PopoverTheme.blue,
-                    action: viewModel.showRAM
-                )
-
-                sectionSeparator
-
-                metricProgressCard(
-                    title: "Storage",
-                    usageText: MetricFormatter.usage(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
-                    percentText: MetricFormatter.percent(used: snapshot.storage.usedBytes, total: snapshot.storage.totalBytes),
-                    ratio: snapshot.storage.usageRatio,
-                    color: PopoverTheme.mint,
-                    action: viewModel.showStorage
-                )
-            } else {
-                collectingCard(text: "Collecting RAM and storage metrics...")
+            if viewModel.isStale {
+                Text("Stale")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(PopoverTheme.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(PopoverTheme.orangeDim)
+                    )
             }
-
-            sectionSeparator
-
-            simulationCard
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(PopoverTheme.bgCard.opacity(0.65))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
     }
 
-    private var sectionSeparator: some View {
-        Rectangle()
-            .fill(PopoverTheme.borderSubtle)
-            .frame(height: 1)
-            .padding(.vertical, 2)
-    }
+    private func mainTabButton(_ tab: MainPopoverTab) -> some View {
+        let isActive = activeTab == tab
 
-    private var thermalCard: some View {
-        let state = displayedThermalState
-
-        return Button(action: viewModel.showTemperature) {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(thermalIndicatorFill(for: state))
-                    .frame(width: 36, height: 36)
-                    .overlay {
-                        Image(systemName: thermalSymbol(for: state))
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(thermalColor(for: state))
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(state.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(thermalColor(for: state))
-
-                        if let lastUpdated = viewModel.snapshot?.timestamp {
-                            Text(MetricFormatter.relativeTime(from: lastUpdated))
-                                .font(.system(size: 10))
-                                .foregroundStyle(PopoverTheme.textMuted)
-                        }
-                    }
-
-                    Text(thermalDescription(for: state))
-                        .font(.system(size: 11))
-                        .foregroundStyle(PopoverTheme.textSecondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
+        return Button {
+            switchToTab(tab)
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 16, weight: .medium))
+                Text(tab.title)
+                    .font(.system(size: 11, weight: .medium))
             }
-            .padding(12)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .foregroundStyle(isActive ? PopoverTheme.textPrimary : PopoverTheme.textMuted)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isActive ? PopoverTheme.bgCard : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isActive ? PopoverTheme.borderMedium : Color.clear, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 
-    private func metricProgressCard(
-        title: String,
-        usageText: String,
-        percentText: String,
-        ratio: Double,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
+    private var content: some View {
+        ScrollView(showsIndicators: true) {
+            Group {
+                switch viewModel.screen {
+                case .storageManagement:
+                    storageManagementScreen
+                case .ramPolicyManager:
+                    policiesScreen
+                case .storage:
+                    storageOverviewScreen
+                case .trends:
+                    trendsOverviewScreen
+                case .settings:
+                    settingsOverviewScreen
+                case .temperature, .battery, .ram:
+                    memoryOverviewScreen
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+    }
+
+    private var memoryOverviewScreen: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            memorySummaryCard
+            memoryProcessesCard
+        }
+        .onAppear {
+            if viewModel.screen != .ram {
+                viewModel.showRAM()
+            }
+            ramDetailsViewModel.setMode(.processes)
+            ramDetailsViewModel.start()
+            ramDetailsViewModel.refresh()
+        }
+    }
+
+    @ViewBuilder
+    private var memorySummaryCard: some View {
+        if let memory = viewModel.snapshot?.memory {
+            let segments = memorySegments(for: memory)
+
+            panelCard {
+                Text("Physical Memory")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .tracking(0.5)
+
                 HStack {
-                    Text(title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PopoverTheme.textPrimary)
+                    Text("\(MetricFormatter.bytes(memory.totalBytes)) Total")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(PopoverTheme.textSecondary)
 
                     Spacer(minLength: 8)
 
-                    Text(percentText)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(color)
+                    Text("\(MetricFormatter.bytes(memory.usedBytes)) Used")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(PopoverTheme.textPrimary)
                 }
 
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(PopoverTheme.borderMedium)
+                usageTrack(segments: segments)
+                    .frame(height: 10)
 
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(color)
-                            .frame(width: geometry.size.width * min(max(ratio, 0), 1))
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 10),
+                        GridItem(.flexible(), spacing: 10)
+                    ],
+                    spacing: 10
+                ) {
+                    ForEach(segments) { segment in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(segment.color)
+                                    .frame(width: 7, height: 7)
+
+                                Text(segment.title)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(PopoverTheme.textMuted)
+                                    .lineLimit(1)
+                            }
+
+                            Text(MetricFormatter.bytes(segment.bytes))
+                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(PopoverTheme.textPrimary)
+                        }
                     }
                 }
-                .frame(height: 6)
-
-                Text(usageText)
-                    .font(.system(size: 10, design: .monospaced))
+            }
+        } else {
+            panelCard {
+                Text("Collecting memory metrics...")
+                    .font(.system(size: 12))
                     .foregroundStyle(PopoverTheme.textMuted)
             }
-            .padding(12)
         }
-        .buttonStyle(.plain)
     }
 
-    private var simulationCard: some View {
-        HStack(spacing: 4) {
-            Text("Simulate")
-                .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textMuted)
+    private var memoryProcessesCard: some View {
+        panelCard {
+            HStack {
+                Text("Top Memory Processes")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .tracking(0.5)
 
-            ForEach(simulatedStates, id: \.self) { state in
+                Spacer(minLength: 6)
+
                 Button {
-                    simulatedThermalState = state
+                    ramDetailsViewModel.refresh()
                 } label: {
-                    Text(state.title)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(displayedThermalState == state ? PopoverTheme.accent : PopoverTheme.textSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh process list")
+                .disabled(ramDetailsViewModel.isLoading)
+            }
+
+            HStack {
+                Text("Process Name")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                Spacer(minLength: 8)
+                Text("Memory")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+            .padding(.bottom, 4)
+
+            let rows = Array(ramDetailsViewModel.processes.prefix(10))
+
+            if rows.isEmpty {
+                HStack(spacing: 8) {
+                    if ramDetailsViewModel.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    Text(ramDetailsViewModel.isLoading ? "Loading processes..." : "No process data available yet.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(rows) { process in
+                        processRow(process)
+                    }
+                }
+            }
+
+            if let resultMessage = ramDetailsViewModel.resultMessage {
+                Text(resultMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.green)
+                    .lineLimit(2)
+            }
+
+            if let errorMessage = ramDetailsViewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.red)
+                    .lineLimit(2)
+            }
+
+            Button {
+                ramDetailsViewModel.requestTerminateSelected()
+            } label: {
+                Label(terminateButtonTitle, systemImage: "xmark.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(ramDetailsViewModel.canTerminateSelection ? PopoverTheme.red : PopoverTheme.textMuted)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(ramDetailsViewModel.canTerminateSelection ? PopoverTheme.redDim : PopoverTheme.bgElevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        ramDetailsViewModel.canTerminateSelection ? PopoverTheme.red.opacity(0.25) : PopoverTheme.borderSubtle,
+                        lineWidth: 1
+                    )
+            )
+            .disabled(!ramDetailsViewModel.canTerminateSelection)
+            .help(ramDetailsViewModel.terminationInfoTooltip)
+        }
+    }
+
+    private func processRow(_ process: ProcessMemoryItem) -> some View {
+        let isSelected = ramDetailsViewModel.selectedProcessIDs.contains(process.pid)
+
+        return Button {
+            ramDetailsViewModel.toggleSelection(for: process.pid)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: checkboxSymbol(for: process, isSelected: isSelected))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(checkboxColor(for: process, isSelected: isSelected))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(process.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(process.isProtected ? PopoverTheme.textMuted : PopoverTheme.textPrimary)
+                        .lineLimit(1)
+
+                    Text(process.isProtected ? "Protected" : process.metricLabel)
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(MetricFormatter.bytes(process.rankingBytes))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(PopoverTheme.bgElevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(process.isProtected || ramDetailsViewModel.isTerminating)
+        .opacity(process.isProtected ? 0.65 : 1.0)
+    }
+
+    private var storageOverviewScreen: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            storageSummaryCard
+            storageAutomationCard
+            storageAppsCard
+
+            if let resultMessage = storageManagementViewModel.resultMessage, !resultMessage.isEmpty {
+                infoBanner(text: resultMessage, tint: PopoverTheme.green, background: PopoverTheme.greenDim)
+            }
+
+            if let errorMessage = storageManagementViewModel.errorMessage, !errorMessage.isEmpty {
+                infoBanner(text: errorMessage, tint: PopoverTheme.red, background: PopoverTheme.redDim)
+            }
+        }
+        .onAppear {
+            if viewModel.screen != .storage {
+                viewModel.showStorage()
+            }
+            storageManagementViewModel.loadIfNeeded()
+        }
+    }
+
+    private var storageSummaryCard: some View {
+        let segments = storageSegments()
+
+        return panelCard {
+            Label {
+                Text("Macintosh HD")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .tracking(0.5)
+            } icon: {
+                Image(systemName: "internaldrive")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+
+            HStack {
+                Text("\(MetricFormatter.bytes(storageManagementViewModel.currentTotalBytes)) Total")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+
+                Spacer(minLength: 8)
+
+                Text("\(MetricFormatter.bytes(storageManagementViewModel.currentUsedBytes)) Used")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+            }
+
+            usageTrack(segments: segments)
+                .frame(height: 12)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 8
+            ) {
+                ForEach(segments) { segment in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(segment.color)
+                                .frame(width: 7, height: 7)
+                            Text(segment.title)
+                                .font(.system(size: 10))
+                                .foregroundStyle(PopoverTheme.textMuted)
+                                .lineLimit(1)
+                        }
+
+                        Text(MetricFormatter.bytes(segment.bytes))
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(PopoverTheme.textPrimary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+
+    private var storageAutomationCard: some View {
+        panelCard {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Cleanup Selection")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+
+                    Text(
+                        storageManagementViewModel.selectedAllowedBytes > 0
+                            ? "Ready to remove \(MetricFormatter.bytes(storageManagementViewModel.selectedAllowedBytes))."
+                            : "Scan and select app data you want to move to Trash."
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    viewModel.showStorageManagement()
+                } label: {
+                    Text("Open")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
                         .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(displayedThermalState == state ? PopoverTheme.accentDim : Color.white.opacity(0.001))
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(PopoverTheme.bgElevated)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var ramScreen: some View {
-        RAMDetailsView(
-            viewModel: ramDetailsViewModel,
-            memorySnapshot: viewModel.snapshot?.memory,
-            onBack: {},
-            showsBackButton: false
-        )
-    }
-
-    private var batteryScreen: some View {
-        BatteryScreenView(
-            battery: viewModel.snapshot?.battery,
-            settings: settings,
-            coordinator: batteryPolicyCoordinator
-        )
-    }
-
-    private func batterySummaryCard(_ battery: BatterySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var storageAppsCard: some View {
+        panelCard {
             HStack {
-                Text("Battery")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textPrimary)
+                Label {
+                    Text("Installed Applications")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .tracking(0.5)
+                } icon: {
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
 
                 Spacer(minLength: 8)
 
-                Text((battery.percentage.map { "\($0)%" }) ?? "--")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.green)
+                Button {
+                    storageManagementViewModel.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .disabled(storageManagementViewModel.isScanning)
+                .help("Refresh storage scan")
             }
 
-            if let percent = battery.percentage {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(PopoverTheme.borderMedium)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
 
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(PopoverTheme.green)
-                            .frame(width: geometry.size.width * min(max(Double(percent) / 100.0, 0), 1))
+                TextField("Search applications...", text: $storageManagementViewModel.searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(PopoverTheme.bgElevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+            )
+
+            HStack {
+                Text("Application")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+
+                Spacer(minLength: 8)
+
+                Text("Size")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+
+                Spacer().frame(width: 52)
+            }
+            .padding(.horizontal, 2)
+
+            let groups = Array(storageManagementViewModel.visibleAppGroups.prefix(8))
+
+            if groups.isEmpty {
+                HStack(spacing: 8) {
+                    if storageManagementViewModel.isScanning {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    Text(storageManagementViewModel.isScanning ? "Scanning applications..." : "No apps found for this query.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(groups) { group in
+                        storageAppRow(group)
                     }
                 }
-                .frame(height: 6)
             }
 
-            Text("\(battery.chargeState.title) • \(battery.powerSource.title)")
-                .font(.system(size: 11))
-                .foregroundStyle(PopoverTheme.textSecondary)
-
-            HStack(spacing: 6) {
-                batteryChip(
-                    title: battery.lowPowerModeEnabled ? "Low Power On" : "Low Power Off",
-                    tint: battery.lowPowerModeEnabled ? PopoverTheme.yellow : PopoverTheme.textMuted
+            HStack(spacing: 8) {
+                Button {
+                    storageManagementViewModel.requestDeleteSelection()
+                } label: {
+                    Text(storageDeleteButtonTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(storageManagementViewModel.canDeleteSelection ? PopoverTheme.red : PopoverTheme.textMuted)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(storageManagementViewModel.canDeleteSelection ? PopoverTheme.redDim : PopoverTheme.bgElevated)
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(
+                            storageManagementViewModel.canDeleteSelection ? PopoverTheme.red.opacity(0.24) : PopoverTheme.borderSubtle,
+                            lineWidth: 1
+                        )
+                )
+                .disabled(!storageManagementViewModel.canDeleteSelection)
 
-                if let cycleCount = battery.cycleCount {
-                    batteryChip(
-                        title: "Cycles \(cycleCount)",
-                        tint: PopoverTheme.textSecondary
-                    )
+                Button {
+                    viewModel.showStorageManagement()
+                } label: {
+                    Text("Manage")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
                 }
-            }
-
-            if let temperature = battery.temperatureCelsius {
-                Text("Temp \(temperature)\u{00B0}C")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
-            }
-
-            if let health = battery.health, !health.isEmpty {
-                Text("Health: \(health)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
-            }
-
-            if let healthCondition = battery.healthCondition, !healthCondition.isEmpty {
-                Text("Condition: \(healthCondition)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(PopoverTheme.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-        )
-    }
-
-    private func batteryChip(title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(tint.opacity(0.10))
-            )
-    }
-
-    private var storageScreen: some View {
-        Group {
-            if let snapshot = viewModel.snapshot {
-                VStack(alignment: .leading, spacing: 0) {
-                    storageSummaryCard(snapshot.storage)
-
-                    sectionSeparator
-
-                    storageManageCard
-                }
-            } else {
-                collectingCard(text: "Collecting storage metrics...")
+                .buttonStyle(.plain)
+                .foregroundStyle(PopoverTheme.textPrimary)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(PopoverTheme.bgElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                )
             }
         }
     }
 
-    private var storageManageCard: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Storage Manager")
-                    .font(.system(size: 12, weight: .semibold))
+    private func storageAppRow(_ group: StorageAppGroup) -> some View {
+        let selectionState = storageManagementViewModel.groupSelectionState(group)
+
+        return HStack(spacing: 10) {
+            Button {
+                storageManagementViewModel.toggleGroupSelection(group.id)
+            } label: {
+                Image(systemName: selectionStateSymbol(selectionState))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(selectionStateColor(selectionState))
+                    .frame(width: 18)
+            }
+            .buttonStyle(.plain)
+
+            Image(systemName: "app.fill")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(PopoverTheme.blue)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.displayName)
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(PopoverTheme.textPrimary)
+                    .lineLimit(1)
 
-                Text("Scan apps, cache folders, and custom folders. Move selected items to Trash.")
+                Text(group.bundleIdentifier ?? "\(group.items.count) cleanup targets")
                     .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textSecondary)
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
 
+            Text(MetricFormatter.bytes(group.totalBytes))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(PopoverTheme.textSecondary)
+                .frame(minWidth: 72, alignment: .trailing)
+
             Button {
-                viewModel.showStorageManagement()
+                quickDelete(group)
             } label: {
-                Text("Manage")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.accentContrastText)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.red)
+                    .frame(width: 28, height: 28)
                     .background(
-                        Capsule(style: .continuous)
-                            .fill(PopoverTheme.accent)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(PopoverTheme.redDim)
                     )
             }
             .buttonStyle(.plain)
         }
-        .padding(12)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(PopoverTheme.bgCard)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgElevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
     }
 
-    private func storageSummaryCard(_ storage: StorageSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Storage")
+    private var settingsOverviewScreen: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            settingsMenuBarCard
+            settingsAlertsCard
+            settingsAdvancedBatteryCard
+            settingsGeneralCard
+            settingsDiagnosticsCard
+            settingsAboutCard
+
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Label("Quit MacMonitor", systemImage: "power")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(settingsTextMain)
+            .background(settingsInputBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(settingsCardBorder, lineWidth: 1)
+            )
+        }
+        .onAppear {
+            if viewModel.screen != .settings {
+                viewModel.showSettings()
+            }
+            ramPolicyViewModel.refresh()
+        }
+    }
 
-                Spacer(minLength: 8)
+    private var settingsMenuBarCard: some View {
+        settingsCard {
+            settingsSectionHeader("Menu Bar Display Status", symbol: "rectangle.topthird.inset.filled")
 
-                Text(MetricFormatter.percent(used: storage.usedBytes, total: storage.totalBytes))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.mint)
+            settingsPickerRow(
+                title: "Display Metric",
+                selection: $settings.menuBarDisplayMode,
+                options: MenuBarDisplayMode.allCases
+            ) { option in
+                option.title
             }
 
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(PopoverTheme.borderMedium)
+            settingsDivider
 
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(PopoverTheme.mint)
-                        .frame(width: geometry.size.width * min(max(storage.usageRatio, 0), 1))
-                }
+            settingsPickerRow(
+                title: "Memory Format",
+                selection: $settings.menuBarMemoryFormat,
+                options: MenuBarMetricDisplayFormat.allCases
+            ) { option in
+                option.title
             }
-            .frame(height: 6)
 
-            HStack {
-                Text(MetricFormatter.usage(used: storage.usedBytes, total: storage.totalBytes))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.textSecondary)
+            settingsDivider
 
-                Spacer(minLength: 4)
-
-                Text("\(MetricFormatter.bytes(max(storage.totalBytes - storage.usedBytes, 0))) available")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
+            settingsPickerRow(
+                title: "Storage Format",
+                selection: $settings.menuBarStorageFormat,
+                options: MenuBarMetricDisplayFormat.allCases
+            ) { option in
+                option.title
             }
         }
-        .padding(14)
+    }
+
+    private var settingsGeneralCard: some View {
+        settingsCard {
+            settingsSectionHeader("General", symbol: "slider.horizontal.3")
+
+            settingsToggleRow(
+                title: "Launch at Login",
+                subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login.",
+                subtitleColor: settings.launchAtLoginError == nil ? settingsTextMuted : PopoverTheme.red,
+                isOn: $settings.launchAtLoginEnabled
+            )
+        }
+    }
+
+    private var settingsAlertsCard: some View {
+        settingsCard {
+            settingsSectionHeader("Alerts", symbol: "bell.badge")
+
+            settingsToggleRow(
+                title: "Thermal Alerts",
+                subtitle: "Notify when thermal pressure reaches threshold.",
+                isOn: Binding(
+                    get: { settings.systemAlertSettings.thermalAlertEnabled },
+                    set: { newValue in
+                        var alertSettings = settings.systemAlertSettings
+                        alertSettings.thermalAlertEnabled = newValue
+                        settings.systemAlertSettings = alertSettings
+                    }
+                )
+            )
+
+            settingsDivider
+
+            settingsPickerRow(
+                title: "Thermal Threshold",
+                selection: Binding(
+                    get: { settings.systemAlertSettings.thermalThreshold },
+                    set: { newValue in
+                        var alertSettings = settings.systemAlertSettings
+                        alertSettings.thermalThreshold = newValue
+                        settings.systemAlertSettings = alertSettings
+                    }
+                ),
+                options: [.fair, .serious, .critical]
+            ) { option in
+                option.title
+            }
+
+            settingsDivider
+
+            settingsPickerRow(
+                title: "Storage Threshold",
+                selection: Binding(
+                    get: { settings.systemAlertSettings.storageUsagePercentThreshold },
+                    set: { newValue in
+                        var alertSettings = settings.systemAlertSettings
+                        alertSettings.storageUsagePercentThreshold = newValue
+                        settings.systemAlertSettings = alertSettings
+                    }
+                ),
+                options: [80, 85, 90, 95]
+            ) { value in
+                "\(value)%"
+            }
+
+            settingsDivider
+
+            settingsPickerRow(
+                title: "Alert Cooldown",
+                selection: Binding(
+                    get: { settings.systemAlertSettings.cooldownMinutes },
+                    set: { newValue in
+                        var alertSettings = settings.systemAlertSettings
+                        alertSettings.cooldownMinutes = newValue
+                        settings.systemAlertSettings = alertSettings
+                    }
+                ),
+                options: [15, 30, 45, 60, 120]
+            ) { value in
+                "\(value)m"
+            }
+        }
+    }
+
+    private var settingsAdvancedBatteryCard: some View {
+        settingsCard {
+            settingsSectionHeader("Advanced Battery (Gated)", symbol: "shield.lefthalf.filled")
+
+            settingsToggleRow(
+                title: "Sleep-aware Stop Charging",
+                subtitle: "Pause charging before system sleep transitions.",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.sleepAwareStopChargingEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.sleepAwareStopChargingEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "Block Sleep Until Limit",
+                subtitle: "Attempt limit recovery before sleep when below charge target.",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.blockSleepUntilLimitEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.blockSleepUntilLimitEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "Calibration Workflow",
+                subtitle: "Enable calibration lifecycle hooks (experimental).",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.calibrationWorkflowEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.calibrationWorkflowEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "Hardware Percentage Refinement",
+                subtitle: "Use refined fallback battery percentage parsing.",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.hardwarePercentageRefinementEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.hardwarePercentageRefinementEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "MagSafe LED Control",
+                subtitle: "Reserved for supported hardware paths.",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.magsafeLEDControlEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.magsafeLEDControlEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+        }
+    }
+
+    private var settingsDiagnosticsCard: some View {
+        settingsCard {
+            settingsSectionHeader("Diagnostics", symbol: "stethoscope")
+
+            Text("Create a local support bundle with sanitized settings, snapshots, and battery lifecycle events.")
+                .font(.system(size: 11))
+                .foregroundStyle(settingsTextMuted)
+
+            Button {
+                exportDiagnostics()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Export Diagnostics")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(PopoverTheme.accentContrastText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(PopoverTheme.accent)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if let diagnosticsStatusMessage {
+                Text(diagnosticsStatusMessage)
+                    .font(.system(size: 10))
+                    .foregroundStyle(settingsTextMuted)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var settingsAboutCard: some View {
+        settingsCard {
+            HStack(alignment: .center, spacing: 12) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(settingsCardBorder, lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.24), radius: 6, y: 3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MacMonitor")
+                        .font(.system(size: 16.5, weight: .semibold))
+                        .foregroundStyle(settingsTextMain)
+
+                    Text("Version \(appSemanticVersion)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(settingsTextMuted)
+
+                    Text("Apple Silicon Optimized")
+                        .font(.system(size: 11))
+                        .foregroundStyle(settingsTextMuted)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func settingsToggleRow(
+        title: String,
+        subtitle: String,
+        subtitleColor: Color = PopoverTheme.textMuted,
+        isOn: Binding<Bool>,
+        isEnabled: Bool = true
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(settingsTextMain)
+
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(settingsToggleTint)
+                .disabled(!isEnabled)
+                .opacity(isEnabled ? 1.0 : 0.6)
+        }
+    }
+
+    private func settingsPickerRow<Option: Hashable>(
+        title: String,
+        selection: Binding<Option>,
+        options: [Option],
+        optionTitle: @escaping (Option) -> String
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(settingsTextMain)
+
+            Spacer(minLength: 8)
+
+            Menu {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        selection.wrappedValue = option
+                    } label: {
+                        Text(optionTitle(option))
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(optionTitle(selection.wrappedValue))
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.trailing)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(settingsTextMain)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(width: settingsPickerWidth, alignment: .leading)
+                .background(settingsInputBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(settingsCardBorder, lineWidth: 1)
+                )
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .frame(width: settingsPickerWidth, alignment: .trailing)
+        }
+    }
+
+    private var settingsDivider: some View {
+        Rectangle()
+            .fill(settingsCardBorder)
+            .frame(height: 1)
+    }
+
+    private var settingsTextMain: Color {
+        settings.appTheme.isDark ? Color(hex: 0xF5F5F7) : Color(hex: 0x1D1D1F)
+    }
+
+    private var settingsTextMuted: Color {
+        settings.appTheme.isDark ? Color(hex: 0xA1A1A6) : Color(hex: 0x86868B)
+    }
+
+    private var settingsCardFill: Color {
+        settings.appTheme.isDark ? Color.white.opacity(0.04) : Color.white.opacity(0.62)
+    }
+
+    private var settingsCardBorder: Color {
+        settings.appTheme.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+    }
+
+    private var settingsInputBackground: Color {
+        settings.appTheme.isDark ? Color.black.opacity(0.26) : Color.black.opacity(0.04)
+    }
+
+    private var settingsToggleTint: Color {
+        Color(hex: 0x32D74B)
+    }
+
+    private func settingsSectionHeader(_ title: String, symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.45)
+        }
+        .foregroundStyle(settingsTextMuted)
+    }
+
+    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(PopoverTheme.bgCard)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(settingsCardFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(settingsCardBorder, lineWidth: 1)
         )
     }
 
-    private func collectingCard(text: String) -> some View {
+    private var settingsPickerWidth: CGFloat {
+        96
+    }
+
+    private func infoBanner(text: String, tint: Color, background: Color) -> some View {
         Text(text)
             .font(.system(size: 11))
-            .foregroundStyle(PopoverTheme.textMuted)
-            .padding(12)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var settingsScreen: some View {
-        SettingsView(
-            settings: settings,
-            ramPolicyViewModel: ramPolicyViewModel,
-            appUpdateController: appUpdateController,
-            onOpenPolicyManager: viewModel.showRAMPolicyManager
-        )
-    }
-
-    private var policiesScreen: some View {
-        RAMPolicySettingsView(
-            viewModel: ramPolicyViewModel,
-            onBack: viewModel.showSettings
-        )
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(background.opacity(0.7))
+            )
     }
 
     private var storageManagementScreen: some View {
@@ -549,57 +1283,54 @@ struct PopoverRootView: View {
         )
     }
 
+    private var trendsOverviewScreen: some View {
+        TrendsView(viewModel: viewModel)
+            .onAppear {
+                if viewModel.screen != .trends {
+                    viewModel.showTrends()
+                }
+            }
+    }
+
+    private var policiesScreen: some View {
+        RAMPolicySettingsView(
+            viewModel: ramPolicyViewModel,
+            onBack: viewModel.showSettings
+        )
+    }
+
     private var footer: some View {
         HStack(spacing: 12) {
             if appUpdateController.canRestartToInstallUpdate {
                 Button {
                     appUpdateController.restartToInstallUpdate()
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "power")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text("Restart to Update")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundStyle(PopoverTheme.accentContrastText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(PopoverTheme.orange)
-                    )
+                    Label("Restart to Update", systemImage: "arrow.clockwise.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color(hex: 0x0A84FF))
+                        )
                 }
                 .buttonStyle(.plain)
-                .help("Install the downloaded update now.")
             } else {
-                Text("MacMonitor")
-                    .font(.system(size: 10))
+                Label("Power Optimized", systemImage: "bolt.fill")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(PopoverTheme.textMuted)
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
-            Button {
-                viewModel.refreshNow()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textMuted)
-
-            Button {
-                NSApp.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-                    .font(.system(size: 10, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textMuted)
-            .keyboardShortcut("q")
+            Text(appVersionLabel)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(PopoverTheme.textMuted)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(PopoverTheme.bgPanel.opacity(0.72))
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(PopoverTheme.borderSubtle)
@@ -607,45 +1338,255 @@ struct PopoverRootView: View {
         }
     }
 
-    private var screenTitle: String {
-        switch viewModel.screen {
-        case .temperature:
-            return "Temperature"
-        case .battery:
-            return "Battery"
-        case .ram:
-            return "RAM"
-        case .storage:
-            return "Storage"
-        case .storageManagement:
-            return "Storage Manager"
-        case .settings:
-            return "Settings"
-        case .ramPolicyManager:
-            return "Policy Manager"
+    private func panelCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func usageTrack(segments: [MemoryUsageSegment]) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(PopoverTheme.borderMedium)
+
+                HStack(spacing: 0) {
+                    ForEach(segments) { segment in
+                        Rectangle()
+                            .fill(segment.color)
+                            .frame(width: geometry.size.width * max(0, min(segment.ratio, 1)))
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
     }
 
-    private var displayedThermalState: ThermalState {
-        simulatedThermalState ?? viewModel.thermalState
+    private func usageTrack(segments: [StorageUsageSegment]) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(PopoverTheme.borderMedium)
+
+                HStack(spacing: 0) {
+                    ForEach(segments) { segment in
+                        Rectangle()
+                            .fill(segment.color)
+                            .frame(width: geometry.size.width * max(0, min(segment.ratio, 1)))
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        }
     }
 
-    private var simulatedStates: [ThermalState] {
-        [.nominal, .fair, .serious, .critical]
+    private func memorySegments(for memory: MemorySnapshot) -> [MemoryUsageSegment] {
+        let total = max(memory.totalBytes, 1)
+        let usedBytes = min(memory.usedBytes, total)
+        let compressedBytes = min(memory.compressedBytes ?? 0, total)
+        let cachedBytes = min(memory.inactiveBytes ?? 0, total)
+        let accountedBytes = min(total, usedBytes + compressedBytes + cachedBytes)
+        let freeBytes = max(total - accountedBytes, 0)
+
+        let rawSegments: [(id: String, title: String, bytes: UInt64, color: Color)] = [
+            ("used", "Used", usedBytes, PopoverTheme.accent),
+            ("compressed", "Compressed", compressedBytes, PopoverTheme.blue),
+            ("cached", "Cached Files", cachedBytes, PopoverTheme.orange),
+            ("free", "Free", freeBytes, PopoverTheme.textMuted)
+        ]
+
+        return rawSegments.map { segment in
+            MemoryUsageSegment(
+                id: segment.id,
+                title: segment.title,
+                bytes: segment.bytes,
+                ratio: Double(segment.bytes) / Double(total),
+                color: segment.color
+            )
+        }
     }
 
-    private func thermalDescription(for state: ThermalState) -> String {
+    private func storageSegments() -> [StorageUsageSegment] {
+        let total = max(storageManagementViewModel.currentTotalBytes, 1)
+        let used = storageManagementViewModel.currentUsedBytes
+
+        let appBytes = min(storageManagementViewModel.appGroups.reduce(UInt64(0)) { $0 + $1.totalBytes }, used)
+        let cacheCandidates = storageManagementViewModel.looseItems
+            .filter { $0.category == .cache }
+            .reduce(UInt64(0)) { $0 + $1.sizeBytes }
+        let cacheBytes = min(cacheCandidates, max(used - appBytes, 0))
+        let folderBytes = max(used - appBytes - cacheBytes, 0)
+
+        let rawSegments: [(id: String, title: String, bytes: UInt64, color: Color)] = [
+            ("apps", "Apps", appBytes, PopoverTheme.blue),
+            ("folders", "Folders", folderBytes, PopoverTheme.purple),
+            ("cache", "Cache", cacheBytes, PopoverTheme.green)
+        ]
+
+        return rawSegments.map { segment in
+            StorageUsageSegment(
+                id: segment.id,
+                title: segment.title,
+                bytes: segment.bytes,
+                ratio: Double(segment.bytes) / Double(total),
+                color: segment.color
+            )
+        }
+    }
+
+    private func selectionStateSymbol(_ state: StorageSelectionState) -> String {
         switch state {
-        case .nominal:
-            return "System thermal pressure is low."
-        case .fair:
-            return "Thermal pressure is elevated but stable."
-        case .serious:
-            return "System is under high thermal pressure."
-        case .critical:
-            return "Critical thermal pressure; performance may throttle."
-        case .unknown:
-            return "Thermal pressure data is unavailable."
+        case .none:
+            return "circle"
+        case .partial:
+            return "minus.circle.fill"
+        case .all:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private func selectionStateColor(_ state: StorageSelectionState) -> Color {
+        switch state {
+        case .none:
+            return PopoverTheme.textMuted
+        case .partial:
+            return PopoverTheme.orange
+        case .all:
+            return PopoverTheme.accent
+        }
+    }
+
+    private func quickDelete(_ group: StorageAppGroup) {
+        storageManagementViewModel.clearPresetSelection()
+        if storageManagementViewModel.groupSelectionState(group) != .all {
+            storageManagementViewModel.toggleGroupSelection(group.id)
+        }
+        storageManagementViewModel.requestDeleteSelection()
+    }
+
+    private var storageDeleteButtonTitle: String {
+        let count = storageManagementViewModel.selectedAllowedCount
+        if count > 0 {
+            return "Move to Trash (\(count))"
+        }
+        return "Move to Trash"
+    }
+
+    private var terminateButtonTitle: String {
+        let count = ramDetailsViewModel.selectedAllowedCount
+        if count > 0 {
+            return "Quit (\(count))"
+        }
+        return "Quit Selected Processes"
+    }
+
+    private func checkboxSymbol(for process: ProcessMemoryItem, isSelected: Bool) -> String {
+        if process.isProtected {
+            return "lock.fill"
+        }
+        return isSelected ? "checkmark.square.fill" : "square"
+    }
+
+    private func checkboxColor(for process: ProcessMemoryItem, isSelected: Bool) -> Color {
+        if process.isProtected {
+            return PopoverTheme.textMuted
+        }
+        return isSelected ? PopoverTheme.accent : PopoverTheme.textMuted
+    }
+
+    private var appSemanticVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
+
+    private var appVersionLabel: String {
+        "v\(appSemanticVersion)"
+    }
+
+    private var activeTab: MainPopoverTab {
+        switch viewModel.screen {
+        case .storage, .storageManagement:
+            return .storageApps
+        case .trends:
+            return .trends
+        case .settings, .ramPolicyManager:
+            return .settings
+        case .temperature, .battery, .ram:
+            return .memory
+        }
+    }
+
+    private func switchToTab(_ tab: MainPopoverTab) {
+        switch tab {
+        case .memory:
+            viewModel.showRAM()
+        case .storageApps:
+            viewModel.showStorage()
+        case .trends:
+            viewModel.showTrends()
+        case .settings:
+            viewModel.showSettings()
+        }
+    }
+
+    private func normalizeLegacyScreenIfNeeded() {
+        guard !hasNormalizedLegacyScreen else { return }
+        hasNormalizedLegacyScreen = true
+
+        switch viewModel.screen {
+        case .battery, .temperature:
+            viewModel.showRAM()
+        case .ram, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
+            break
+        }
+    }
+
+    private func exportDiagnostics() {
+        do {
+            let bundleURL = try diagnosticsExporter.exportDiagnosticsBundle(
+                settings: settings,
+                snapshot: viewModel.snapshot,
+                history: viewModel.history,
+                recentBatteryEvents: batteryPolicyCoordinator.recentEvents,
+                updateStatusMessage: appUpdateController.statusMessage,
+                helperAvailability: batteryPolicyCoordinator.helperAvailability
+            )
+
+            diagnosticsStatusMessage = "Saved: \(bundleURL.lastPathComponent)"
+            NSWorkspace.shared.activateFileViewerSelecting([bundleURL])
+        } catch {
+            diagnosticsStatusMessage = "Diagnostics export failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func toggleTheme() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            settings.appTheme = pairedTheme(for: settings.appTheme)
+        }
+    }
+
+    private func pairedTheme(for theme: AppTheme) -> AppTheme {
+        switch theme {
+        case .lime:
+            return .daylight
+        case .midnight:
+            return .arctic
+        case .cyber:
+            return .sand
+        case .daylight:
+            return .lime
+        case .arctic:
+            return .midnight
+        case .sand:
+            return .cyber
         }
     }
 
@@ -660,56 +1601,10 @@ struct PopoverRootView: View {
         case .critical:
             return PopoverTheme.red
         case .unknown:
-            return PopoverTheme.textSecondary
-        }
-    }
-
-    private func thermalStrokeColor(for state: ThermalState) -> Color {
-        switch state {
-        case .nominal:
-            return PopoverTheme.green.opacity(0.25)
-        case .fair:
-            return PopoverTheme.yellow.opacity(0.25)
-        case .serious:
-            return PopoverTheme.orange.opacity(0.25)
-        case .critical:
-            return PopoverTheme.red.opacity(0.25)
-        case .unknown:
-            return PopoverTheme.borderSubtle
-        }
-    }
-
-    private func thermalIndicatorFill(for state: ThermalState) -> Color {
-        switch state {
-        case .nominal:
-            return PopoverTheme.greenDim
-        case .fair:
-            return PopoverTheme.yellowDim
-        case .serious:
-            return PopoverTheme.orangeDim
-        case .critical:
-            return PopoverTheme.redDim
-        case .unknown:
-            return Color.white.opacity(0.08)
-        }
-    }
-
-    private func thermalSymbol(for state: ThermalState) -> String {
-        switch state {
-        case .nominal:
-            return "thermometer.low"
-        case .fair:
-            return "thermometer.medium"
-        case .serious:
-            return "thermometer.high"
-        case .critical:
-            return "exclamationmark.triangle.fill"
-        case .unknown:
-            return "questionmark.circle"
+            return PopoverTheme.textMuted
         }
     }
 }
-
 // MARK: - Theme Palette
 
 struct ThemePalette {
@@ -833,36 +1728,36 @@ enum PopoverTheme {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static let limePalette = ThemePalette(
-        bgDeep:          Color(hex: 0x1c1c1e),
-        bgPanel:         Color(hex: 0x252527),
-        bgCard:          Color(hex: 0x2c2c2e),
-        bgCardHover:     Color(hex: 0x333336),
-        bgElevated:      Color(hex: 0x2a2a2c),
-        borderSubtle:    Color.white.opacity(0.08),
-        borderMedium:    Color.white.opacity(0.12),
-        borderActive:    Color(hex: 0xBFFF00, opacity: 0.40),
-        textPrimary:     Color(hex: 0xededed),
-        textSecondary:   Color(hex: 0x888888),
-        textMuted:       Color(hex: 0x555555),
-        accent:          Color(hex: 0xBFFF00),
-        accentDim:       Color(hex: 0xBFFF00, opacity: 0.10),
-        blue:            Color(hex: 0x3b82f6),
-        blueDim:         Color(hex: 0x3b82f6, opacity: 0.10),
-        blueGlow:        Color(hex: 0x3b82f6, opacity: 0.15),
-        green:           Color(hex: 0xBFFF00),
-        greenDim:        Color(hex: 0xBFFF00, opacity: 0.10),
-        yellow:          Color(hex: 0xe6d400),
-        yellowDim:       Color(hex: 0xe6d400, opacity: 0.10),
-        orange:          Color(hex: 0xf97316),
-        orangeDim:       Color(hex: 0xf97316, opacity: 0.10),
-        red:             Color(hex: 0xef4444),
-        redDim:          Color(hex: 0xef4444, opacity: 0.10),
-        mint:            Color(hex: 0x2dd4bf),
-        mintDim:         Color(hex: 0x2dd4bf, opacity: 0.10),
-        purple:          Color(hex: 0xa78bfa),
-        purpleDim:       Color(hex: 0xa78bfa, opacity: 0.10),
-        accentContrastText: .black,
-        toggleOffTrack:  Color.white.opacity(0.10),
+        bgDeep:          Color(hex: 0x17171B),
+        bgPanel:         Color(hex: 0x1D1D21),
+        bgCard:          Color(hex: 0x232329),
+        bgCardHover:     Color(hex: 0x2A2A30),
+        bgElevated:      Color(hex: 0x202026),
+        borderSubtle:    Color.white.opacity(0.09),
+        borderMedium:    Color.white.opacity(0.14),
+        borderActive:    Color(hex: 0x5E5CE6, opacity: 0.36),
+        textPrimary:     Color(hex: 0xF5F5F7),
+        textSecondary:   Color(hex: 0xC1C1C8),
+        textMuted:       Color(hex: 0xA1A1A6),
+        accent:          Color(hex: 0x5E5CE6),
+        accentDim:       Color(hex: 0x5E5CE6, opacity: 0.12),
+        blue:            Color(hex: 0x0A84FF),
+        blueDim:         Color(hex: 0x0A84FF, opacity: 0.12),
+        blueGlow:        Color(hex: 0x0A84FF, opacity: 0.18),
+        green:           Color(hex: 0x32D74B),
+        greenDim:        Color(hex: 0x32D74B, opacity: 0.12),
+        yellow:          Color(hex: 0xFFD60A),
+        yellowDim:       Color(hex: 0xFFD60A, opacity: 0.12),
+        orange:          Color(hex: 0xFF9F0A),
+        orangeDim:       Color(hex: 0xFF9F0A, opacity: 0.12),
+        red:             Color(hex: 0xFF453A),
+        redDim:          Color(hex: 0xFF453A, opacity: 0.12),
+        mint:            Color(hex: 0x64D2FF),
+        mintDim:         Color(hex: 0x64D2FF, opacity: 0.12),
+        purple:          Color(hex: 0xBF5AF2),
+        purpleDim:       Color(hex: 0xBF5AF2, opacity: 0.12),
+        accentContrastText: .white,
+        toggleOffTrack:  Color(hex: 0x787880, opacity: 0.35),
         toggleOffKnob:   .white
     )
 
@@ -939,37 +1834,37 @@ enum PopoverTheme {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static let daylightPalette = ThemePalette(
-        bgDeep:          Color(hex: 0xf7f6f3),
-        bgPanel:         Color(hex: 0xeceae5),
-        bgCard:          Color(hex: 0xffffff),
-        bgCardHover:     Color(hex: 0xf5f4f1),
-        bgElevated:      Color(hex: 0xfafaf8),
-        borderSubtle:    Color.black.opacity(0.07),
-        borderMedium:    Color.black.opacity(0.11),
-        borderActive:    Color(hex: 0x65a30d, opacity: 0.40),
-        textPrimary:     Color(hex: 0x1a1a18),
-        textSecondary:   Color(hex: 0x5c5c56),
-        textMuted:       Color(hex: 0xa0a098),
-        accent:          Color(hex: 0x65a30d),
-        accentDim:       Color(hex: 0x65a30d, opacity: 0.10),
-        blue:            Color(hex: 0x2563eb),
-        blueDim:         Color(hex: 0x2563eb, opacity: 0.08),
-        blueGlow:        Color(hex: 0x2563eb, opacity: 0.12),
-        green:           Color(hex: 0x16a34a),
-        greenDim:        Color(hex: 0x16a34a, opacity: 0.08),
-        yellow:          Color(hex: 0xb45309),
-        yellowDim:       Color(hex: 0xb45309, opacity: 0.08),
-        orange:          Color(hex: 0xc2410c),
-        orangeDim:       Color(hex: 0xc2410c, opacity: 0.08),
-        red:             Color(hex: 0xdc2626),
-        redDim:          Color(hex: 0xdc2626, opacity: 0.08),
-        mint:            Color(hex: 0x0d9488),
-        mintDim:         Color(hex: 0x0d9488, opacity: 0.08),
-        purple:          Color(hex: 0x7c3aed),
-        purpleDim:       Color(hex: 0x7c3aed, opacity: 0.08),
+        bgDeep:          Color(hex: 0xF5F5F7),
+        bgPanel:         Color.white,
+        bgCard:          Color.white.opacity(0.62),
+        bgCardHover:     Color.white.opacity(0.76),
+        bgElevated:      Color.white.opacity(0.70),
+        borderSubtle:    Color.black.opacity(0.05),
+        borderMedium:    Color.black.opacity(0.10),
+        borderActive:    Color(hex: 0x5E5CE6, opacity: 0.34),
+        textPrimary:     Color(hex: 0x1D1D1F),
+        textSecondary:   Color(hex: 0x4A4A50),
+        textMuted:       Color(hex: 0x86868B),
+        accent:          Color(hex: 0x5E5CE6),
+        accentDim:       Color(hex: 0x5E5CE6, opacity: 0.10),
+        blue:            Color(hex: 0x0A84FF),
+        blueDim:         Color(hex: 0x0A84FF, opacity: 0.08),
+        blueGlow:        Color(hex: 0x0A84FF, opacity: 0.12),
+        green:           Color(hex: 0x32D74B),
+        greenDim:        Color(hex: 0x32D74B, opacity: 0.08),
+        yellow:          Color(hex: 0xFFD60A),
+        yellowDim:       Color(hex: 0xFFD60A, opacity: 0.08),
+        orange:          Color(hex: 0xFF9F0A),
+        orangeDim:       Color(hex: 0xFF9F0A, opacity: 0.08),
+        red:             Color(hex: 0xFF453A),
+        redDim:          Color(hex: 0xFF453A, opacity: 0.08),
+        mint:            Color(hex: 0x64D2FF),
+        mintDim:         Color(hex: 0x64D2FF, opacity: 0.08),
+        purple:          Color(hex: 0xBF5AF2),
+        purpleDim:       Color(hex: 0xBF5AF2, opacity: 0.08),
         accentContrastText: .white,
-        toggleOffTrack:  Color.black.opacity(0.10),
-        toggleOffKnob:   Color(hex: 0xb0b0b0)
+        toggleOffTrack:  Color(hex: 0x787880, opacity: 0.32),
+        toggleOffKnob:   .white
     )
 
     private static let arcticPalette = ThemePalette(

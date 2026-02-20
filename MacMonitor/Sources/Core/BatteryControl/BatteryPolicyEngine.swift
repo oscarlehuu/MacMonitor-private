@@ -1,7 +1,11 @@
 import Foundation
 
 struct BatteryPolicyEngine {
-    func evaluate(snapshot: BatterySnapshot, configuration: BatteryPolicyConfiguration) -> BatteryPolicyDecision {
+    func evaluate(
+        snapshot: BatterySnapshot,
+        configuration: BatteryPolicyConfiguration,
+        advancedFlags: BatteryAdvancedControlFeatureFlags = .default
+    ) -> BatteryPolicyDecision {
         let config = configuration.normalized()
 
         guard snapshot.isPresent else {
@@ -12,7 +16,7 @@ struct BatteryPolicyEngine {
             )
         }
 
-        guard let currentPercent = snapshot.percentage else {
+        guard let currentPercent = refinedBatteryPercent(snapshot: snapshot, advancedFlags: advancedFlags) else {
             return BatteryPolicyDecision(
                 state: .unavailable,
                 command: nil,
@@ -140,5 +144,25 @@ struct BatteryPolicyEngine {
             command: nil,
             reason: "Exactly at charge limit."
         )
+    }
+
+    private func refinedBatteryPercent(
+        snapshot: BatterySnapshot,
+        advancedFlags: BatteryAdvancedControlFeatureFlags
+    ) -> Int? {
+        if !advancedFlags.hardwarePercentageRefinementEnabled {
+            return snapshot.percentage
+        }
+
+        if let percentage = snapshot.percentage {
+            return min(max(percentage, 0), 100)
+        }
+
+        // Some hardware states occasionally omit maxCapacity.
+        // Fall back to treating currentCapacity as a direct percent when plausible.
+        if let currentCapacity = snapshot.currentCapacity, (0 ... 100).contains(currentCapacity) {
+            return currentCapacity
+        }
+        return nil
     }
 }

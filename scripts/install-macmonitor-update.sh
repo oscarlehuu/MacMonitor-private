@@ -12,6 +12,8 @@ KEEP_QUARANTINE=false
 
 MOUNT_POINT=""
 TMP_DIR=""
+ARTIFACT_PATH=""
+EXTRACTED_APP_PATH=""
 
 usage() {
   cat <<USAGE
@@ -37,7 +39,7 @@ Examples:
 USAGE
 }
 
-log() { printf '[INFO] %s\n' "$*"; }
+log() { printf '[INFO] %s\n' "$*" >&2; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
 fail() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
@@ -121,7 +123,7 @@ prepare_source() {
     log "SHA-256 verified"
   fi
 
-  printf '%s\n' "${artifact_path}"
+  ARTIFACT_PATH="${artifact_path}"
 }
 
 extract_app_path() {
@@ -130,7 +132,7 @@ extract_app_path() {
   lower="$(printf '%s' "${artifact}" | tr '[:upper:]' '[:lower:]')"
 
   if [[ -d "${artifact}" && "$(basename "${artifact}")" == "${APP_NAME}" ]]; then
-    printf '%s\n' "${artifact}"
+    EXTRACTED_APP_PATH="${artifact}"
     return
   fi
 
@@ -150,7 +152,7 @@ extract_app_path() {
     require_cmd tar
     tar -xzf "${artifact}" -C "${extract_dir}"
   elif [[ "${lower}" == *.app ]]; then
-    printf '%s\n' "${artifact}"
+    EXTRACTED_APP_PATH="${artifact}"
     return
   else
     fail "Unsupported artifact type: ${artifact}"
@@ -159,7 +161,7 @@ extract_app_path() {
   local found
   found="$(find "${extract_dir}" -maxdepth 3 -type d -name "${APP_NAME}" | head -n 1 || true)"
   [[ -n "${found}" ]] || fail "Could not locate ${APP_NAME} inside artifact"
-  printf '%s\n' "${found}"
+  EXTRACTED_APP_PATH="${found}"
 }
 
 verify_app() {
@@ -218,13 +220,11 @@ main() {
   require_cmd find
   parse_args "$@"
 
-  local artifact
-  artifact="$(prepare_source)"
-  local app_path
-  app_path="$(extract_app_path "${artifact}")"
+  prepare_source
+  extract_app_path "${ARTIFACT_PATH}"
 
-  verify_app "${app_path}"
-  install_app "${app_path}"
+  verify_app "${EXTRACTED_APP_PATH}"
+  install_app "${EXTRACTED_APP_PATH}"
 
   log "Done"
 }

@@ -49,7 +49,7 @@ final class MenuBarStatusIconRenderer {
             context.setAllowsAntialiasing(true)
             context.setShouldAntialias(true)
 
-            let center = CGPoint(x: rect.midX, y: rect.midY + size.height * 0.11)
+            let center = CGPoint(x: rect.midX, y: rect.midY + size.height * 0.04)
             self.drawArc(
                 context,
                 center: center,
@@ -121,7 +121,7 @@ final class MenuBarStatusIconRenderer {
             context.setAllowsAntialiasing(true)
             context.setShouldAntialias(true)
 
-            let center = CGPoint(x: rect.midX, y: rect.midY + size.height * 0.11)
+            let center = CGPoint(x: rect.midX, y: rect.midY + size.height * 0.04)
 
             self.drawGradientArc(
                 context,

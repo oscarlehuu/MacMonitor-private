@@ -52,6 +52,37 @@ final class SignalProcessTerminatorTests: XCTestCase {
         XCTAssertEqual(calledPIDs, [31])
     }
 
+    func testKillSignalUsesSIGKILL() {
+        let process = makeProcess(pid: 40, name: "ForceTarget", protectionReason: nil)
+        var signals: [Int32] = []
+        let terminator = SignalProcessTerminator { _, signal in
+            signals.append(signal)
+            return (0, 0)
+        }
+
+        _ = terminator.terminate(processes: [process], selectedProcessIDs: [40], signal: .kill)
+
+        XCTAssertEqual(signals, [SIGKILL])
+    }
+
+    func testAliveProcessIDsTreatsEPERMAsAliveAndESRCHAsDead() {
+        let terminator = SignalProcessTerminator { pid, signal in
+            XCTAssertEqual(signal, 0)
+            switch pid {
+            case 50:
+                return (0, 0)
+            case 51:
+                return (-1, EPERM)
+            default:
+                return (-1, ESRCH)
+            }
+        }
+
+        let alive = terminator.aliveProcessIDs(in: [50, 51, 52])
+
+        XCTAssertEqual(alive, [50, 51])
+    }
+
     private func makeProcess(pid: Int32, name: String, protectionReason: ProcessProtectionReason?) -> ProcessMemoryItem {
         ProcessMemoryItem(
             pid: pid,

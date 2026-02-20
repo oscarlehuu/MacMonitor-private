@@ -6,83 +6,65 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         let title = MenuBarDisplayFormatter.valueText(
             for: makeSnapshot(memoryUsed: 4, memoryTotal: 8, storageUsed: 40, storageTotal: 100),
             mode: .icon,
-            valueMode: .used,
-            format: .percent
+            memoryFormat: .percentUsage,
+            storageFormat: .numberLeft
         )
 
         XCTAssertNil(title)
     }
 
-    func testRAMUsedPercentTitle() {
+    func testMemoryPercentUsageTitle() {
         let title = MenuBarDisplayFormatter.valueText(
             for: makeSnapshot(memoryUsed: 3, memoryTotal: 4, storageUsed: 0, storageTotal: 1),
-            mode: .ram,
-            valueMode: .used,
-            format: .percent
+            mode: .memory,
+            memoryFormat: .percentUsage,
+            storageFormat: .percentUsage
         )
 
-        XCTAssertEqual(title, "75%")
+        XCTAssertEqual(title, "RAM: 75%")
     }
 
-    func testStorageFreePercentTitle() {
+    func testStorageNumberLeftTitle() {
+        let snapshot = makeSnapshot(
+            memoryUsed: 0,
+            memoryTotal: 1,
+            storageUsed: 80,
+            storageTotal: 100
+        )
+
         let title = MenuBarDisplayFormatter.valueText(
-            for: makeSnapshot(memoryUsed: 0, memoryTotal: 1, storageUsed: 80, storageTotal: 100),
+            for: snapshot,
             mode: .storage,
-            valueMode: .free,
-            format: .percent
+            memoryFormat: .percentUsage,
+            storageFormat: .numberLeft
         )
 
-        XCTAssertEqual(title, "20%")
+        XCTAssertEqual(title, "SSD: \(MetricFormatter.bytes(20)) left")
     }
 
-    func testBatteryPercentTitle() {
-        let snapshot = makeSnapshot(memoryUsed: 0, memoryTotal: 1, storageUsed: 0, storageTotal: 1)
+    func testBothMetricsTitle() {
         let title = MenuBarDisplayFormatter.valueText(
-            for: SystemSnapshot(
-                id: snapshot.id,
-                timestamp: snapshot.timestamp,
-                memory: snapshot.memory,
-                storage: snapshot.storage,
-                battery: BatterySnapshot(
-                    currentCapacity: 81,
-                    maxCapacity: 100,
-                    isPresent: true,
-                    isCharging: false,
-                    isCharged: false,
-                    powerSource: .battery,
-                    timeToEmptyMinutes: 200,
-                    timeToFullChargeMinutes: nil,
-                    amperageMilliAmps: nil,
-                    voltageMilliVolts: nil,
-                    temperatureCelsius: nil,
-                    cycleCount: nil,
-                    health: nil,
-                    healthCondition: nil,
-                    lowPowerModeEnabled: false
-                ),
-                thermal: snapshot.thermal,
-                refreshReason: snapshot.refreshReason
-            ),
-            mode: .battery,
-            valueMode: .used,
-            format: .percent
+            for: makeSnapshot(memoryUsed: 3, memoryTotal: 4, storageUsed: 80, storageTotal: 100),
+            mode: .both,
+            memoryFormat: .percentUsage,
+            storageFormat: .percentUsage
         )
 
-        XCTAssertEqual(title, "81%\u{2193}")
+        XCTAssertEqual(title, "RAM: 75% | SSD: 80%")
     }
 
     func testPlaceholderWhenSnapshotMissing() {
         let title = MenuBarDisplayFormatter.valueText(
             for: nil,
-            mode: .ram,
-            valueMode: .free,
-            format: .number
+            mode: .memory,
+            memoryFormat: .numberUsage,
+            storageFormat: .percentUsage
         )
 
-        XCTAssertEqual(title, "--")
+        XCTAssertEqual(title, "RAM: --")
     }
 
-    func testRAMUsedNumberTitleDoesNotUsePercentSymbol() {
+    func testMemoryNumberUsageTitleDoesNotUsePercentSymbol() {
         let title = MenuBarDisplayFormatter.valueText(
             for: makeSnapshot(
                 memoryUsed: 1_073_741_824,
@@ -90,9 +72,9 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
                 storageUsed: 0,
                 storageTotal: 1
             ),
-            mode: .ram,
-            valueMode: .used,
-            format: .number
+            mode: .memory,
+            memoryFormat: .numberUsage,
+            storageFormat: .percentUsage
         )
 
         XCTAssertNotNil(title)
