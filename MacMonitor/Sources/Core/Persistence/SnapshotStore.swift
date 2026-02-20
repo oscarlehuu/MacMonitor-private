@@ -53,8 +53,9 @@ final class SnapshotStore {
             }
 
             let trimmed = Array(snapshots.suffix(maxHistoryCount))
-            try? fileManager.removeItem(at: legacyFileURL)
-            writeJSONL(trimmed, to: fileURL)
+            if writeJSONL(trimmed, to: fileURL) {
+                try? fileManager.removeItem(at: legacyFileURL)
+            }
             return trimmed
         }
     }
@@ -122,12 +123,17 @@ final class SnapshotStore {
             }
     }
 
-    private func writeJSONL(_ snapshots: [SystemSnapshot], to url: URL) {
+    @discardableResult
+    private func writeJSONL(_ snapshots: [SystemSnapshot], to url: URL) -> Bool {
         guard !snapshots.isEmpty else {
             if fileManager.fileExists(atPath: url.path) {
-                try? fileManager.removeItem(at: url)
+                do {
+                    try fileManager.removeItem(at: url)
+                } catch {
+                    return false
+                }
             }
-            return
+            return true
         }
 
         let lines = snapshots.compactMap { snapshot -> String? in
@@ -135,6 +141,11 @@ final class SnapshotStore {
             return String(data: data, encoding: .utf8)
         }
         let payload = lines.joined(separator: "\n") + "\n"
-        try? payload.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try payload.write(to: url, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
+        }
     }
 }

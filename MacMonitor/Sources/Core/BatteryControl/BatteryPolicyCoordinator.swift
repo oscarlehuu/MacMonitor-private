@@ -82,7 +82,10 @@ final class BatteryPolicyCoordinator: ObservableObject {
             reconciliationManager.clearLastAppliedState()
         }
 
-        await applyAdvancedLifecycleActions(for: event)
+        let didApplyLifecycleOverride = await applyAdvancedLifecycleActions(for: event)
+        if event == .willSleep && didApplyLifecycleOverride {
+            return
+        }
         await reconcileNow(source: .lifecycle, reason: reason, force: true)
     }
 
@@ -331,9 +334,9 @@ final class BatteryPolicyCoordinator: ObservableObject {
         lastErrorMessage = safetyMonitor.lastAutoDisableReason
     }
 
-    private func applyAdvancedLifecycleActions(for event: BatteryLifecycleEvent) async {
+    private func applyAdvancedLifecycleActions(for event: BatteryLifecycleEvent) async -> Bool {
         let flags = settings.batteryAdvancedControlFeatureFlags
-        guard flags.anyEnabled else { return }
+        guard flags.anyEnabled else { return false }
 
         switch event {
         case .willSleep:
@@ -342,19 +345,21 @@ final class BatteryPolicyCoordinator: ObservableObject {
                 && (latestBatterySnapshot.percentage ?? chargeLimit) < chargeLimit
 
             if shouldBlockSleepUntilLimit {
-                _ = await directCommand(
+                let result = await directCommand(
                     .setChargeLimit(chargeLimit),
                     state: .chargingToLimit,
                     source: .lifecycle,
                     reason: "Advanced policy: block-sleep-until-limit requested."
                 )
+                return result.accepted
             } else if flags.sleepAwareStopChargingEnabled {
-                _ = await directCommand(
+                let result = await directCommand(
                     .setChargingPaused(true),
                     state: .pausedAtLimit,
                     source: .lifecycle,
                     reason: "Advanced policy: sleep-aware stop charging."
                 )
+                return result.accepted
             }
         case .didWake:
             if flags.blockSleepUntilLimitEnabled {
@@ -368,6 +373,8 @@ final class BatteryPolicyCoordinator: ObservableObject {
         case .appDidLaunch, .appWillTerminate, .userSessionDidBecomeActive, .userSessionDidResignActive:
             break
         }
+
+        return false
     }
 
     private func reconcileNow(
