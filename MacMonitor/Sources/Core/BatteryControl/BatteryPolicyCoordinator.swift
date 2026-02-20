@@ -365,7 +365,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
             if flags.blockSleepUntilLimitEnabled {
                 _ = await directCommand(
                     .setChargingPaused(false),
-                    state: state,
+                    state: .chargingToLimit,
                     source: .lifecycle,
                     reason: "Advanced policy: wake resumed charging controls."
                 )
