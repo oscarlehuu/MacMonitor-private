@@ -11,3 +11,7 @@ dist/*.zip
 plans/icon-variants/
 plans/macmonitor-icon-draft*.png
 plans/*-mock.html
+
+# Coverage artifacts
+*.profraw
+*.profdata

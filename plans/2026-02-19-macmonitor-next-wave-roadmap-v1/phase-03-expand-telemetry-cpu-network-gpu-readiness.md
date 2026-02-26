@@ -1,7 +1,7 @@
 # Context links
 - Parent plan: `./plan.md`
 - Inputs: `./research/researcher-01-report.md`, `./research/researcher-02-report.md`
-- Core files: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`, `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift`
+- Core files: `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`, `./MacMonitor/Sources/Features/Settings/SettingsStore.swift`
 
 # Overview
 - Date: 2026-02-19
@@ -28,12 +28,12 @@
 - Keep GPU behind protocol boundary to avoid blocking release.
 
 # Related code files
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Domain/SystemSnapshot.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/CPUCollector.swift`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/NetworkCollector.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/MenuBar/MenuBarDisplayFormatter.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift`
+- Modify: `./MacMonitor/Sources/Core/Domain/SystemSnapshot.swift`
+- Modify: `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
+- Create: `./MacMonitor/Sources/Core/Metrics/Collectors/CPUCollector.swift`
+- Create: `./MacMonitor/Sources/Core/Metrics/Collectors/NetworkCollector.swift`
+- Modify: `./MacMonitor/Sources/Features/MenuBar/MenuBarDisplayFormatter.swift`
+- Modify: `./MacMonitor/Sources/Features/Settings/SettingsStore.swift`
 
 # Implementation Steps
 1. Add new domain snapshot structs and backward-compatible decoding defaults.

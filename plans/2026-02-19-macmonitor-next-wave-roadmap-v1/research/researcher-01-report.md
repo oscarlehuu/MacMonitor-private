@@ -4,14 +4,14 @@
 Define highest-ROI next implementations based on what is already shipped in code.
 
 ## Sources
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift:5`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift:88`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Battery/BatteryScreenView.swift:1`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift:4`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift:17`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Persistence/SnapshotStore.swift:43`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift:8`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift:58`
+- `./MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift:5`
+- `./MacMonitor/Sources/Core/DI/AppContainer.swift:88`
+- `./MacMonitor/Sources/Features/Battery/BatteryScreenView.swift:1`
+- `./MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift:4`
+- `./MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift:17`
+- `./MacMonitor/Sources/Core/Persistence/SnapshotStore.swift:43`
+- `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift:8`
+- `./MacMonitor/Sources/Features/Settings/SettingsStore.swift:58`
 
 ## Findings
 1. Battery automation backend is present and wired at app startup, but no first-class schedule UX exists.

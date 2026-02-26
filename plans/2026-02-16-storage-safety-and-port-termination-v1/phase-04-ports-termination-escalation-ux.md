@@ -1,10 +1,10 @@
 ## 1) Context links
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessTerminating.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./MacMonitor/Sources/Core/Processes/ProcessTerminating.swift`
+- `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
+- `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
 
 ## 2) Overview
 - date: 2026-02-16
@@ -32,11 +32,11 @@
 - Reuse existing `ProcessProtectionPolicy` unchanged.
 
 ## 6) Related code files
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessTerminating.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/SignalProcessTerminatorTests.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/RAMDetailsViewModelTests.swift`
+- modify: `./MacMonitor/Sources/Core/Processes/ProcessTerminating.swift`
+- modify: `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
+- modify: `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
+- modify: `./MacMonitor/Tests/SignalProcessTerminatorTests.swift`
+- modify: `./MacMonitor/Tests/RAMDetailsViewModelTests.swift`
 
 ## 7) Implementation Steps
 1. Add selected-port -> PID normalization and dedupe logic.

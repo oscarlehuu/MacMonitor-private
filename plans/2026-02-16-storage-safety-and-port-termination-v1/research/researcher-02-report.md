@@ -25,11 +25,11 @@ Focus: Terminate-by-port architecture in RAM details (graceful then optional for
 - RAM details UI already has confirmation and termination summary patterns.
 
 ## Evidence in Codebase
-- Process collection baseline: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift:16`
-- Protection policy reuse candidate: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift:66`
-- SIGTERM outcome mapping: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessTerminating.swift:65`
-- Current RAM terminate flow: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift:149`
-- Current scope segment UI (candidate for extra tab): `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:319`
+- Process collection baseline: `./MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift:16`
+- Protection policy reuse candidate: `./MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift:66`
+- SIGTERM outcome mapping: `./MacMonitor/Sources/Core/Processes/ProcessTerminating.swift:65`
+- Current RAM terminate flow: `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift:149`
+- Current scope segment UI (candidate for extra tab): `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:319`
 
 ## V1 Recommendations
 1. Add dedicated port collector module.

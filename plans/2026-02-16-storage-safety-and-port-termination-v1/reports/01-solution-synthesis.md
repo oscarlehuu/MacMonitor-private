@@ -24,9 +24,9 @@ Two behaviors need coordinated design:
 - No code implementation in this planning step.
 
 ## References
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
 
 ## Unresolved Questions
 - Force fallback batch behavior: one dialog for all survivors or per-app/per-port group.

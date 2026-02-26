@@ -18,8 +18,8 @@ Two workflows now own release automation:
      - `CURRENT_PROJECT_VERSION = $GITHUB_RUN_NUMBER`
    - Submits the release bundle to Apple notarization, waits for acceptance, and staples the ticket to `MacMonitor.app`.
    - Uploads zip asset to source release.
-   - Uploads same zip to `oscarlehuu/macmonitor-updates` release.
-   - Regenerates and commits `appcast.xml` + per-release notes in `macmonitor-updates` (GitHub Pages feed).
+   - Uploads same zip to the updates repository configured by `UPDATES_REPO` (defaults to `<owner>/macmonitor-updates`).
+   - Regenerates and commits `appcast.xml` + per-release notes in that updates repository (GitHub Pages feed).
 
 ## Conventional Commit mapping
 
@@ -34,13 +34,18 @@ Use these commit types on merge PRs to `main`:
 
 - `RELEASE_PLEASE_TOKEN`: PAT for this source repo (`contents:write`, `pull_requests:write`, `issues:write`). Needed so release creation can trigger downstream workflows.
 - `SPARKLE_PRIVATE_KEY`: export from Sparkle `generate_keys -x`.
-- `UPDATES_REPO_TOKEN`: PAT with push + release access to `oscarlehuu/macmonitor-updates`.
+- `UPDATES_REPO_TOKEN`: PAT with push + release access to your updates repository.
 - `APPLE_CERTIFICATE_P12_BASE64`: Developer ID Application certificate (base64-encoded `.p12`).
 - `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
 - `APPLE_SIGNING_IDENTITY`: signing identity name (for example: `Developer ID Application: Your Name (TEAMID)`).
 - `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID used by `notarytool`.
 - `APPLE_NOTARY_ISSUER_ID`: App Store Connect issuer UUID paired with the API key.
 - `APPLE_NOTARY_API_KEY_BASE64`: base64-encoded contents of `AuthKey_<APPLE_NOTARY_KEY_ID>.p8`.
+
+## Optional repository variable
+
+- `UPDATES_REPO`: target updates repo in `owner/repo` format (for example: `your-org/macmonitor-updates`).
+- If not set, release workflow defaults to `<github.repository_owner>/macmonitor-updates`.
 
 ## Manual fallback
 
