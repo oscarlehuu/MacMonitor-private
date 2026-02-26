@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/oscarlehuu/macmonitor/compare/v0.4.2...v0.4.3) (2026-02-26)
+
+
+### Bug Fixes
+
+* finalize release automation and open-source readiness ([#28](https://github.com/oscarlehuu/macmonitor/issues/28)) ([e1ae731](https://github.com/oscarlehuu/macmonitor/commit/e1ae731ea21399c55925afa919bcf1592d11ca00))
+
 ## [0.4.2](https://github.com/oscarlehuu/macmonitor/compare/v0.4.1...v0.4.2) (2026-02-26)
 
 
