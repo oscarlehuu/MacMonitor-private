@@ -4,6 +4,12 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (example: v0.4.1)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -28,11 +34,18 @@ jobs:
 
       - name: Resolve release metadata
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          tag="${{ github.event.release.tag_name }}"
+          tag="${RELEASE_TAG:-}"
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${DISPATCH_TAG:-}"
+          fi
 
           if [[ -z "${tag}" ]]; then
             echo "Release tag is required." >&2
@@ -205,9 +218,18 @@ jobs:
             --wait \
             --output-format json > "${notary_result_path}"
 
-          cat "${notary_result_path}"
-          if ! grep -q '"status"[[:space:]]*:[[:space:]]*"Accepted"' "${notary_result_path}"; then
-            echo "Notarization did not return Accepted status." >&2
+          /usr/bin/python3 -m json.tool "${notary_result_path}" || cat "${notary_result_path}"
+          notary_status="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", ""))' "${notary_result_path}")"
+          notary_id="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("id", ""))' "${notary_result_path}")"
+          if [[ "${notary_status}" != "Accepted" ]]; then
+            echo "Notarization did not return Accepted status (status=${notary_status:-unknown})." >&2
+            if [[ -n "${notary_id}" ]]; then
+              echo "Fetching notary rejection log for submission ${notary_id}..." >&2
+              xcrun notarytool log "${notary_id}" \
+                --key "${notary_key_path}" \
+                --key-id "${APPLE_NOTARY_KEY_ID}" \
+                --issuer "${APPLE_NOTARY_ISSUER_ID}" || true
+            fi
             exit 1
           fi
 
