@@ -25,7 +25,13 @@ Open-source macOS (Apple Silicon) menu bar monitor.
 - Sparkle update assets + appcast are published automatically when a GitHub Release is published.
 - Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `UPDATES_REPO_TOKEN`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `APPLE_NOTARY_API_KEY_BASE64`).
 - See `scripts/release-checklist.md` for full release flow and secrets.
+- For forks, configure repository variable `UPDATES_REPO` (format: `owner/repo`) if your update feed repository is not `<owner>/macmonitor-updates`.
 
 ## Install new build
 Use:
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/scripts/install-macmonitor-update.sh`
+- `./scripts/install-macmonitor-update.sh`
+
+## Community
+- Contributing guide: `CONTRIBUTING.md`
+- Code of conduct: `CODE_OF_CONDUCT.md`
+- Security policy: `SECURITY.md`

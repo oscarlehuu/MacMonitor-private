@@ -1,7 +1,7 @@
 # Context links
 - Parent plan: `./plan.md`
 - Inputs: `./research/researcher-01-report.md`, `./reports/01-solution-synthesis.md`
-- Core files: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`, `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
+- Core files: `./MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`, `./MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
 
 # Overview
 - Date: 2026-02-19
@@ -27,12 +27,12 @@
 - Add `SystemAlertPolicyEngine` + `SystemAlertNotifier` following RAM policy notifier pattern.
 
 # Related code files
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Alerts/SystemAlertPolicyEngine.swift`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Alerts/SystemAlertNotifier.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift`
-- Create UI: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Trends/TrendsView.swift`
+- Modify: `./MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`
+- Modify: `./MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
+- Create: `./MacMonitor/Sources/Core/Alerts/SystemAlertPolicyEngine.swift`
+- Create: `./MacMonitor/Sources/Core/Alerts/SystemAlertNotifier.swift`
+- Modify: `./MacMonitor/Sources/Features/Settings/SettingsStore.swift`
+- Create UI: `./MacMonitor/Sources/Features/Trends/TrendsView.swift`
 
 # Implementation Steps
 1. Define trend window domain and history sampling utilities.

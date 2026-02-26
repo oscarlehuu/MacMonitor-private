@@ -4,13 +4,13 @@
 Identify delivery risks and guardrails for the next feature wave.
 
 ## Sources
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md:18`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryLifecycleCoordinator.swift:5`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryPolicyEngine.swift:5`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift:1`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/StorageProtectionPolicy.swift:1`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/RunningAppPreflightCoordinator.swift:1`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/.github/workflows/ci.yml:1`
+- `./plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md:18`
+- `./MacMonitor/Sources/Core/BatteryControl/BatteryLifecycleCoordinator.swift:5`
+- `./MacMonitor/Sources/Core/BatteryControl/BatteryPolicyEngine.swift:5`
+- `./MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift:1`
+- `./MacMonitor/Sources/Core/Storage/StorageProtectionPolicy.swift:1`
+- `./MacMonitor/Sources/Core/Storage/RunningAppPreflightCoordinator.swift:1`
+- `./.github/workflows/ci.yml:1`
 
 ## Findings
 1. Battery group-2 features are explicitly deferred, with lifecycle unpredictability called out.

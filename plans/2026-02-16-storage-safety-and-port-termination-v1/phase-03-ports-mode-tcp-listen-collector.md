@@ -1,11 +1,11 @@
 ## 1) Context links
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift`
+- `./MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift`
+- `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
+- `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
 
 ## 2) Overview
 - date: 2026-02-16
@@ -35,13 +35,13 @@
 - Wire service through `AppContainer` for testability.
 
 ## 6) Related code files
-- create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ListeningPortModels.swift`
-- create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/LsofListeningPortCollector.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
-- create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/LsofListeningPortCollectorTests.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/RAMDetailsViewModelTests.swift`
+- create: `./MacMonitor/Sources/Core/Processes/ListeningPortModels.swift`
+- create: `./MacMonitor/Sources/Core/Processes/LsofListeningPortCollector.swift`
+- modify: `./MacMonitor/Sources/Core/DI/AppContainer.swift`
+- modify: `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
+- modify: `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift`
+- create: `./MacMonitor/Tests/LsofListeningPortCollectorTests.swift`
+- modify: `./MacMonitor/Tests/RAMDetailsViewModelTests.swift`
 
 ## 7) Implementation Steps
 1. Define `ListeningPort` model and parser contract.

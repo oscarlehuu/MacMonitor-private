@@ -1,10 +1,10 @@
 ## 1) Context links
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/StorageManagementModels.swift`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift`
+- `./MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
+- `./MacMonitor/Sources/Core/Storage/StorageManagementModels.swift`
 
 ## 2) Overview
 - date: 2026-02-16
@@ -32,10 +32,10 @@
 - Expand storage result model for accurate reason reporting.
 
 ## 6) Related code files
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/StorageManagementModels.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/StorageManagementViewModelTests.swift`
+- modify: `./MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift`
+- modify: `./MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
+- modify: `./MacMonitor/Sources/Core/Storage/StorageManagementModels.swift`
+- modify: `./MacMonitor/Tests/StorageManagementViewModelTests.swift`
 
 ## 7) Implementation Steps
 1. Add UI state for second-stage force confirmation dialog.

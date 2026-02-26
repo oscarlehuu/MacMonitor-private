@@ -33,9 +33,9 @@ Identify how to compute per-app RAM usage (main + helpers) and evaluate alert th
 - Notification permission denial must degrade gracefully to in-app event logging.
 
 ## Sources
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
+- `./MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift`
+- `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift`
+- `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
 
 ## Unresolved Questions
 - Should unknown/non-bundled processes be ignored or grouped under an `Unknown App` bucket for user visibility?

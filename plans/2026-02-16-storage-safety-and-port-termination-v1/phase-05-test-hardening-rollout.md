@@ -1,11 +1,11 @@
 ## 1) Context links
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/StorageManagementViewModelTests.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/RAMDetailsViewModelTests.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/SignalProcessTerminatorTests.swift`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./MacMonitor/Tests/StorageManagementViewModelTests.swift`
+- `./MacMonitor/Tests/RAMDetailsViewModelTests.swift`
+- `./MacMonitor/Tests/SignalProcessTerminatorTests.swift`
 
 ## 2) Overview
 - date: 2026-02-16
@@ -32,10 +32,10 @@
 - Keep rollout checklist artifacts in this plan directory.
 
 ## 6) Related code files
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/StorageManagementViewModelTests.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/RAMDetailsViewModelTests.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/SignalProcessTerminatorTests.swift`
-- create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/ListeningPortTerminationFlowTests.swift`
+- modify: `./MacMonitor/Tests/StorageManagementViewModelTests.swift`
+- modify: `./MacMonitor/Tests/RAMDetailsViewModelTests.swift`
+- modify: `./MacMonitor/Tests/SignalProcessTerminatorTests.swift`
+- create: `./MacMonitor/Tests/ListeningPortTerminationFlowTests.swift`
 
 ## 7) Implementation Steps
 1. Snapshot current local storage-related diffs and keep them intact.

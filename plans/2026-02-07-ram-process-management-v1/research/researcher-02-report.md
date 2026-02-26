@@ -37,11 +37,11 @@ Fit RAM detail + multi-select terminate workflow into current MacMonitor archite
 - Regression tests for summary/settings navigation integrity.
 
 ## Sources
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/SystemSummaryViewModelTests.swift`
+- `./MacMonitor/Sources/Core/DI/AppContainer.swift`
+- `./MacMonitor/Sources/Features/Popover/SystemSummaryViewModel.swift`
+- `./MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
+- `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
+- `./MacMonitor/Tests/SystemSummaryViewModelTests.swift`
 
 ## Unresolved Questions
 - Should we keep details navigation inside `SystemSummaryViewModel` or add a separate `PopoverNavigationViewModel`?

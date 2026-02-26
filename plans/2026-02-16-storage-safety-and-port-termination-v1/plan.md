@@ -37,8 +37,8 @@ Implement two safety-first features: Storage Manager must gracefully quit runnin
 | 5 | Test hardening + rollout readiness | Pending | 0% | 4h | [phase-05-test-hardening-rollout.md](./phase-05-test-hardening-rollout.md) |
 
 ## Dependencies
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/reports/01-solution-synthesis.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/reports/02-plan-validation.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-02-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/reports/01-solution-synthesis.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/reports/02-plan-validation.md`

@@ -20,7 +20,7 @@ concurrency:
 
 env:
   SPARKLE_VERSION: 2.8.1
-  UPDATES_REPO: oscarlehuu/macmonitor-updates
+  UPDATES_REPO: ${{ vars.UPDATES_REPO || format('{0}/macmonitor-updates', github.repository_owner) }}
 
 jobs:
   publish:
@@ -244,6 +244,9 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "${app_path}" "${asset_path}"
 
           notes_path="${RUNNER_TEMP}/release-notes.md"
+          updates_owner="${UPDATES_REPO%%/*}"
+          updates_repo_name="${UPDATES_REPO#*/}"
+          sparkle_appcast_url="https://${updates_owner}.github.io/${updates_repo_name}/appcast.xml"
           {
             echo "Automated release asset publish for \\`${GITHUB_REPOSITORY}@${GITHUB_SHA}\\`."
             echo
@@ -251,7 +254,7 @@ jobs:
             echo "- Version: ${built_short_version} (${built_build_version})"
             echo "- Signing identity: ${APPLE_SIGNING_IDENTITY}"
             echo "- Notarized: yes"
-            echo "- Sparkle appcast: https://oscarlehuu.github.io/macmonitor-updates/appcast.xml"
+            echo "- Sparkle appcast: ${sparkle_appcast_url}"
           } > "${notes_path}"
 
           echo "asset_name=${asset_name}" >> "${GITHUB_OUTPUT}"
@@ -296,6 +299,9 @@ jobs:
 
           updates_dir="${RUNNER_TEMP}/updates-repo"
           archives_dir="${RUNNER_TEMP}/sparkle-archives"
+          updates_owner="${UPDATES_REPO%%/*}"
+          updates_repo_name="${UPDATES_REPO#*/}"
+          release_notes_url_prefix="https://${updates_owner}.github.io/${updates_repo_name}/"
           download_prefix="https://github.com/${UPDATES_REPO}/releases/download/${tag}/"
 
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${UPDATES_REPO}.git" "${updates_dir}"
@@ -336,7 +342,7 @@ jobs:
           echo "${SPARKLE_PRIVATE_KEY}" | "${sparkle_tools_dir}/generate_appcast" \
             --ed-key-file - \
             --download-url-prefix "${download_prefix}" \
-            --release-notes-url-prefix "https://oscarlehuu.github.io/macmonitor-updates/" \
+            --release-notes-url-prefix "${release_notes_url_prefix}" \
             --full-release-notes-url "${release_url}" \
             --link "https://github.com/${GITHUB_REPOSITORY}" \
             "${archives_dir}"

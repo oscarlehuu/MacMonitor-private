@@ -1,7 +1,7 @@
 # Context links
 - Parent plan: `./plan.md`
 - Inputs: `./research/researcher-01-report.md`, `./scout/scout-01-report.md`
-- Core files: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift`, `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
+- Core files: `./MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift`, `./MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
 
 # Overview
 - Date: 2026-02-19
@@ -29,11 +29,11 @@
 - Keep command execution path unchanged (`BatteryPolicyCoordinator.applyScheduledAction`).
 
 # Related code files
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryScheduleViewModel.swift`
-- Modify tests: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/BatteryScheduleCoordinatorTests.swift`
+- Modify: `./MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
+- Modify: `./MacMonitor/Sources/Core/DI/AppContainer.swift`
+- Modify: `./MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
+- Create: `./MacMonitor/Sources/Features/Automation/BatteryScheduleViewModel.swift`
+- Modify tests: `./MacMonitor/Tests/BatteryScheduleCoordinatorTests.swift`
 
 # Implementation Steps
 1. Add `BatteryScheduleViewModel` with draft state, validation, and task formatting helpers.
