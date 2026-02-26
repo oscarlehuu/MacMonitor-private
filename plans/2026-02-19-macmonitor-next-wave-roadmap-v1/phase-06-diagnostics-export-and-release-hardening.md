@@ -1,7 +1,7 @@
 # Context links
 - Parent plan: `./plan.md`
 - Inputs: `./research/researcher-02-report.md`
-- Core files: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift`, `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/.github/workflows/ci.yml`
+- Core files: `./MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift`, `./.github/workflows/ci.yml`
 
 # Overview
 - Date: 2026-02-19
@@ -27,10 +27,10 @@
 - Add deterministic test harness for lifecycle simulations.
 
 # Related code files
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Diagnostics/DiagnosticsExporter.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsView.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift`
-- Modify CI: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/.github/workflows/ci.yml`
+- Create: `./MacMonitor/Sources/Core/Diagnostics/DiagnosticsExporter.swift`
+- Modify: `./MacMonitor/Sources/Features/Settings/SettingsView.swift`
+- Modify: `./MacMonitor/Sources/Core/BatteryControl/BatteryEventStore.swift`
+- Modify CI: `./.github/workflows/ci.yml`
 
 # Implementation Steps
 1. Define diagnostics bundle schema and redaction policy.

@@ -1,10 +1,10 @@
 ## 1) Context links
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/LocalStorageManager.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/research/researcher-01-report.md`
+- `./plans/2026-02-16-storage-safety-and-port-termination-v1/scout/scout-01-report.md`
+- `./MacMonitor/Sources/Core/Storage/LocalStorageManager.swift`
+- `./MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
+- `./MacMonitor/Sources/Core/DI/AppContainer.swift`
 
 ## 2) Overview
 - date: 2026-02-16
@@ -32,10 +32,10 @@
 - Emit per-item preflight state for phase-2 escalation logic.
 
 ## 6) Related code files
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
-- create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/RunningAppPreflightCoordinator.swift`
-- modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/StorageManagementViewModelTests.swift`
+- modify: `./MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift`
+- modify: `./MacMonitor/Sources/Core/DI/AppContainer.swift`
+- create: `./MacMonitor/Sources/Core/Storage/RunningAppPreflightCoordinator.swift`
+- modify: `./MacMonitor/Tests/StorageManagementViewModelTests.swift`
 
 ## 7) Implementation Steps
 1. Preserve current local edits in storage files/tests and avoid destructive reset workflows.

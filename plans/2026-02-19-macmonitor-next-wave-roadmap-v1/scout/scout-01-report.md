@@ -5,26 +5,26 @@
 
 ## High-signal files
 - App composition and dependency wiring:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift`
+  - `./MacMonitor/Sources/Core/DI/AppContainer.swift`
 - Core metric pipeline:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/MemoryCollector.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/StorageCollector.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/BatteryCollector.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Metrics/Collectors/ThermalCollector.swift`
+  - `./MacMonitor/Sources/Core/Metrics/MetricsEngine.swift`
+  - `./MacMonitor/Sources/Core/Metrics/Collectors/MemoryCollector.swift`
+  - `./MacMonitor/Sources/Core/Metrics/Collectors/StorageCollector.swift`
+  - `./MacMonitor/Sources/Core/Metrics/Collectors/BatteryCollector.swift`
+  - `./MacMonitor/Sources/Core/Metrics/Collectors/ThermalCollector.swift`
 - Existing battery control + automation:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryPolicyCoordinator.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryScheduleEngine.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift`
+  - `./MacMonitor/Sources/Core/BatteryControl/BatteryPolicyCoordinator.swift`
+  - `./MacMonitor/Sources/Features/Automation/BatteryScheduleCoordinator.swift`
+  - `./MacMonitor/Sources/Features/Automation/BatteryScheduleEngine.swift`
+  - `./MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift`
 - Current UI surfaces:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsView.swift`
+  - `./MacMonitor/Sources/Features/Popover/PopoverRootView.swift`
+  - `./MacMonitor/Sources/Features/Battery/BatteryScreenView.swift`
+  - `./MacMonitor/Sources/Features/Settings/SettingsView.swift`
 - Persistence + history:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
+  - `./MacMonitor/Sources/Core/Persistence/SnapshotStore.swift`
 - Prior roadmap constraints:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md`
+  - `./plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md`
 
 ## Key scout conclusions
 1. Battery schedule infra exists but is not visible to users in current battery UI.

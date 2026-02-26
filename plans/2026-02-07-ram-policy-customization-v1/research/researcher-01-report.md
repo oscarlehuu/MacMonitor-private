@@ -41,8 +41,8 @@ Define a low-friction persistence design for per-app RAM policies that survives 
 - SQLite can be added later if row counts or query complexity grow.
 
 ## Sources
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/project.yml`
+- `./MacMonitor/Sources/Features/Settings/SettingsStore.swift`
+- `./project.yml`
 
 ## Unresolved Questions
 - Should policy edits be serialized with a dedicated actor or a private dispatch queue?

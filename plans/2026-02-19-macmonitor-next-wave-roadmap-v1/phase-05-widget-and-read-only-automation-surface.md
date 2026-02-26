@@ -1,7 +1,7 @@
 # Context links
 - Parent plan: `./plan.md`
 - Inputs: `./reports/01-solution-synthesis.md`
-- Related prior direction: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-07-thermal-state-menubar-v1/phase-05-widget-ready-shared-snapshot.md`
+- Related prior direction: `./plans/2026-02-07-thermal-state-menubar-v1/phase-05-widget-ready-shared-snapshot.md`
 
 # Overview
 - Date: 2026-02-19
@@ -27,10 +27,10 @@
 - Build widget timeline provider that consumes projected snapshots only.
 
 # Related code files
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/project.yml`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitorWidget/`
-- Create: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Persistence/AppGroupSnapshotStore.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift`
+- Modify: `./project.yml`
+- Create: `./MacMonitorWidget/`
+- Create: `./MacMonitor/Sources/Core/Persistence/AppGroupSnapshotStore.swift`
+- Modify: `./MacMonitor/Sources/Features/Automation/BatteryAppIntents.swift`
 
 # Implementation Steps
 1. Add widget target and bundle config in project spec.

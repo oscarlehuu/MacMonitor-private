@@ -1,6 +1,6 @@
 # Context links
 - Parent plan: `./plan.md`
-- Dependency docs: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md`
+- Dependency docs: `./plans/2026-02-08-battery-management-apple-silicon-v1/phase-06-deferred-group-2-features.md`
 - Inputs: `./research/researcher-02-report.md`
 
 # Overview
@@ -28,11 +28,11 @@
 - Extend lifecycle coordinator integration points for sleep-specific policy transitions.
 
 # Related code files
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryPolicyEngine.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryPolicyCoordinator.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/BatteryControl/BatteryLifecycleCoordinator.swift`
-- Modify: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/Settings/SettingsStore.swift`
-- Modify tests: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/BatteryPolicyEngineTests.swift`
+- Modify: `./MacMonitor/Sources/Core/BatteryControl/BatteryPolicyEngine.swift`
+- Modify: `./MacMonitor/Sources/Core/BatteryControl/BatteryPolicyCoordinator.swift`
+- Modify: `./MacMonitor/Sources/Core/BatteryControl/BatteryLifecycleCoordinator.swift`
+- Modify: `./MacMonitor/Sources/Features/Settings/SettingsStore.swift`
+- Modify tests: `./MacMonitor/Tests/BatteryPolicyEngineTests.swift`
 
 # Implementation Steps
 1. Define go/no-go metrics and write them into roadmap docs.

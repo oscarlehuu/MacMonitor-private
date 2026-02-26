@@ -1,9 +1,9 @@
 # 01 Solution Synthesis - MacMonitor Next-Wave Roadmap
 
 ## Inputs
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-19-macmonitor-next-wave-roadmap-v1/research/researcher-01-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-19-macmonitor-next-wave-roadmap-v1/research/researcher-02-report.md`
-- `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-19-macmonitor-next-wave-roadmap-v1/scout/scout-01-report.md`
+- `./plans/2026-02-19-macmonitor-next-wave-roadmap-v1/research/researcher-01-report.md`
+- `./plans/2026-02-19-macmonitor-next-wave-roadmap-v1/research/researcher-02-report.md`
+- `./plans/2026-02-19-macmonitor-next-wave-roadmap-v1/scout/scout-01-report.md`
 
 ## Decision
 Use a 6-phase roadmap that maximizes reuse of existing infrastructure before adding risky battery controls.

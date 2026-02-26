@@ -22,8 +22,11 @@ final class DefaultStorageProtectionPolicyTests: XCTestCase {
 
     func testAllowsUserCachePath() {
         let policy = DefaultStorageProtectionPolicy(currentApplicationPath: "/Applications/MacMonitor.app")
+        let userCachePath = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Library/Caches/com.apple.Safari", isDirectory: true)
+            .path
 
-        let decision = policy.evaluate(url: URL(fileURLWithPath: "/Users/oscar/Library/Caches/com.apple.Safari"))
+        let decision = policy.evaluate(url: URL(fileURLWithPath: userCachePath))
 
         XCTAssertFalse(decision.isProtected)
         XCTAssertNil(decision.reason)

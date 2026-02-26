@@ -8,36 +8,36 @@ Scope: Codebase touchpoints for storage app-deletion safety + terminate-by-port 
 ## Current Architecture Map
 1. Storage deletion pipeline
 - Selection + confirmation + async delete dispatch:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift:56`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift:298`
+  - `./MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift:56`
+  - `./MacMonitor/Sources/Features/StorageManagement/StorageManagementViewModel.swift:298`
 - Actual delete implementation:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:126`
+  - `./MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:126`
 - Deletion result model + summary message:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/StorageManagementModels.swift:206`
+  - `./MacMonitor/Sources/Core/Storage/StorageManagementModels.swift:206`
 
 2. Process/RAM termination pipeline
 - Process collection and scope switching:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift:16`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift:61`
+  - `./MacMonitor/Sources/Core/Processes/LibprocProcessListCollector.swift:16`
+  - `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsViewModel.swift:61`
 - Protection policy:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift:66`
+  - `./MacMonitor/Sources/Core/Processes/ProcessProtectionPolicy.swift:66`
 - Batch SIGTERM terminator:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Processes/ProcessTerminating.swift:65`
+  - `./MacMonitor/Sources/Core/Processes/ProcessTerminating.swift:65`
 - RAM UI controls and destructive confirmation:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:319`
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:406`
+  - `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:319`
+  - `./MacMonitor/Sources/Features/RAMDetails/RAMDetailsView.swift:406`
 
 3. Dependency injection root
 - Existing construction points for storage/process services:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/DI/AppContainer.swift:40`
+  - `./MacMonitor/Sources/Core/DI/AppContainer.swift:40`
 
 ## Existing Test Surface
 - Storage view-model behavior tests:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/StorageManagementViewModelTests.swift:89`
+  - `./MacMonitor/Tests/StorageManagementViewModelTests.swift:89`
 - RAM details behavior tests:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/RAMDetailsViewModelTests.swift:55`
+  - `./MacMonitor/Tests/RAMDetailsViewModelTests.swift:55`
 - Signal terminator mapping tests:
-  - `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Tests/SignalProcessTerminatorTests.swift:20`
+  - `./MacMonitor/Tests/SignalProcessTerminatorTests.swift:20`
 
 ## Gaps Relevant to New Scope
 1. Storage flow lacks running-app preflight/quit/force-escalation state.

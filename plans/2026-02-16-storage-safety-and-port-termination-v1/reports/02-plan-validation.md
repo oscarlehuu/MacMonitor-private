@@ -1,6 +1,6 @@
 # Plan Validation
 Date: 2026-02-16
-Plan: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
+Plan: `./plans/2026-02-16-storage-safety-and-port-termination-v1/plan.md`
 Status: approved
 
 ## Interview Results

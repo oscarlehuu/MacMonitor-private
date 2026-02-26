@@ -26,10 +26,10 @@ Focus: Running-app deletion safety in Storage Manager (graceful first, explicit 
 - UX has a single generic destructive confirmation.
 
 ## Evidence in Codebase
-- Storage delete loop: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:126`
-- Immediate trash call: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:149`
-- Outcome enum/message today: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Core/Storage/StorageManagementModels.swift:206`
-- Single generic delete confirmation: `/Users/oscar/Desktop/Projects/OscarProjects/MacMonitor/MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift:56`
+- Storage delete loop: `./MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:126`
+- Immediate trash call: `./MacMonitor/Sources/Core/Storage/LocalStorageManager.swift:149`
+- Outcome enum/message today: `./MacMonitor/Sources/Core/Storage/StorageManagementModels.swift:206`
+- Single generic delete confirmation: `./MacMonitor/Sources/Features/StorageManagement/StorageManagementView.swift:56`
 
 ## V1 Recommendations
 1. Add preflight for selected app bundles.
