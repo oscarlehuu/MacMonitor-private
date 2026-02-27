@@ -24,6 +24,7 @@ env:
 
 jobs:
   publish:
+    if: github.repository == 'oscarlehuu/macmonitor-open'
     runs-on: macos-15
 
     steps:
