@@ -1,5 +1,10 @@
 # Release Checklist
 
+## Repository authority
+
+- Primary release authority is the public repo: `oscarlehuu/macmonitor-open` (`main` branch).
+- This private repo keeps release jobs guard-railed to avoid accidental publishing.
+
 ## Automated flow (default)
 
 Two workflows now own release automation:
