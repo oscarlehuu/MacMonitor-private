@@ -30,7 +30,7 @@ targets:
         INFOPLIST_FILE: MacMonitor/Config/App-Info.plist
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
-        SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor-updates/appcast.xml"
+        SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor/appcast.xml"
         SPARKLE_PUBLIC_ED_KEY: "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU="
       configs:
         Release:
@@ -38,6 +38,12 @@ targets:
           ENABLE_HARDENED_RUNTIME: YES
     postBuildScripts:
       - name: Embed Battery Helper
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/com.oscar.macmonitor.battery-helper
+          - $(SRCROOT)/MacMonitor/Config/AppIcon.icns
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchServices/com.oscar.macmonitor.battery-helper
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/AppIcon.icns
         script: |
           helper_binary="${BUILT_PRODUCTS_DIR}/com.oscar.macmonitor.battery-helper"
           helper_destination_dir="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchServices"

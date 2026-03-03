@@ -7,9 +7,6 @@ struct TrendsView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             trendGrid
-            if let latestAlert = viewModel.recentSystemAlerts.first {
-                alertBanner(alert: latestAlert)
-            }
         }
     }
 
@@ -55,35 +52,56 @@ struct TrendsView: View {
     }
 
     private var trendGrid: some View {
-        VStack(spacing: 10) {
+        let latestAlerts = TrendInlineAlertResolver.latestBatch(from: viewModel.recentSystemAlerts)
+            .filter { isAlertEnabled($0.kind) }
+
+        return VStack(spacing: 10) {
             trendCard(
                 title: "Memory",
                 subtitle: "Usage",
                 samples: viewModel.memoryTrend(window: viewModel.selectedTrendWindow),
                 tint: PopoverTheme.accent,
-                unitSuffix: "%"
+                unitSuffix: "%",
+                inlineAlert: TrendInlineAlertResolver.inlineAlert(for: .memory, from: latestAlerts)
             )
             trendCard(
                 title: "Storage",
                 subtitle: "Usage",
                 samples: viewModel.storageTrend(window: viewModel.selectedTrendWindow),
                 tint: PopoverTheme.blue,
-                unitSuffix: "%"
+                unitSuffix: "%",
+                inlineAlert: TrendInlineAlertResolver.inlineAlert(for: .storage, from: latestAlerts)
             )
             trendCard(
                 title: "CPU",
                 subtitle: "Usage",
                 samples: viewModel.cpuTrend(window: viewModel.selectedTrendWindow),
                 tint: PopoverTheme.green,
-                unitSuffix: "%"
+                unitSuffix: "%",
+                inlineAlert: TrendInlineAlertResolver.inlineAlert(for: .cpu, from: latestAlerts)
             )
             trendCard(
                 title: "Battery",
                 subtitle: "Level",
                 samples: viewModel.batteryTrend(window: viewModel.selectedTrendWindow),
                 tint: PopoverTheme.orange,
-                unitSuffix: "%"
+                unitSuffix: "%",
+                inlineAlert: TrendInlineAlertResolver.inlineAlert(for: .battery, from: latestAlerts)
             )
+        }
+    }
+
+    private func isAlertEnabled(_ kind: SystemAlertKind) -> Bool {
+        let settings = viewModel.settings.systemAlertSettings
+        switch kind {
+        case .thermal:
+            return settings.thermalAlertEnabled
+        case .ram:
+            return settings.ramAlertEnabled
+        case .storage:
+            return settings.storageAlertEnabled
+        case .batteryHealth:
+            return settings.batteryHealthDropAlertEnabled
         }
     }
 
@@ -92,11 +110,13 @@ struct TrendsView: View {
         subtitle: String,
         samples: [TrendSample],
         tint: Color,
-        unitSuffix: String
+        unitSuffix: String,
+        inlineAlert: SystemAlert?
     ) -> some View {
         let currentValue = samples.last?.value
         let averageValue = samples.isEmpty ? nil : samples.map(\.value).reduce(0, +) / Double(samples.count)
         let maxValue = samples.map(\.value).max()
+        let alertHighlightColor = selectedAlertHighlightColor
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -109,7 +129,13 @@ struct TrendsView: View {
                 Spacer(minLength: 6)
                 Text(metricText(currentValue, unitSuffix: unitSuffix))
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.textSecondary)
+                    .foregroundStyle(inlineAlert == nil ? PopoverTheme.textSecondary : alertHighlightColor)
+                if inlineAlert != nil {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(alertHighlightColor)
+                        .help("Exceeded threshold")
+                }
             }
 
             if samples.count >= 2 {
@@ -145,6 +171,10 @@ struct TrendsView: View {
         )
     }
 
+    private var selectedAlertHighlightColor: Color {
+        Color(hex: viewModel.settings.systemAlertSettings.exceededThresholdHighlightColor)
+    }
+
     private func trendMetricLabel(title: String, value: String) -> some View {
         HStack(spacing: 4) {
             Text(title)
@@ -156,28 +186,42 @@ struct TrendsView: View {
         }
     }
 
-    private func alertBanner(alert: SystemAlert) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(alert.title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(PopoverTheme.orange)
-            Text(alert.message)
-                .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textSecondary)
-                .lineLimit(2)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(PopoverTheme.orangeDim)
-        )
-    }
-
     private func metricText(_ value: Double?, unitSuffix: String) -> String {
         guard let value else { return "--" }
         return "\(Int(value.rounded()))\(unitSuffix)"
+    }
+}
+
+enum TrendInlineAlertSlot {
+    case memory
+    case storage
+    case cpu
+    case battery
+}
+
+struct TrendInlineAlertResolver {
+    static func latestBatch(from alerts: [SystemAlert]) -> [SystemAlert] {
+        guard let latestTimestamp = alerts.first?.timestamp else {
+            return []
+        }
+        return alerts.filter { $0.timestamp == latestTimestamp }
+    }
+
+    static func inlineAlert(for slot: TrendInlineAlertSlot, from alerts: [SystemAlert]) -> SystemAlert? {
+        alerts.first(where: { self.slot(for: $0.kind) == slot })
+    }
+
+    static func slot(for kind: SystemAlertKind) -> TrendInlineAlertSlot {
+        switch kind {
+        case .ram:
+            return .memory
+        case .storage:
+            return .storage
+        case .thermal:
+            return .cpu
+        case .batteryHealth:
+            return .battery
+        }
     }
 }
 

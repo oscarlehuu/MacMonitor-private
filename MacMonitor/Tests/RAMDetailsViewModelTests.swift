@@ -189,6 +189,140 @@ final class RAMDetailsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.listeningPorts.first?.port, 3000)
     }
 
+    func testSwitchingModeClearsSearchQuery() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        portsCollector.rows = [
+            makePort(
+                endpoint: "127.0.0.1:8000",
+                port: 8000,
+                pid: 620,
+                processName: "node",
+                userID: 501,
+                protected: false
+            )
+        ]
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        viewModel.setSearchQuery("node")
+        XCTAssertEqual(viewModel.searchQuery, "node")
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+
+        XCTAssertEqual(viewModel.searchQuery, "")
+    }
+
+    func testWhitespaceOnlySearchIsNotTreatedAsActiveFilter() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        collector.mineItems = [
+            makeProcess(pid: 630, name: "Finder", userID: 501, protected: false, rankingBytes: 120),
+            makeProcess(pid: 631, name: "Mail", userID: 501, protected: false, rankingBytes: 110)
+        ]
+        collector.allItems = collector.mineItems
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        await viewModel.performRefresh()
+        viewModel.setSearchQuery("   ")
+
+        XCTAssertEqual(viewModel.filteredProcesses.count, 2)
+        XCTAssertFalse(viewModel.hasActiveSearch)
+    }
+
+    func testSearchFiltersProcessesByNameAndPID() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        collector.mineItems = [
+            makeProcess(pid: 610, name: "Google Chrome", userID: 501, protected: false, rankingBytes: 200),
+            makeProcess(pid: 611, name: "Cursor", userID: 501, protected: false, rankingBytes: 100)
+        ]
+        collector.allItems = collector.mineItems
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        await viewModel.performRefresh()
+        XCTAssertEqual(viewModel.filteredProcesses.count, 2)
+
+        viewModel.setSearchQuery("  chrome ")
+        XCTAssertEqual(viewModel.filteredProcesses.map(\.name), ["Google Chrome"])
+
+        viewModel.setSearchQuery("611")
+        XCTAssertEqual(viewModel.filteredProcesses.map(\.name), ["Cursor"])
+
+        viewModel.selectedProcessIDs = [610, 611]
+        viewModel.setSearchQuery("chrome")
+        XCTAssertEqual(viewModel.selectedProcessIDs, [610])
+    }
+
+    func testSearchFiltersPortsByProcessNameAndPortAndPrunesSelection() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let portsCollector = FakeListeningPortCollector()
+        let node = makePort(
+            endpoint: "127.0.0.1:8000",
+            port: 8000,
+            pid: 710,
+            processName: "node",
+            userID: 501,
+            protected: false
+        )
+        let postgres = makePort(
+            endpoint: "127.0.0.1:5432",
+            port: 5432,
+            pid: 711,
+            processName: "postgres",
+            userID: 501,
+            protected: false
+        )
+        portsCollector.rows = [node, postgres]
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            listeningPortCollector: portsCollector,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        viewModel.setMode(.ports)
+        await viewModel.pendingRefreshTask?.value
+        XCTAssertEqual(viewModel.filteredListeningPorts.count, 2)
+
+        viewModel.selectedPortIDs = [node.id, postgres.id]
+        viewModel.setSearchQuery("5432")
+        XCTAssertEqual(viewModel.filteredListeningPorts.map(\.id), [postgres.id])
+        XCTAssertEqual(viewModel.selectedPortIDs, [postgres.id])
+
+        viewModel.setSearchQuery(" NODE ")
+        XCTAssertEqual(viewModel.filteredListeningPorts.map(\.id), [node.id])
+
+        viewModel.setSearchQuery("127.0.0.1:8000")
+        XCTAssertEqual(viewModel.filteredListeningPorts.map(\.id), [node.id])
+
+        viewModel.setSearchQuery("711")
+        XCTAssertEqual(viewModel.filteredListeningPorts.map(\.id), [postgres.id])
+    }
+
     func testTerminateSelectedPortsDeduplicatesPIDsAndShowsForcePrompt() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()

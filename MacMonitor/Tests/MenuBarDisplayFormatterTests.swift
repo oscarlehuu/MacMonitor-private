@@ -81,6 +81,70 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         XCTAssertFalse(title?.contains("%") ?? true)
     }
 
+    func testHighlightedRangesMemoryModeHighlightsOnlyValueWhenExceeded() {
+        let text = "RAM: 92%"
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: .memory,
+            highlightRAM: true,
+            highlightStorage: false
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual((text as NSString).substring(with: ranges[0]), "92%")
+    }
+
+    func testHighlightedRangesBothModeCanHighlightOnlyRAMValue() {
+        let text = "RAM: 92% | SSD: 50%"
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: .both,
+            highlightRAM: true,
+            highlightStorage: false
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual((text as NSString).substring(with: ranges[0]), "92%")
+    }
+
+    func testHighlightedRangesBothModeCanHighlightOnlyStorageValue() {
+        let text = "RAM: 50% | SSD: 93%"
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: .both,
+            highlightRAM: false,
+            highlightStorage: true
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual((text as NSString).substring(with: ranges[0]), "93%")
+    }
+
+    func testHighlightedRangesStorageNumberLeftExcludesLeftSuffix() {
+        let text = "SSD: 20 GB left"
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: .storage,
+            highlightRAM: false,
+            highlightStorage: true
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual((text as NSString).substring(with: ranges[0]), "20 GB")
+    }
+
+    func testHighlightedRangesReturnsEmptyWhenNothingExceeded() {
+        let text = "RAM: 60% | SSD: 60%"
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: .both,
+            highlightRAM: false,
+            highlightStorage: false
+        )
+
+        XCTAssertTrue(ranges.isEmpty)
+    }
+
     private func makeSnapshot(
         memoryUsed: UInt64,
         memoryTotal: UInt64,

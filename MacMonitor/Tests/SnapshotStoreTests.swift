@@ -47,6 +47,29 @@ final class SnapshotStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlURL.path))
     }
 
+    func testMemorySnapshotDecodesLegacyPayloadWithoutActivityFields() throws {
+        let payload = """
+        {
+          "usedBytes": 1234,
+          "totalBytes": 4321,
+          "pressure": "normal",
+          "inactiveBytes": 100,
+          "compressedBytes": 50,
+          "freeBytes": 200
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: payload)
+
+        XCTAssertEqual(decoded.usedBytes, 1234)
+        XCTAssertEqual(decoded.totalBytes, 4321)
+        XCTAssertEqual(decoded.pressure, .normal)
+        XCTAssertNil(decoded.appMemoryBytes)
+        XCTAssertNil(decoded.wiredMemoryBytes)
+        XCTAssertNil(decoded.cachedFilesBytes)
+        XCTAssertNil(decoded.swapUsedBytes)
+    }
+
     private func makeSnapshot(minutesAgo: Int) -> SystemSnapshot {
         SystemSnapshot(
             timestamp: Date().addingTimeInterval(TimeInterval(-minutesAgo * 60)),

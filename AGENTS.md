@@ -16,9 +16,9 @@
 - Prefer squash merge with a Conventional Commit PR title so `main` gets the correct release signal.
 - After merging to `main`, expect `release-please` to open/update a release PR (`chore: release x.y.z`); merge that PR to publish the GitHub release and Sparkle update assets.
 
-## Open Source Mirror Rule
+## Private Distribution Rule
 
 - Private source-of-truth repo: `oscarlehuu/macmonitor` (this repo).
-- Public open-source + release authority repo: `oscarlehuu/macmonitor-open` (`main` branch).
-- Never push private feature branches or full private history directly to the public repo.
-- When publishing to public, use a sanitized snapshot branch/worktree flow and push only reviewed commits.
+- Do not publish source snapshots to any public mirror repository.
+- Sparkle update artifacts are published as binary-only feed files on this repo's `gh-pages` branch.
+- Keep all release automation and signing/notarization secrets scoped to this private source repo.

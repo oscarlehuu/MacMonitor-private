@@ -1,4 +1,5 @@
 import Combine
+import CoreGraphics
 import Foundation
 
 // MARK: - App Theme
@@ -65,6 +66,14 @@ enum MenuBarDisplayMode: String, CaseIterable, Codable, Identifiable {
 
     var id: String { rawValue }
 
+    static let userSelectableCases: [MenuBarDisplayMode] = [
+        .both,
+        .memory,
+        .storage,
+        .cpu,
+        .network
+    ]
+
     var title: String {
         switch self {
         case .memory:
@@ -102,23 +111,118 @@ enum MenuBarMetricDisplayFormat: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+private enum LegacyExceededThresholdHighlightColorPreset: String {
+    case yellow
+    case orange
+    case red
+    case green
+    case blue
+    case purple
+
+    var paletteHex: UInt32 {
+        switch self {
+        case .yellow:
+            return 0xFFD60A
+        case .orange:
+            return 0xFF9F0A
+        case .red:
+            return 0xFF453A
+        case .green:
+            return 0x32D74B
+        case .blue:
+            return 0x0A84FF
+        case .purple:
+            return 0xBF5AF2
+        }
+    }
+}
+
 struct SystemAlertSettings: Codable, Equatable {
     var thermalAlertEnabled: Bool
     var thermalThreshold: ThermalState
+    var ramAlertEnabled: Bool
+    var ramUsagePercentThreshold: Int
     var storageAlertEnabled: Bool
     var storageUsagePercentThreshold: Int
     var batteryHealthDropAlertEnabled: Bool
     var batteryHealthDropPercentThreshold: Int
     var cooldownMinutes: Int
+    var exceededThresholdHighlightColor: UInt32
+
+    private enum CodingKeys: String, CodingKey {
+        case thermalAlertEnabled
+        case thermalThreshold
+        case ramAlertEnabled
+        case ramUsagePercentThreshold
+        case storageAlertEnabled
+        case storageUsagePercentThreshold
+        case batteryHealthDropAlertEnabled
+        case batteryHealthDropPercentThreshold
+        case cooldownMinutes
+        case exceededThresholdHighlightColor
+    }
+
+    init(
+        thermalAlertEnabled: Bool,
+        thermalThreshold: ThermalState,
+        ramAlertEnabled: Bool,
+        ramUsagePercentThreshold: Int,
+        storageAlertEnabled: Bool,
+        storageUsagePercentThreshold: Int,
+        batteryHealthDropAlertEnabled: Bool,
+        batteryHealthDropPercentThreshold: Int,
+        cooldownMinutes: Int,
+        exceededThresholdHighlightColor: UInt32
+    ) {
+        self.thermalAlertEnabled = thermalAlertEnabled
+        self.thermalThreshold = thermalThreshold
+        self.ramAlertEnabled = ramAlertEnabled
+        self.ramUsagePercentThreshold = ramUsagePercentThreshold
+        self.storageAlertEnabled = storageAlertEnabled
+        self.storageUsagePercentThreshold = storageUsagePercentThreshold
+        self.batteryHealthDropAlertEnabled = batteryHealthDropAlertEnabled
+        self.batteryHealthDropPercentThreshold = batteryHealthDropPercentThreshold
+        self.cooldownMinutes = cooldownMinutes
+        self.exceededThresholdHighlightColor = exceededThresholdHighlightColor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        thermalAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .thermalAlertEnabled)
+            ?? SystemAlertSettings.default.thermalAlertEnabled
+        thermalThreshold = try container.decodeIfPresent(ThermalState.self, forKey: .thermalThreshold)
+            ?? SystemAlertSettings.default.thermalThreshold
+        ramAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .ramAlertEnabled)
+            ?? SystemAlertSettings.default.ramAlertEnabled
+        ramUsagePercentThreshold = try container.decodeIfPresent(Int.self, forKey: .ramUsagePercentThreshold)
+            ?? SystemAlertSettings.default.ramUsagePercentThreshold
+        storageAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .storageAlertEnabled)
+            ?? SystemAlertSettings.default.storageAlertEnabled
+        storageUsagePercentThreshold = try container.decodeIfPresent(Int.self, forKey: .storageUsagePercentThreshold)
+            ?? SystemAlertSettings.default.storageUsagePercentThreshold
+        batteryHealthDropAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .batteryHealthDropAlertEnabled)
+            ?? SystemAlertSettings.default.batteryHealthDropAlertEnabled
+        batteryHealthDropPercentThreshold = try container.decodeIfPresent(Int.self, forKey: .batteryHealthDropPercentThreshold)
+            ?? SystemAlertSettings.default.batteryHealthDropPercentThreshold
+        cooldownMinutes = try container.decodeIfPresent(Int.self, forKey: .cooldownMinutes)
+            ?? SystemAlertSettings.default.cooldownMinutes
+        exceededThresholdHighlightColor = Self.decodeHighlightColor(
+            from: container,
+            key: .exceededThresholdHighlightColor
+        ) ?? SystemAlertSettings.default.exceededThresholdHighlightColor
+    }
 
     static let `default` = SystemAlertSettings(
         thermalAlertEnabled: true,
         thermalThreshold: .serious,
+        ramAlertEnabled: true,
+        ramUsagePercentThreshold: 90,
         storageAlertEnabled: true,
         storageUsagePercentThreshold: 90,
         batteryHealthDropAlertEnabled: true,
         batteryHealthDropPercentThreshold: 15,
-        cooldownMinutes: 45
+        cooldownMinutes: 15,
+        exceededThresholdHighlightColor: 0xFFD60A
     )
 
     func normalized() -> SystemAlertSettings {
@@ -133,12 +237,50 @@ struct SystemAlertSettings: Codable, Equatable {
         return SystemAlertSettings(
             thermalAlertEnabled: thermalAlertEnabled,
             thermalThreshold: normalizedThreshold,
+            ramAlertEnabled: ramAlertEnabled,
+            ramUsagePercentThreshold: min(max(ramUsagePercentThreshold, 60), 99),
             storageAlertEnabled: storageAlertEnabled,
             storageUsagePercentThreshold: min(max(storageUsagePercentThreshold, 60), 99),
             batteryHealthDropAlertEnabled: batteryHealthDropAlertEnabled,
             batteryHealthDropPercentThreshold: min(max(batteryHealthDropPercentThreshold, 5), 40),
-            cooldownMinutes: min(max(cooldownMinutes, 5), 360)
+            cooldownMinutes: min(max(cooldownMinutes, 5), 30),
+            exceededThresholdHighlightColor: Self.normalizedHighlightColorHex(exceededThresholdHighlightColor)
         )
+    }
+
+    private static func decodeHighlightColor(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> UInt32? {
+        if let value = try? container.decode(UInt32.self, forKey: key) {
+            return normalizedHighlightColorHex(value)
+        }
+
+        if let value = try? container.decode(Int.self, forKey: key),
+           let safeValue = UInt32(exactly: value) {
+            return normalizedHighlightColorHex(safeValue)
+        }
+
+        if let rawValue = try? container.decode(String.self, forKey: key) {
+            if let legacyPreset = LegacyExceededThresholdHighlightColorPreset(rawValue: rawValue) {
+                return legacyPreset.paletteHex
+            }
+
+            let normalizedHexString = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "#", with: "")
+                .replacingOccurrences(of: "0x", with: "")
+            if let value = UInt32(normalizedHexString, radix: 16) {
+                return normalizedHighlightColorHex(value)
+            }
+        }
+
+        return nil
+    }
+
+    private static func normalizedHighlightColorHex(_ value: UInt32) -> UInt32 {
+        value & 0x00FF_FFFF
     }
 }
 
@@ -164,6 +306,16 @@ struct BatteryAdvancedControlFeatureFlags: Codable, Equatable {
             || hardwarePercentageRefinementEnabled
             || magsafeLEDControlEnabled
     }
+
+    func normalized() -> BatteryAdvancedControlFeatureFlags {
+        BatteryAdvancedControlFeatureFlags(
+            sleepAwareStopChargingEnabled: sleepAwareStopChargingEnabled,
+            blockSleepUntilLimitEnabled: blockSleepUntilLimitEnabled,
+            calibrationWorkflowEnabled: false,
+            hardwarePercentageRefinementEnabled: hardwarePercentageRefinementEnabled,
+            magsafeLEDControlEnabled: false
+        )
+    }
 }
 
 protocol LaunchAtLoginManaging {
@@ -173,6 +325,11 @@ protocol LaunchAtLoginManaging {
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    static let mainPopoverFixedHeight: CGFloat = 620
+    static let mainPopoverFallbackWidth: CGFloat = 440
+    static let mainPopoverMinWidth: CGFloat = 360
+    static let mainPopoverMaxWidth: CGFloat = 760
+
     @Published var appTheme: AppTheme {
         didSet {
             guard !isHydrating else { return }
@@ -191,6 +348,10 @@ final class SettingsStore: ObservableObject {
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
         didSet {
             guard !isHydrating else { return }
+            if menuBarDisplayMode == .icon {
+                menuBarDisplayMode = .both
+                return
+            }
             defaults.set(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode)
         }
     }
@@ -236,7 +397,12 @@ final class SettingsStore: ObservableObject {
     @Published var batteryAdvancedControlFeatureFlags: BatteryAdvancedControlFeatureFlags {
         didSet {
             guard !isHydrating else { return }
-            persistBatteryAdvancedControlFeatureFlags(batteryAdvancedControlFeatureFlags)
+            let normalized = batteryAdvancedControlFeatureFlags.normalized()
+            if normalized != batteryAdvancedControlFeatureFlags {
+                batteryAdvancedControlFeatureFlags = normalized
+                return
+            }
+            persistBatteryAdvancedControlFeatureFlags(normalized)
         }
     }
 
@@ -247,6 +413,20 @@ final class SettingsStore: ObservableObject {
             applyLaunchAtLoginToggle()
         }
     }
+
+    @Published private(set) var mainPopoverDefaultWidth: CGFloat {
+        didSet {
+            guard !isHydrating else { return }
+            let normalized = Self.normalizedMainPopoverWidth(mainPopoverDefaultWidth)
+            if normalized != mainPopoverDefaultWidth {
+                mainPopoverDefaultWidth = normalized
+                return
+            }
+            defaults.set(Double(normalized), forKey: Keys.mainPopoverDefaultWidth)
+        }
+    }
+
+    @Published private(set) var mainPopoverCurrentWidth: CGFloat
 
     @Published private(set) var launchAtLoginError: String?
 
@@ -270,6 +450,7 @@ final class SettingsStore: ObservableObject {
         static let systemAlertSettings = "settings.systemAlertSettings"
         static let batteryAdvancedControlFeatureFlags = "settings.batteryAdvancedControlFeatureFlags"
         static let launchAtLogin = "settings.launchAtLogin"
+        static let mainPopoverDefaultWidth = "settings.mainPopoverDefaultWidth"
     }
 
     init(
@@ -295,8 +476,11 @@ final class SettingsStore: ObservableObject {
         self.menuBarStorageFormat = Self.loadMenuBarMetricFormat(
             defaults: defaults,
             key: Keys.menuBarStorageFormat,
-            defaultFormat: .numberLeft
+            defaultFormat: .percentUsage
         )
+        let hydratedMainPopoverDefaultWidth = Self.loadMainPopoverDefaultWidth(defaults: defaults)
+        self.mainPopoverDefaultWidth = hydratedMainPopoverDefaultWidth
+        self.mainPopoverCurrentWidth = hydratedMainPopoverDefaultWidth
 
         self.batteryPolicyConfiguration = Self.loadBatteryPolicyConfiguration(defaults: defaults)
         self.systemAlertSettings = Self.loadSystemAlertSettings(defaults: defaults)
@@ -335,12 +519,23 @@ final class SettingsStore: ObservableObject {
               let decoded = try? JSONDecoder().decode(BatteryAdvancedControlFeatureFlags.self, from: data) else {
             return .default
         }
-        return decoded
+        return decoded.normalized()
+    }
+
+    private static func loadMainPopoverDefaultWidth(defaults: UserDefaults) -> CGFloat {
+        guard let value = defaults.object(forKey: Keys.mainPopoverDefaultWidth) as? Double else {
+            return mainPopoverFallbackWidth
+        }
+        return normalizedMainPopoverWidth(CGFloat(value))
     }
 
     private static func loadMenuBarDisplayMode(defaults: UserDefaults) -> MenuBarDisplayMode {
         if let persisted = defaults.string(forKey: Keys.menuBarDisplayMode),
            let mode = MenuBarDisplayMode(rawValue: persisted) {
+            if mode == .icon {
+                defaults.set(MenuBarDisplayMode.both.rawValue, forKey: Keys.menuBarDisplayMode)
+                return .both
+            }
             return mode
         }
 
@@ -351,7 +546,8 @@ final class SettingsStore: ObservableObject {
             case "storage":
                 return .storage
             case "icon":
-                return .icon
+                defaults.set(MenuBarDisplayMode.both.rawValue, forKey: Keys.menuBarDisplayMode)
+                return .both
             case "battery":
                 return .memory
             case "both":
@@ -361,7 +557,7 @@ final class SettingsStore: ObservableObject {
             }
         }
 
-        return .memory
+        return .both
     }
 
     private static func loadMenuBarMetricFormat(
@@ -386,6 +582,29 @@ final class SettingsStore: ObservableObject {
         default:
             return defaultFormat
         }
+    }
+
+    static func normalizedMainPopoverWidth(_ width: CGFloat) -> CGFloat {
+        guard width.isFinite else {
+            return mainPopoverFallbackWidth
+        }
+        return min(max(width, mainPopoverMinWidth), mainPopoverMaxWidth)
+    }
+
+    func updateMainPopoverCurrentWidth(_ width: CGFloat) {
+        mainPopoverCurrentWidth = Self.normalizedMainPopoverWidth(width)
+    }
+
+    func resetMainPopoverCurrentWidthToDefault() {
+        mainPopoverCurrentWidth = mainPopoverDefaultWidth
+    }
+
+    func saveCurrentPopoverWidthAsDefault() {
+        mainPopoverDefaultWidth = mainPopoverCurrentWidth
+    }
+
+    var hasUnsavedMainPopoverWidth: Bool {
+        abs(mainPopoverCurrentWidth - mainPopoverDefaultWidth) > 0.5
     }
 
     private func persistBatteryPolicyConfiguration(_ configuration: BatteryPolicyConfiguration) {

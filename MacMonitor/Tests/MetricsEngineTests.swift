@@ -111,14 +111,16 @@ final class MetricsEngineTests: XCTestCase {
 }
 
 final class MemoryCollectorTests: XCTestCase {
-    func testUsedPageCountExcludesInactivePages() {
-        var stats = vm_statistics64()
-        stats.active_count = 120
-        stats.inactive_count = 240
-        stats.wire_count = 30
-        stats.compressor_page_count = 10
+    func testMemoryUsedBytesSubtractsCachedAndFree() {
+        let used = MemoryCollector.memoryUsedBytes(totalBytes: 1_000, cachedFilesBytes: 300, freeBytes: 200)
 
-        XCTAssertEqual(MemoryCollector.usedPageCount(from: stats), 150)
+        XCTAssertEqual(used, 500)
+    }
+
+    func testMemoryUsedBytesClampsAtZero() {
+        let used = MemoryCollector.memoryUsedBytes(totalBytes: 1_000, cachedFilesBytes: 900, freeBytes: 200)
+
+        XCTAssertEqual(used, 0)
     }
 }
 

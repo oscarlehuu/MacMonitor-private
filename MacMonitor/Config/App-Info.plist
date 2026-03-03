@@ -28,6 +28,8 @@
     <string>$(SPARKLE_PUBLIC_ED_KEY)</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>3600</integer>
     <key>SUAutomaticallyUpdate</key>
     <true/>
     <key>LSUIElement</key>

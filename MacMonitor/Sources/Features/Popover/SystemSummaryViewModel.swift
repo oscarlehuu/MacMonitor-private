@@ -50,7 +50,7 @@ final class SystemSummaryViewModel: ObservableObject {
     @Published private(set) var history: [SystemSnapshot] = []
     @Published private(set) var recentSystemAlerts: [SystemAlert] = []
     @Published var selectedTrendWindow: TrendWindow = .last24Hours
-    @Published private(set) var screen: Screen = .battery
+    @Published private(set) var screen: Screen = .ram
 
     let settings: SettingsStore
 
@@ -62,6 +62,7 @@ final class SystemSummaryViewModel: ObservableObject {
     private let now: () -> Date
     private var cancellables = Set<AnyCancellable>()
     private var hasStarted = false
+    private var lastObservedAlertSettings: SystemAlertSettings?
 
     init(
         engine: MetricsEngine,
@@ -87,6 +88,7 @@ final class SystemSummaryViewModel: ObservableObject {
 
         history = snapshotStore.loadHistory()
         snapshot = history.last
+        lastObservedAlertSettings = settings.systemAlertSettings
         if let snapshot {
             appGroupSnapshotStore?.write(snapshot: snapshot, history: history, referenceDate: now())
             evaluateAndNotifyAlerts(for: snapshot)
@@ -107,6 +109,21 @@ final class SystemSummaryViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        settings.$systemAlertSettings
+            .dropFirst()
+            .sink { [weak self] newSettings in
+                guard let self else { return }
+                defer { self.lastObservedAlertSettings = newSettings }
+                guard let currentSnapshot = self.snapshot else { return }
+
+                if let previousSettings = self.lastObservedAlertSettings,
+                   self.isAlertPolicyEquivalent(previousSettings, newSettings) {
+                    return
+                }
+                self.evaluateAndNotifyAlerts(for: currentSnapshot)
+            }
+            .store(in: &cancellables)
+
         engine.start()
     }
 
@@ -115,6 +132,7 @@ final class SystemSummaryViewModel: ObservableObject {
         hasStarted = false
         engine.stop()
         cancellables.removeAll()
+        lastObservedAlertSettings = nil
     }
 
     func refreshNow() {
@@ -126,7 +144,7 @@ final class SystemSummaryViewModel: ObservableObject {
     }
 
     func showSummary() {
-        showBattery()
+        showRAM()
     }
 
     func showRAMDetails() {
@@ -154,7 +172,7 @@ final class SystemSummaryViewModel: ObservableObject {
     }
 
     func showStorageManagement() {
-        screen = .storageManagement
+        screen = .storage
     }
 
     func showRAMPolicyManager() {
@@ -268,5 +286,17 @@ final class SystemSummaryViewModel: ObservableObject {
 
         let cooldown = TimeInterval(settings.systemAlertSettings.cooldownMinutes * 60)
         alertNotifier.notify(alerts: alerts, cooldown: cooldown)
+    }
+
+    private func isAlertPolicyEquivalent(_ lhs: SystemAlertSettings, _ rhs: SystemAlertSettings) -> Bool {
+        lhs.thermalAlertEnabled == rhs.thermalAlertEnabled
+            && lhs.thermalThreshold == rhs.thermalThreshold
+            && lhs.ramAlertEnabled == rhs.ramAlertEnabled
+            && lhs.ramUsagePercentThreshold == rhs.ramUsagePercentThreshold
+            && lhs.storageAlertEnabled == rhs.storageAlertEnabled
+            && lhs.storageUsagePercentThreshold == rhs.storageUsagePercentThreshold
+            && lhs.batteryHealthDropAlertEnabled == rhs.batteryHealthDropAlertEnabled
+            && lhs.batteryHealthDropPercentThreshold == rhs.batteryHealthDropPercentThreshold
+            && lhs.cooldownMinutes == rhs.cooldownMinutes
     }
 }
