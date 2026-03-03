@@ -2079,7 +2079,7 @@ struct PopoverRootView: View {
             .help("Exceeded threshold color")
     }
 
-    private func colorHexValue(from color: Color) -> UInt32? {
+    private func colorHexValue(from color: Color) -> String? {
         guard let sRGBColor = NSColor(color).usingColorSpace(.sRGB) else {
             return nil
         }
@@ -2087,7 +2087,8 @@ struct PopoverRootView: View {
         let red = UInt32((sRGBColor.redComponent * 255.0).rounded())
         let green = UInt32((sRGBColor.greenComponent * 255.0).rounded())
         let blue = UInt32((sRGBColor.blueComponent * 255.0).rounded())
-        return (red << 16) | (green << 8) | blue
+        let value = (red << 16) | (green << 8) | blue
+        return String(format: "%06X", value)
     }
 
     private func settingsSectionHeader(_ title: String, symbol: String) -> some View {
