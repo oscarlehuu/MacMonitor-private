@@ -1540,27 +1540,20 @@ struct PopoverRootView: View {
     }
 
     private var settingsCompactUpdateState: SettingsCompactUpdateState {
-        let statusMessage = appUpdateController.statusMessage.lowercased()
-
-        if statusMessage.contains("disabled") || statusMessage.contains("unavailable") {
+        switch appUpdateController.updateStatus {
+        case .disabled, .unavailable:
             return .disabled
-        }
-        if statusMessage.contains("failed") || statusMessage.contains("error") {
+        case .failed:
             return .failed
-        }
-        if statusMessage.contains("checking") || statusMessage.contains("downloading") {
+        case .checking, .restarting:
             return .checking
-        }
-        if statusMessage.contains("ready to check") {
+        case .available, .updateReady, .downloaded:
+            return .available
+        case .upToDate:
+            return .upToDate
+        case .ready:
             return .ready
         }
-        if statusMessage.contains("available") || statusMessage.contains("ready") || statusMessage.contains("downloaded") {
-            return .available
-        }
-        if statusMessage.contains("up to date") {
-            return .upToDate
-        }
-        return .ready
     }
 
     private var settingsCompactUpdateActionTitle: String {
@@ -1970,43 +1963,6 @@ struct PopoverRootView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .tint(settingsToggleTint)
-        }
-    }
-
-    private func settingsPercentInputRow(
-        title: String,
-        selection: Binding<Int>,
-        isEnabled: Bool = true
-    ) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(settingsTextMain)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                TextField("", value: selection, formatter: Self.settingsIntegerFormatter)
-                    .font(.system(size: 12, weight: .medium))
-                    .multilineTextAlignment(.trailing)
-                    .textFieldStyle(.plain)
-                    .frame(width: 44)
-
-                Text("%")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(settingsTextMuted)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(settingsInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(settingsCardBorder, lineWidth: 1)
-            )
-            .frame(width: settingsPickerWidth, alignment: .trailing)
-            .disabled(!isEnabled)
-            .opacity(isEnabled ? 1.0 : 0.6)
         }
     }
 

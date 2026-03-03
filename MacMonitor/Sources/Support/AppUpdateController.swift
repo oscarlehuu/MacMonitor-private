@@ -7,9 +7,23 @@ import Sparkle
 
 @MainActor
 final class AppUpdateController: NSObject, ObservableObject {
+    enum UpdateStatus: Equatable {
+        case disabled
+        case unavailable
+        case ready
+        case checking
+        case available
+        case updateReady
+        case downloaded
+        case failed
+        case upToDate
+        case restarting
+    }
+
     @Published private(set) var updatesEnabled: Bool
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var canRestartToInstallUpdate = false
+    @Published private(set) var updateStatus: UpdateStatus
     @Published private(set) var statusMessage: String
     @Published private(set) var detailMessage: String?
 
@@ -33,8 +47,10 @@ final class AppUpdateController: NSObject, ObservableObject {
         self.updatesEnabled = updatesEnabled
         self.canCheckForUpdates = updatesEnabled
 #if canImport(Sparkle)
+        self.updateStatus = updatesEnabled ? .ready : .disabled
         self.statusMessage = updatesEnabled ? "Ready to check for updates." : "In-app updates are disabled."
 #else
+        self.updateStatus = .unavailable
         self.statusMessage = "In-app updates are unavailable in this build."
 #endif
         self.detailMessage = nil
@@ -56,11 +72,13 @@ final class AppUpdateController: NSObject, ObservableObject {
     func checkForUpdates() {
 #if canImport(Sparkle)
         guard updatesEnabled, let updater = updaterController?.updater else { return }
+        updateStatus = .checking
         statusMessage = "Checking for updates..."
         detailMessage = nil
         updater.checkForUpdates()
         refreshCapabilities(from: updater)
 #else
+        updateStatus = .unavailable
         statusMessage = "In-app updates are unavailable in this build."
 #endif
     }
@@ -68,6 +86,7 @@ final class AppUpdateController: NSObject, ObservableObject {
     func restartToInstallUpdate() {
 #if canImport(Sparkle)
         guard let immediateInstallHandler else { return }
+        updateStatus = .restarting
         statusMessage = "Restarting to install update..."
         detailMessage = nil
         canRestartToInstallUpdate = false
@@ -100,18 +119,21 @@ final class AppUpdateController: NSObject, ObservableObject {
 @MainActor
 extension AppUpdateController: @preconcurrency SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        updateStatus = .available
         statusMessage = "Update \(item.displayVersionString) is available."
         detailMessage = "Downloading release assets..."
         refreshCapabilities(from: updater)
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+        updateStatus = .upToDate
         statusMessage = "MacMonitor is up to date."
         detailMessage = nil
         refreshCapabilities(from: updater)
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
+        updateStatus = .updateReady
         statusMessage = "Update \(item.displayVersionString) is ready."
         detailMessage = "Restart to install when you are ready."
         refreshCapabilities(from: updater)
@@ -124,6 +146,7 @@ extension AppUpdateController: @preconcurrency SPUUpdaterDelegate {
     ) -> Bool {
         self.immediateInstallHandler = immediateInstallHandler
         canRestartToInstallUpdate = true
+        updateStatus = .downloaded
         statusMessage = "Update \(item.displayVersionString) downloaded."
         detailMessage = "Use Restart to Update to apply the release now."
         refreshCapabilities(from: updater)
@@ -131,6 +154,7 @@ extension AppUpdateController: @preconcurrency SPUUpdaterDelegate {
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
+        updateStatus = .failed
         statusMessage = "Update failed."
         detailMessage = error.localizedDescription
         canRestartToInstallUpdate = false
@@ -144,6 +168,7 @@ extension AppUpdateController: @preconcurrency SPUUpdaterDelegate {
         error: (any Error)?
     ) {
         if let error {
+            updateStatus = .failed
             statusMessage = "Update check failed."
             detailMessage = error.localizedDescription
         }
