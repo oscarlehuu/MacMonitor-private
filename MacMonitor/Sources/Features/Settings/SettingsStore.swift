@@ -173,6 +173,15 @@ protocol LaunchAtLoginManaging {
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    static let mainPopoverDefaultWidth: CGFloat = 920
+    static let mainPopoverMinWidth: CGFloat = 640
+    static let mainPopoverMaxWidth: CGFloat = 1280
+    static let mainPopoverFixedHeight: CGFloat = 760
+
+    static func normalizedMainPopoverWidth(_ width: CGFloat) -> CGFloat {
+        min(max(width, mainPopoverMinWidth), mainPopoverMaxWidth)
+    }
+
     @Published var appTheme: AppTheme {
         didSet {
             guard !isHydrating else { return }
@@ -250,6 +259,18 @@ final class SettingsStore: ObservableObject {
 
     @Published private(set) var launchAtLoginError: String?
 
+    @Published var mainPopoverCurrentWidth: CGFloat {
+        didSet {
+            guard !isHydrating else { return }
+            let normalized = Self.normalizedMainPopoverWidth(mainPopoverCurrentWidth)
+            if normalized != mainPopoverCurrentWidth {
+                mainPopoverCurrentWidth = normalized
+                return
+            }
+            defaults.set(Double(normalized), forKey: Keys.mainPopoverCurrentWidth)
+        }
+    }
+
     private let defaults: UserDefaults
     private let launchAtLoginManager: LaunchAtLoginManaging
     private var isHydrating = true
@@ -270,6 +291,7 @@ final class SettingsStore: ObservableObject {
         static let systemAlertSettings = "settings.systemAlertSettings"
         static let batteryAdvancedControlFeatureFlags = "settings.batteryAdvancedControlFeatureFlags"
         static let launchAtLogin = "settings.launchAtLogin"
+        static let mainPopoverCurrentWidth = "settings.mainPopoverCurrentWidth"
     }
 
     init(
@@ -307,6 +329,11 @@ final class SettingsStore: ObservableObject {
         } else {
             self.launchAtLoginEnabled = defaults.bool(forKey: Keys.launchAtLogin)
         }
+
+        let persistedPopoverWidth = defaults.object(forKey: Keys.mainPopoverCurrentWidth) as? Double
+        self.mainPopoverCurrentWidth = Self.normalizedMainPopoverWidth(
+            CGFloat(persistedPopoverWidth ?? Double(Self.mainPopoverDefaultWidth))
+        )
 
         isHydrating = false
         PopoverTheme.applyTheme(appTheme)
@@ -419,5 +446,9 @@ final class SettingsStore: ObservableObject {
             launchAtLoginEnabled = launchAtLoginManager.isEnabled()
             isSyncingLaunchToggle = false
         }
+    }
+
+    func updateMainPopoverCurrentWidth(_ width: CGFloat) {
+        mainPopoverCurrentWidth = Self.normalizedMainPopoverWidth(width)
     }
 }
