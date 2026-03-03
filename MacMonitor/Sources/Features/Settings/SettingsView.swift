@@ -147,7 +147,7 @@ struct SettingsView: View {
         settingSection(title: "Menu Bar", subtitle: "The little guy up top") {
             optionGroup(
                 selection: $settings.menuBarDisplayMode,
-                options: MenuBarDisplayMode.allCases
+                options: MenuBarDisplayMode.userSelectableCases
             ) { mode, isSelected in
                 HStack(spacing: 4) {
                     Image(systemName: menuBarDisplaySymbol(for: mode))

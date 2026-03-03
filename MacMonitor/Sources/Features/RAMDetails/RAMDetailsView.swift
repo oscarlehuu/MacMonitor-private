@@ -21,10 +21,7 @@ struct RAMDetailsView: View {
             }
 
             modeControls
-
-            if viewModel.mode == .processes {
-                scopeControls
-            }
+            searchField
 
             Text(listSummaryText)
                 .font(.system(size: 10))
@@ -107,8 +104,11 @@ struct RAMDetailsView: View {
         let segments = breakdownSegments(memory)
         let usedPercent = percentString(used: memory.usedBytes, total: memory.totalBytes, fractionDigits: 1)
         let usedUsage = "\(MetricFormatter.bytes(memory.usedBytes)) / \(MetricFormatter.bytes(memory.totalBytes))"
-        let inclCompressed = memory.usedIncludingCompressedBytes
-        let inclCompressedPercent = percentString(used: inclCompressed, total: memory.totalBytes, fractionDigits: 1)
+        let appMemoryText = byteText(memory.appMemoryBytes.map { min($0, memory.totalBytes) })
+        let wiredMemoryText = byteText(memory.wiredMemoryBytes.map { min($0, memory.totalBytes) })
+        let compressedText = byteText(memory.compressedBytes.map { min($0, memory.totalBytes) })
+        let cachedFilesText = byteText((memory.cachedFilesBytes ?? memory.inactiveBytes).map { min($0, memory.totalBytes) })
+        let swapUsedText = byteText(memory.swapUsedBytes)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
@@ -121,11 +121,11 @@ struct RAMDetailsView: View {
                         infoIcon
                     }
 
-                    Text("Used = Active + Wired")
+                    Text("Physical Memory: \(MetricFormatter.bytes(memory.totalBytes))")
                         .font(.system(size: 10))
                         .foregroundStyle(PopoverTheme.textSecondary)
 
-                    Text("Incl. Compressed: \(MetricFormatter.bytes(inclCompressed)) (\(inclCompressedPercent))")
+                    Text("Memory Used: \(MetricFormatter.bytes(memory.usedBytes)) (\(usedPercent))")
                         .font(.system(size: 10))
                         .foregroundStyle(PopoverTheme.textMuted)
                 }
@@ -163,6 +163,24 @@ struct RAMDetailsView: View {
                         .offset(x: tooltipOffsetX, y: tooltipOffsetY)
                 }
             }
+
+            Divider()
+                .overlay(PopoverTheme.borderSubtle)
+
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    summaryMetricRow(title: "Physical Memory", value: MetricFormatter.bytes(memory.totalBytes))
+                    summaryMetricRow(title: "Memory Used", value: MetricFormatter.bytes(memory.usedBytes))
+                    summaryMetricRow(title: "Cached Files", value: cachedFilesText)
+                    summaryMetricRow(title: "Swap Used", value: swapUsedText)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    summaryMetricRow(title: "App Memory", value: appMemoryText)
+                    summaryMetricRow(title: "Wired Memory", value: wiredMemoryText)
+                    summaryMetricRow(title: "Compressed", value: compressedText)
+                }
+            }
         }
         .padding(14)
         .background(
@@ -184,7 +202,7 @@ struct RAMDetailsView: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(PopoverTheme.textMuted)
         }
-        .help("Used = Active + Wired (kernel-locked memory)\nCompressed = Pages compressed by macOS\nInactive = Reclaimable file-backed cache\nFree = Immediately available pages")
+        .help("Memory Used = Physical - (Cached Files + Free)\nApp Memory = Internal memory pages\nWired Memory = Kernel-locked pages\nCompressed = Pages compressed by macOS VM")
     }
 
     private func pressureBadge(_ pressure: MemoryPressureLevel) -> some View {
@@ -287,6 +305,27 @@ struct RAMDetailsView: View {
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 
+    private func summaryMetricRow(title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10))
+                .foregroundStyle(PopoverTheme.textMuted)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(PopoverTheme.textPrimary)
+                .lineLimit(1)
+        }
+    }
+
+    private func byteText(_ value: UInt64?) -> String {
+        guard let value else { return "--" }
+        return MetricFormatter.bytes(value)
+    }
+
     private var tooltipOffsetX: CGFloat {
         let localX = hoverPoint.x - chartAreaFrame.minX + 12
         return max(0, min(localX, max(chartAreaFrame.width - 210, 0)))
@@ -299,20 +338,13 @@ struct RAMDetailsView: View {
 
     private func breakdownSegments(_ memory: MemorySnapshot) -> [MemoryBreakdownSegment] {
         let usedBytes = min(memory.usedBytes, memory.totalBytes)
-        let compressedBytes = min(memory.compressedBytes ?? 0, memory.totalBytes)
-        let inactiveBytes = min(memory.inactiveBytes ?? 0, memory.totalBytes)
-
-        let fallbackFreeBytes: UInt64 = {
-            let accounted = min(memory.totalBytes, usedBytes + compressedBytes + inactiveBytes)
-            return max(memory.totalBytes - accounted, 0)
-        }()
-
+        let cachedBytes = min(memory.cachedFilesBytes ?? memory.inactiveBytes ?? 0, memory.totalBytes)
+        let fallbackFreeBytes = max(memory.totalBytes - min(memory.totalBytes, usedBytes + cachedBytes), 0)
         let freeBytes = min(memory.freeBytes ?? fallbackFreeBytes, memory.totalBytes)
 
         let rawSegments: [(MemoryBreakdownSegmentKey, String, UInt64, Color, String)] = [
-            (.used, "Used (Active + Wired)", usedBytes, PopoverTheme.blue, "App memory + kernel-locked pages"),
-            (.compressed, "Compressed", compressedBytes, Color(hex: 0xf59e0b), "Pages compressed by macOS VM"),
-            (.inactive, "Inactive (Cache)", inactiveBytes, PopoverTheme.purple, "Reclaimable file-backed cache"),
+            (.used, "Memory Used", usedBytes, PopoverTheme.blue, "Physical memory currently in-use"),
+            (.cached, "Cached Files", cachedBytes, PopoverTheme.purple, "Reclaimable file-backed cache"),
             (.free, "Free", freeBytes, PopoverTheme.green, "Immediately available pages")
         ]
 
@@ -377,56 +409,50 @@ struct RAMDetailsView: View {
         .buttonStyle(.plain)
     }
 
-    private var scopeControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 2) {
-                scopeButton(title: "My Processes", mode: .sameUserOnly)
-                scopeButton(title: "All Discoverable", mode: .allDiscoverable)
-            }
-            .padding(3)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(PopoverTheme.bgCard)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-            )
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(PopoverTheme.textMuted)
 
-            if viewModel.canToggleAllMine {
-                Button(viewModel.showAllMine ? "Show Top \(viewModel.defaultTopRows)" : "Show All Mine (\(viewModel.myProcessCount))") {
-                    viewModel.setShowAllMine(!viewModel.showAllMine)
+            TextField(searchPlaceholder, text: searchBinding)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(PopoverTheme.textPrimary)
+
+            if !viewModel.searchQuery.isEmpty {
+                Button {
+                    viewModel.setSearchQuery("")
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(PopoverTheme.textMuted)
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(PopoverTheme.textSecondary)
-            }
-
-            if viewModel.scopeMode == .allDiscoverable
-                && viewModel.areDisplayedRowsCurrentUserOnly
-                && viewModel.hasMoreAllRowsThanDisplayed {
-                Text("Top rows are currently all from your user.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
+                .help("Clear search")
             }
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+        )
     }
 
-    private func scopeButton(title: String, mode: ProcessScopeMode) -> some View {
-        Button {
-            viewModel.setScopeMode(mode)
-        } label: {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(viewModel.scopeMode == mode ? PopoverTheme.accentContrastText : PopoverTheme.textMuted)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(viewModel.scopeMode == mode ? PopoverTheme.accent : Color.white.opacity(0.001))
-                )
-        }
-        .buttonStyle(.plain)
+    private var searchPlaceholder: String {
+        viewModel.mode == .ports ? "Search process, port, PID..." : "Search process or PID..."
+    }
+
+    private var searchBinding: Binding<String> {
+        Binding(
+            get: { viewModel.searchQuery },
+            set: { viewModel.setSearchQuery($0) }
+        )
     }
 
     private var processList: some View {
@@ -438,8 +464,8 @@ struct RAMDetailsView: View {
                     .padding(.vertical, 18)
                     .frame(maxWidth: .infinity)
                     .background(listCardBackground)
-            } else if viewModel.processes.isEmpty {
-                Text("No processes available.")
+            } else if viewModel.filteredProcesses.isEmpty {
+                Text(viewModel.hasActiveSearch ? "No matching processes." : "No processes available.")
                     .font(.system(size: 11))
                     .foregroundStyle(PopoverTheme.textSecondary)
                     .padding(.vertical, 18)
@@ -448,7 +474,7 @@ struct RAMDetailsView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        ForEach(viewModel.processes) { process in
+                        ForEach(viewModel.filteredProcesses) { process in
                             ProcessRowView(
                                 process: process,
                                 isSelected: viewModel.selectedProcessIDs.contains(process.pid),
@@ -473,8 +499,8 @@ struct RAMDetailsView: View {
                     .padding(.vertical, 18)
                     .frame(maxWidth: .infinity)
                     .background(listCardBackground)
-            } else if viewModel.listeningPorts.isEmpty {
-                Text("No listening TCP ports found.")
+            } else if viewModel.filteredListeningPorts.isEmpty {
+                Text(viewModel.hasActiveSearch ? "No matching ports." : "No listening TCP ports found.")
                     .font(.system(size: 11))
                     .foregroundStyle(PopoverTheme.textSecondary)
                     .padding(.vertical, 18)
@@ -483,7 +509,7 @@ struct RAMDetailsView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        ForEach(viewModel.listeningPorts) { row in
+                        ForEach(viewModel.filteredListeningPorts) { row in
                             PortRowView(
                                 row: row,
                                 isSelected: viewModel.selectedPortIDs.contains(row.id),
@@ -588,26 +614,26 @@ struct RAMDetailsView: View {
         }
     }
 
-    private var totalProcessesInScope: Int {
-        switch viewModel.scopeMode {
-        case .sameUserOnly:
-            return viewModel.myProcessCount
-        case .allDiscoverable:
-            return viewModel.allProcessCount
-        }
-    }
-
     private var listSummaryText: String {
         if viewModel.mode == .ports {
-            let selectableRows = viewModel.listeningPorts.filter { !$0.isProtected }.count
-            return "TCP LISTEN rows \(viewModel.listeningPorts.count) • Selectable \(selectableRows)"
+            let visibleRows = viewModel.filteredListeningPorts
+            let selectableRows = visibleRows.filter { !$0.isProtected }.count
+            if viewModel.hasActiveSearch {
+                return "Matches \(visibleRows.count) of \(viewModel.listeningPorts.count) • Selectable \(selectableRows)"
+            }
+            return "TCP LISTEN rows \(visibleRows.count) • Selectable \(selectableRows)"
         }
 
-        let listed = MetricFormatter.bytes(viewModel.listedRowsBytes)
-        if viewModel.scopeMode == .sameUserOnly && viewModel.showAllMine {
-            return "All mine \(viewModel.processes.count) of \(viewModel.myProcessCount) • Listed \(listed)"
+        let visibleRows = viewModel.filteredProcesses
+        let listed = MetricFormatter.bytes(viewModel.filteredRowsBytes)
+        let totalInScope = viewModel.scopeMode == .allDiscoverable ? viewModel.allProcessCount : viewModel.myProcessCount
+        if viewModel.hasActiveSearch {
+            return "Matches \(visibleRows.count) of \(viewModel.processes.count) • Listed \(listed)"
         }
-        return "Top \(viewModel.processes.count) of \(totalProcessesInScope) • Listed \(listed)"
+        if viewModel.scopeMode == .sameUserOnly && viewModel.showAllMine {
+            return "All mine \(visibleRows.count) of \(viewModel.myProcessCount) • Listed \(listed)"
+        }
+        return "Top \(visibleRows.count) of \(totalInScope) • Listed \(listed)"
     }
 }
 
@@ -724,7 +750,7 @@ private struct PortRowView: View {
                         .foregroundStyle(processNameColor)
                         .lineLimit(1)
 
-                    Text(metaLine)
+                    portMetaLine
                         .font(.system(size: 10, weight: .regular, design: .monospaced))
                         .foregroundStyle(PopoverTheme.textMuted)
                         .lineLimit(1)
@@ -789,18 +815,51 @@ private struct PortRowView: View {
         row.isProtected ? PopoverTheme.textMuted : PopoverTheme.textPrimary
     }
 
-    private var metaLine: String {
-        if let reason = row.protectionReason {
-            return "\(row.endpoint) • \(row.userName) • \(reason.description)"
+    private var portMetaLine: some View {
+        HStack(spacing: 4) {
+            endpointWithHighlightedPort
+            Text("•")
+            Text(row.userName)
+            if let reason = row.protectionReason {
+                Text("•")
+                Text(reason.description)
+            }
         }
-        return "\(row.endpoint) • \(row.userName)"
+    }
+
+    @ViewBuilder
+    private var endpointWithHighlightedPort: some View {
+        if let endpoint = endpointSplit {
+            HStack(spacing: 0) {
+                Text(endpoint.host)
+                Text(endpoint.port)
+                    .foregroundStyle(PopoverTheme.accent)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(PopoverTheme.accent.opacity(0.14))
+                    )
+            }
+        } else {
+            Text(row.endpoint)
+        }
+    }
+
+    private var endpointSplit: (host: String, port: String)? {
+        guard let separator = row.endpoint.lastIndex(of: ":") else { return nil }
+        let hostPart = String(row.endpoint[..<separator])
+        let portStart = row.endpoint.index(after: separator)
+        let portPart = String(row.endpoint[portStart...])
+
+        guard !hostPart.isEmpty, !portPart.isEmpty else { return nil }
+        return ("\(hostPart):", portPart)
     }
 }
 
 private enum MemoryBreakdownSegmentKey: String {
     case used
-    case compressed
-    case inactive
+    case cached
     case free
 }
 

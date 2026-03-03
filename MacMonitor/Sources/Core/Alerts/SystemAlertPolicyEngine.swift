@@ -2,6 +2,7 @@ import Foundation
 
 enum SystemAlertKind: String, Codable, Equatable, CaseIterable {
     case thermal
+    case ram
     case storage
     case batteryHealth
 }
@@ -60,6 +61,20 @@ struct SystemAlertPolicyEngine {
                         kind: .storage,
                         title: "Storage Usage High",
                         message: "Storage usage is \(Int(storagePercent.rounded()))%."
+                    )
+                )
+            }
+        }
+
+        if normalizedSettings.ramAlertEnabled {
+            let ramPercent = snapshot.memory.usageRatio * 100
+            if ramPercent >= Double(normalizedSettings.ramUsagePercentThreshold) {
+                alerts.append(
+                    SystemAlert(
+                        timestamp: referenceDate,
+                        kind: .ram,
+                        title: "RAM Usage High",
+                        message: "RAM usage is \(Int(ramPercent.rounded()))%."
                     )
                 )
             }

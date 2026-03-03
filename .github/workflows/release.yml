@@ -20,12 +20,11 @@ concurrency:
 
 env:
   SPARKLE_VERSION: 2.8.1
-  UPDATES_BASE_URL: ${{ vars.UPDATES_BASE_URL || 'https://oscarlehuu.github.io/macmonitor' }}
+  UPDATES_BASE_URL: ${{ vars.UPDATES_BASE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
   PUBLIC_DISTRIBUTION_REPO: ${{ vars.PUBLIC_DISTRIBUTION_REPO || '' }}
 
 jobs:
   publish:
-    if: github.repository == 'oscarlehuu/macmonitor'
     runs-on: macos-15
 
     steps:
@@ -33,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.event.release.tag_name || github.ref }}
 
       - name: Resolve release metadata
         id: meta
@@ -310,7 +309,7 @@ jobs:
           download_prefix="${base_updates_url}/downloads/"
           updates_repo_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-          if [[ -n "$(git ls-remote --heads "${updates_repo_remote}" gh-pages 2>/dev/null)" ]]; then
+          if git ls-remote --heads "${updates_repo_remote}" gh-pages >/dev/null 2>&1; then
             git clone --depth 1 --branch gh-pages "${updates_repo_remote}" "${updates_dir}"
           else
             mkdir -p "${updates_dir}"
@@ -391,7 +390,7 @@ jobs:
 
           git clone --depth 1 --branch gh-pages "${source_remote}" "${source_updates_dir}"
 
-          if [[ -n "$(git ls-remote --heads "${public_remote}" gh-pages 2>/dev/null)" ]]; then
+          if git ls-remote --heads "${public_remote}" gh-pages >/dev/null 2>&1; then
             git clone --depth 1 --branch gh-pages "${public_remote}" "${public_updates_dir}"
           else
             mkdir -p "${public_updates_dir}"

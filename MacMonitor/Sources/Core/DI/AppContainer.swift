@@ -204,6 +204,7 @@ final class AppContainer {
                     StorageDiskUsage(usedBytes: storage.usedBytes, totalBytes: storage.totalBytes)
                 )
             }
+        storageManagementViewModel.loadIfNeeded()
         ramPolicyMonitor.start()
         batteryLifecycleCoordinator.start()
     }

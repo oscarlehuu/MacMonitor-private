@@ -4,6 +4,11 @@ import SwiftUI
 
 @MainActor
 final class MenuBarController: NSObject {
+    private struct MenuBarHighlightState {
+        let ramExceeded: Bool
+        let storageExceeded: Bool
+    }
+
     private let viewModel: SystemSummaryViewModel
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
@@ -51,9 +56,13 @@ final class MenuBarController: NSObject {
                 batteryScheduleViewModel: batteryScheduleViewModel,
                 settings: viewModel.settings,
                 appUpdateController: appUpdateController,
+                popoverWindowProvider: { [weak self] in
+                    self?.popover.contentViewController?.view.window
+                },
                 diagnosticsExporter: diagnosticsExporter
             )
         )
+        applyMainPopoverDefaultSize()
 
         guard let button = statusItem.button else { return }
         button.action = #selector(togglePopover(_:))
@@ -82,6 +91,7 @@ final class MenuBarController: NSObject {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            applyMainPopoverDefaultSize()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
@@ -109,6 +119,13 @@ final class MenuBarController: NSObject {
             self?.renderStatusItem()
         }
         .store(in: &cancellables)
+
+        viewModel.settings.$systemAlertSettings
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.renderStatusItem()
+            }
+            .store(in: &cancellables)
     }
 
     private func renderStatusItem() {
@@ -119,28 +136,93 @@ final class MenuBarController: NSObject {
         case .icon:
             statusItem.length = NSStatusItem.squareLength
             button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
             button.image = iconOnlySymbol()
         case .memory, .storage, .cpu, .network, .both:
             statusItem.length = NSStatusItem.variableLength
-            button.imagePosition = .imageLeft
+            button.imagePosition = .noImage
             button.imageScaling = .scaleProportionallyDown
-            button.image = metricPrefixIcon()
+            button.image = nil
             button.font = NSFont.monospacedDigitSystemFont(
                 ofSize: NSFont.systemFontSize(for: .small),
                 weight: .semibold
             )
-            button.title = MenuBarDisplayFormatter.valueText(
+            let titleText = MenuBarDisplayFormatter.valueText(
                 for: viewModel.snapshot,
                 mode: settings.menuBarDisplayMode,
                 memoryFormat: settings.menuBarMemoryFormat,
                 storageFormat: settings.menuBarStorageFormat
             ) ?? ""
+            button.title = titleText
+            button.attributedTitle = attributedMenuBarTitle(
+                text: titleText,
+                mode: settings.menuBarDisplayMode,
+                font: button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
+            )
         }
 
         applyBackgroundStyle(to: button, mode: settings.menuBarDisplayMode)
         button.contentTintColor = nil
+    }
+
+    private func attributedMenuBarTitle(
+        text: String,
+        mode: MenuBarDisplayMode,
+        font: NSFont
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: font,
+                .foregroundColor: NSColor.labelColor
+            ]
+        )
+
+        let highlightState = menuBarHighlightState()
+        let highlightRanges = MenuBarDisplayFormatter.highlightedRanges(
+            in: text,
+            mode: mode,
+            highlightRAM: highlightState.ramExceeded,
+            highlightStorage: highlightState.storageExceeded
+        )
+        let highlightColor = menuBarExceededThresholdHighlightColor
+
+        for range in highlightRanges {
+            result.addAttribute(.foregroundColor, value: highlightColor, range: range)
+        }
+
+        return result
+    }
+
+    private func menuBarHighlightState() -> MenuBarHighlightState {
+        guard let snapshot = viewModel.snapshot else {
+            return MenuBarHighlightState(ramExceeded: false, storageExceeded: false)
+        }
+
+        let alertSettings = viewModel.settings.systemAlertSettings
+        let ramPercent = snapshot.memory.usageRatio * 100
+        let storagePercent = snapshot.storage.usageRatio * 100
+
+        let ramExceeded = alertSettings.ramAlertEnabled
+            && ramPercent >= Double(alertSettings.ramUsagePercentThreshold)
+        let storageExceeded = alertSettings.storageAlertEnabled
+            && storagePercent >= Double(alertSettings.storageUsagePercentThreshold)
+
+        return MenuBarHighlightState(ramExceeded: ramExceeded, storageExceeded: storageExceeded)
+    }
+
+    private var menuBarExceededThresholdHighlightColor: NSColor {
+        let hex = viewModel.settings.systemAlertSettings.exceededThresholdHighlightColor
+        return nsColor(hex: hex)
+    }
+
+    private func nsColor(hex: UInt32) -> NSColor {
+        let red = CGFloat((hex >> 16) & 0xFF) / 255.0
+        let green = CGFloat((hex >> 8) & 0xFF) / 255.0
+        let blue = CGFloat(hex & 0xFF) / 255.0
+        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1.0)
     }
 
     private func metricPrefixIcon() -> NSImage? {
@@ -234,10 +316,44 @@ final class MenuBarController: NSObject {
             }
         }
     }
+
+    private func applyMainPopoverDefaultSize() {
+        viewModel.settings.resetMainPopoverCurrentWidthToDefault()
+        applyPopoverSize(width: viewModel.settings.mainPopoverCurrentWidth)
+    }
+
+    private func applyPopoverSize(width: CGFloat) {
+        popover.contentSize = NSSize(
+            width: SettingsStore.normalizedMainPopoverWidth(width),
+            height: SettingsStore.mainPopoverFixedHeight
+        )
+    }
+
+    private func configureResizablePopoverWindow() {
+        guard let window = popover.contentViewController?.view.window else { return }
+        window.styleMask.insert(.resizable)
+        let minSize = NSSize(
+            width: SettingsStore.mainPopoverMinWidth,
+            height: SettingsStore.mainPopoverFixedHeight
+        )
+        let maxSize = NSSize(
+            width: SettingsStore.mainPopoverMaxWidth,
+            height: SettingsStore.mainPopoverFixedHeight
+        )
+        window.contentMinSize = minSize
+        window.contentMaxSize = maxSize
+
+        let normalizedWidth = SettingsStore.normalizedMainPopoverWidth(window.contentLayoutRect.width)
+        window.setContentSize(
+            NSSize(width: normalizedWidth, height: SettingsStore.mainPopoverFixedHeight)
+        )
+        viewModel.settings.updateMainPopoverCurrentWidth(normalizedWidth)
+    }
 }
 
 extension MenuBarController: NSPopoverDelegate {
     func popoverDidShow(_ notification: Notification) {
+        configureResizablePopoverWindow()
         renderStatusItem()
     }
 

@@ -39,6 +39,7 @@
 		4753E5A8D636591BC9BEC382 /* RAMDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2665DF7F6E538B2D5D4EF6E9 /* RAMDetailsView.swift */; };
 		47CCD1C1A71B3246F51747A5 /* RAMDetailsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44C1428F04FBFCBA0C2731DA /* RAMDetailsViewModel.swift */; };
 		49A6A2E10C75CA0AF4527DA1 /* TrendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F07C23AB6EAC9857843A8D /* TrendsView.swift */; };
+		4E3610ACC1CC4A2FAC9C71C6 /* SystemAlertPolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B077FF0D0B27104447898F7 /* SystemAlertPolicyEngineTests.swift */; };
 		4F226C0C7A62B29D0765FDB0 /* FileRAMPolicyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2B40D2FD6F77679BD222DB /* FileRAMPolicyStoreTests.swift */; };
 		527E7D856CF40F2B1D7DCBFA /* RunningAppPreflightCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C375B2194AF206B2ACBA35C4 /* RunningAppPreflightCoordinatorTests.swift */; };
 		54DA1EB3085A182A6DFC1B26 /* BatteryScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FC1349FC699830E89CA4A9 /* BatteryScreenView.swift */; };
@@ -180,6 +181,7 @@
 		34A720CC27D1A6BF69E9C2AA /* RAMPolicyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyMonitor.swift; sourceTree = "<group>"; };
 		35B62E09E6632776880D8314 /* BatteryScheduleCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryScheduleCoordinatorTests.swift; sourceTree = "<group>"; };
 		38E319329C90694AD37693FE /* MetricFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricFormatter.swift; sourceTree = "<group>"; };
+		3B077FF0D0B27104447898F7 /* SystemAlertPolicyEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAlertPolicyEngineTests.swift; sourceTree = "<group>"; };
 		3EA639F3554AB98154A6A2DF /* StorageRingChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageRingChartView.swift; sourceTree = "<group>"; };
 		3F3718321C22DD14B8B2D695 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4152BE4A80031CF8082079D1 /* RAMPolicyEventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyEventStore.swift; sourceTree = "<group>"; };
@@ -568,6 +570,7 @@
 				9A2D67A66893D3CE26C64B82 /* SignalProcessTerminatorTests.swift */,
 				28CD4F8B3CFF153D7BB06F5B /* SnapshotStoreTests.swift */,
 				9DD9DB38629F7CE289E8E0C9 /* StorageManagementViewModelTests.swift */,
+				3B077FF0D0B27104447898F7 /* SystemAlertPolicyEngineTests.swift */,
 				F6FEC685BC6C27E89EAC286C /* SystemSummaryViewModelTests.swift */,
 			);
 			name = Tests;
@@ -779,11 +782,15 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/com.oscar.macmonitor.battery-helper",
+				"$(SRCROOT)/MacMonitor/Config/AppIcon.icns",
 			);
 			name = "Embed Battery Helper";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchServices/com.oscar.macmonitor.battery-helper",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/AppIcon.icns",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -819,6 +826,7 @@
 				D3B341F8A190646028CFB2B5 /* SignalProcessTerminatorTests.swift in Sources */,
 				78CB8292ACC26CC5D47B70B3 /* SnapshotStoreTests.swift in Sources */,
 				6D7B3950ED4B3AA26C0FECA7 /* StorageManagementViewModelTests.swift in Sources */,
+				4E3610ACC1CC4A2FAC9C71C6 /* SystemAlertPolicyEngineTests.swift in Sources */,
 				5C9D22A7CE427706DBDE8FED /* SystemSummaryViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -963,7 +971,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
-				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor/appcast.xml";
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-open/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Debug;
@@ -1160,7 +1168,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
-				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor/appcast.xml";
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-open/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Release;

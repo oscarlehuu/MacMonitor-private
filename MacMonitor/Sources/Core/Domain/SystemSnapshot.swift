@@ -175,6 +175,10 @@ struct MemorySnapshot: Codable, Equatable {
     let inactiveBytes: UInt64?
     let compressedBytes: UInt64?
     let freeBytes: UInt64?
+    let appMemoryBytes: UInt64?
+    let wiredMemoryBytes: UInt64?
+    let cachedFilesBytes: UInt64?
+    let swapUsedBytes: UInt64?
 
     init(
         usedBytes: UInt64,
@@ -182,7 +186,11 @@ struct MemorySnapshot: Codable, Equatable {
         pressure: MemoryPressureLevel,
         inactiveBytes: UInt64? = nil,
         compressedBytes: UInt64? = nil,
-        freeBytes: UInt64? = nil
+        freeBytes: UInt64? = nil,
+        appMemoryBytes: UInt64? = nil,
+        wiredMemoryBytes: UInt64? = nil,
+        cachedFilesBytes: UInt64? = nil,
+        swapUsedBytes: UInt64? = nil
     ) {
         self.usedBytes = usedBytes
         self.totalBytes = totalBytes
@@ -190,6 +198,10 @@ struct MemorySnapshot: Codable, Equatable {
         self.inactiveBytes = inactiveBytes
         self.compressedBytes = compressedBytes
         self.freeBytes = freeBytes
+        self.appMemoryBytes = appMemoryBytes
+        self.wiredMemoryBytes = wiredMemoryBytes
+        self.cachedFilesBytes = cachedFilesBytes
+        self.swapUsedBytes = swapUsedBytes
     }
 
     var usageRatio: Double {
@@ -198,7 +210,7 @@ struct MemorySnapshot: Codable, Equatable {
     }
 
     var usedIncludingCompressedBytes: UInt64 {
-        min(totalBytes, usedBytes + (compressedBytes ?? 0))
+        usedBytes
     }
 
     static func empty(totalBytes: UInt64) -> MemorySnapshot {

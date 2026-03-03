@@ -14,6 +14,19 @@ struct StorageListRow: Identifiable, Equatable {
     var id: String { item.id }
 }
 
+struct StorageDeletionPreviewRow: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let path: String
+    let sizeBytes: UInt64
+}
+
+struct StorageSelectionSnapshot: Equatable {
+    let selectedItemIDs: Set<String>
+    let expandedItemIDs: Set<String>
+    let activePreset: StorageCleanupPreset?
+}
+
 @MainActor
 final class StorageManagementViewModel: ObservableObject {
     private struct TrackedFolderAccess: Codable, Equatable {
@@ -181,19 +194,63 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func addCustomFolder(_ url: URL) {
+        errorMessage = nil
+
         let normalized = url.standardizedFileURL
         let normalizedPath = normalized.path
-        guard !trackedFolderAccesses.contains(where: { $0.path == normalizedPath }) else {
-            return
+        guard normalizedPath != "/" else { return }
+
+        let fileManager = FileManager.default
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        let defaultPaths = defaultScanSourceAbsolutePaths(homeDirectory: homeDirectory)
+        let exactOnlyBlockedDefaults = Set([
+            homeDirectory.appendingPathComponent("Developer", isDirectory: true).standardizedFileURL.path,
+            homeDirectory.appendingPathComponent("Projects", isDirectory: true).standardizedFileURL.path
+        ])
+        let candidatePaths = customFolderCandidatePaths(
+            for: normalizedPath,
+            avoiding: defaultPaths,
+            exactOnlyBlockedRoots: exactOnlyBlockedDefaults,
+            fileManager: fileManager
+        )
+        guard !candidatePaths.isEmpty else { return }
+
+        var trackedAccessByPath: [String: TrackedFolderAccess] = [:]
+        for access in trackedFolderAccesses {
+            let path = URL(fileURLWithPath: access.path).standardizedFileURL.path
+            trackedAccessByPath[path] = TrackedFolderAccess(path: path, bookmarkData: access.bookmarkData)
         }
 
-        let access = TrackedFolderAccess(
-            path: normalizedPath,
-            bookmarkData: makeBookmarkData(for: normalized)
-        )
-        trackedFolderAccesses.append(access)
-        trackedFolderAccesses.sort { lhs, rhs in
-            lhs.path.localizedCaseInsensitiveCompare(rhs.path) == .orderedAscending
+        var didChange = false
+        for candidatePath in candidatePaths {
+            if let coveringPath = trackedAccessByPath.keys.first(where: { isPathEqualOrDescendant(candidatePath, ancestor: $0) }),
+               coveringPath != candidatePath {
+                continue
+            }
+
+            let descendantPaths = trackedAccessByPath.keys.filter { existingPath in
+                existingPath != candidatePath && isPathEqualOrDescendant(existingPath, ancestor: candidatePath)
+            }
+            if !descendantPaths.isEmpty {
+                didChange = true
+                for descendantPath in descendantPaths {
+                    trackedAccessByPath.removeValue(forKey: descendantPath)
+                }
+            }
+
+            if trackedAccessByPath[candidatePath] == nil {
+                trackedAccessByPath[candidatePath] = TrackedFolderAccess(
+                    path: candidatePath,
+                    bookmarkData: makeBookmarkData(for: URL(fileURLWithPath: candidatePath, isDirectory: true))
+                )
+                didChange = true
+            }
+        }
+
+        guard didChange else { return }
+
+        trackedFolderAccesses = trackedAccessByPath.values.sorted { lhs, rhs in
+            pathSort(lhs.path, rhs.path)
         }
         persistTrackedFolderAccesses()
         reloadTrackedFolders()
@@ -229,7 +286,7 @@ final class StorageManagementViewModel: ObservableObject {
         let selectableIDs = selectableIDs(for: group.id)
         guard !selectableIDs.isEmpty else { return .none }
 
-        let selectedCount = selectableIDs.intersection(selectedItemIDs).count
+        let selectedCount = effectiveSelectedCount(in: selectableIDs)
         if selectedCount == 0 {
             return .none
         }
@@ -246,17 +303,10 @@ final class StorageManagementViewModel: ObservableObject {
 
         switch groupSelectionState(group) {
         case .all:
+            materializeSelectedAncestorsCovering(targetIDs: groupSelectableIDs)
             selectedItemIDs.subtract(groupSelectableIDs)
         case .none, .partial:
-            let orderedIDs = groupSelectableIDs.sorted { lhs, rhs in
-                if lhs.count == rhs.count {
-                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-                }
-                return lhs.count < rhs.count
-            }
-            for id in orderedIDs {
-                selectNonOverlapping(itemID: id)
-            }
+            selectedItemIDs.formUnion(groupSelectableIDs)
         }
 
         activePreset = nil
@@ -294,18 +344,65 @@ final class StorageManagementViewModel: ObservableObject {
         flattenRows(items: visibleLooseItems)
     }
 
+    func allLooseRows() -> [StorageListRow] {
+        flattenRows(items: looseItems)
+    }
+
     func toggleSelection(for itemID: String) {
         guard let item = itemIndex[itemID], !item.isProtected else {
             return
         }
 
-        if selectedItemIDs.contains(itemID) {
-            selectedItemIDs.remove(itemID)
+        let targetSubtreeIDs = subtreeSelectableIDs(for: itemID)
+        guard !targetSubtreeIDs.isEmpty else { return }
+
+        // If any ancestor is selected, expand all selected ancestors into explicit descendants first.
+        let selectedAncestorIDs = selectedAncestors(of: itemID)
+        if !selectedAncestorIDs.isEmpty {
+            for selectedAncestorID in selectedAncestorIDs {
+                let ancestorSubtreeIDs = subtreeSelectableIDs(for: selectedAncestorID)
+                selectedItemIDs.remove(selectedAncestorID)
+                selectedItemIDs.formUnion(ancestorSubtreeIDs.subtracting([selectedAncestorID]))
+            }
+        }
+
+        let selectedInSubtreeCount = effectiveSelectedCount(in: targetSubtreeIDs)
+        if selectedInSubtreeCount == targetSubtreeIDs.count {
+            selectedItemIDs.subtract(targetSubtreeIDs)
         } else {
-            selectNonOverlapping(itemID: itemID)
+            selectedItemIDs.formUnion(targetSubtreeIDs)
         }
 
         activePreset = nil
+    }
+
+    func itemSelectionState(_ itemID: String) -> StorageSelectionState {
+        guard let item = itemIndex[itemID], !item.isProtected else { return .none }
+        let subtreeIDs = subtreeSelectableIDs(for: itemID)
+        guard !subtreeIDs.isEmpty else { return .none }
+
+        let selectedCount = effectiveSelectedCount(in: subtreeIDs)
+        if selectedCount == 0 {
+            return .none
+        }
+        if selectedCount == subtreeIDs.count {
+            return .all
+        }
+        return .partial
+    }
+
+    func makeSelectionSnapshot() -> StorageSelectionSnapshot {
+        StorageSelectionSnapshot(
+            selectedItemIDs: selectedItemIDs,
+            expandedItemIDs: expandedItemIDs,
+            activePreset: activePreset
+        )
+    }
+
+    func restoreSelectionSnapshot(_ snapshot: StorageSelectionSnapshot) {
+        selectedItemIDs = snapshot.selectedItemIDs.intersection(selectableItemIDs)
+        expandedItemIDs = Set(snapshot.expandedItemIDs.filter { itemIndex[$0] != nil })
+        activePreset = snapshot.activePreset
     }
 
     func requestDeleteSelection() {
@@ -426,6 +523,42 @@ final class StorageManagementViewModel: ObservableObject {
         normalizedSelectedItems.reduce(0) { $0 + $1.sizeBytes }
     }
 
+    var deletionPreviewRows: [StorageDeletionPreviewRow] {
+        sortedDeletionPreviewItems
+            .map { item in
+                StorageDeletionPreviewRow(
+                    id: item.id,
+                    displayName: item.displayName,
+                    path: item.url.path,
+                    sizeBytes: item.sizeBytes
+                )
+            }
+    }
+
+    var deletionPreviewRootItemIDs: Set<String> {
+        Set(sortedDeletionPreviewItems.map(\.id))
+    }
+
+    var deletionPreviewListRows: [StorageListRow] {
+        deletionPreviewListRows(rootItemIDs: deletionPreviewRootItemIDs)
+    }
+
+    func deletionPreviewListRows(rootItemIDs: Set<String>) -> [StorageListRow] {
+        let rootItems = rootItemIDs.compactMap { itemIndex[$0] }.sorted { lhs, rhs in
+            if lhs.sizeBytes == rhs.sizeBytes {
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
+            return lhs.sizeBytes > rhs.sizeBytes
+        }
+        return flattenRows(items: rootItems)
+    }
+
+    func isItemInDeletionScope(_ itemID: String) -> Bool {
+        normalizedSelectedItems.contains { selectedItem in
+            isAncestorPath(ancestor: selectedItem.id, descendant: itemID)
+        }
+    }
+
     var forceQuitPromptMessage: String {
         if forceQuitCandidateNames.isEmpty {
             return "Some selected apps are still running. Force quitting may lose unsaved work."
@@ -486,37 +619,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     var ringBuckets: [StorageRingBucket] {
-        var buckets: [StorageRingBucket] = []
-        buckets.reserveCapacity(appGroups.count + looseItems.count)
-
-        for group in appGroups where group.totalBytes > 0 {
-            buckets.append(
-                StorageRingBucket(
-                    id: "group:\(group.id)",
-                    label: group.displayName,
-                    sizeBytes: group.totalBytes,
-                    category: .application
-                )
-            )
-        }
-
-        for item in looseItems where item.sizeBytes > 0 {
-            buckets.append(
-                StorageRingBucket(
-                    id: "item:\(item.id)",
-                    label: item.displayName,
-                    sizeBytes: item.sizeBytes,
-                    category: item.category
-                )
-            )
-        }
-
-        let sorted = buckets.sorted { lhs, rhs in
-            if lhs.sizeBytes == rhs.sizeBytes {
-                return lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
-            }
-            return lhs.sizeBytes > rhs.sizeBytes
-        }
+        let sorted = sortedRingSourceBuckets()
 
         guard sorted.count > 10 else { return sorted }
 
@@ -532,6 +635,16 @@ final class StorageManagementViewModel: ObservableObject {
                 category: .folder
             )
         ]
+    }
+
+    func selectRingBucketForDeletion(_ bucketID: String) {
+        guard ringBuckets.contains(where: { $0.id == bucketID }) else { return }
+
+        let targetItemIDs = selectableItemIDsForRingBucket(bucketID)
+        guard !targetItemIDs.isEmpty else { return }
+
+        selectedItemIDs.formUnion(targetItemIDs)
+        activePreset = nil
     }
 
     var visibleAppGroups: [StorageAppGroup] {
@@ -554,6 +667,22 @@ final class StorageManagementViewModel: ObservableObject {
 
     var hasLooseItems: Bool {
         !visibleLooseItems.isEmpty
+    }
+
+    var defaultScanSourcePaths: [String] {
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        return defaultScanSourceAbsolutePaths(homeDirectory: homeDirectory)
+            .map { formatDisplayPath($0, homeDirectory: homeDirectory) }
+    }
+
+    var addedScanSourcePaths: [String] {
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        return resolveTrackedFolderURLs()
+            .map(\.path)
+            .sorted { lhs, rhs in
+                lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+            .map { formatDisplayPath($0, homeDirectory: homeDirectory) }
     }
 
     private func executeDeletion(
@@ -595,6 +724,63 @@ final class StorageManagementViewModel: ObservableObject {
         forceQuitCandidateNames = []
     }
 
+    private func selectableItemIDsForRingBucket(_ bucketID: String) -> Set<String> {
+        if bucketID == "other" {
+            return Set(
+                sortedRingSourceBuckets()
+                    .dropFirst(9)
+                    .flatMap { selectableItemIDsForRingSourceID($0.id) }
+            )
+        }
+        return selectableItemIDsForRingSourceID(bucketID)
+    }
+
+    private func selectableItemIDsForRingSourceID(_ ringSourceID: String) -> Set<String> {
+        if ringSourceID.hasPrefix("group:") {
+            let groupID = String(ringSourceID.dropFirst("group:".count))
+            return selectableIDs(for: groupID)
+        }
+        if ringSourceID.hasPrefix("item:") {
+            let itemID = String(ringSourceID.dropFirst("item:".count))
+            return subtreeSelectableIDs(for: itemID)
+        }
+        return []
+    }
+
+    private func sortedRingSourceBuckets() -> [StorageRingBucket] {
+        var buckets: [StorageRingBucket] = []
+        buckets.reserveCapacity(appGroups.count + looseItems.count)
+
+        for group in appGroups where group.totalBytes > 0 {
+            buckets.append(
+                StorageRingBucket(
+                    id: "group:\(group.id)",
+                    label: group.displayName,
+                    sizeBytes: group.totalBytes,
+                    category: .application
+                )
+            )
+        }
+
+        for item in looseItems where item.sizeBytes > 0 {
+            buckets.append(
+                StorageRingBucket(
+                    id: "item:\(item.id)",
+                    label: item.displayName,
+                    sizeBytes: item.sizeBytes,
+                    category: item.category
+                )
+            )
+        }
+
+        return buckets.sorted { lhs, rhs in
+            if lhs.sizeBytes == rhs.sizeBytes {
+                return lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
+            }
+            return lhs.sizeBytes > rhs.sizeBytes
+        }
+    }
+
     private func applyPreset(_ preset: StorageCleanupPreset, keepPresetActive: Bool) {
         let candidateItems = itemIndex.values
             .filter { !$0.isProtected }
@@ -606,10 +792,7 @@ final class StorageManagementViewModel: ObservableObject {
                 return lhs.id.count < rhs.id.count
             }
 
-        selectedItemIDs.removeAll()
-        for candidate in candidateItems {
-            selectNonOverlapping(itemID: candidate.id)
-        }
+        selectedItemIDs = Set(candidateItems.map(\.id))
 
         if keepPresetActive {
             activePreset = preset
@@ -677,6 +860,151 @@ final class StorageManagementViewModel: ObservableObject {
         return false
     }
 
+    private func defaultScanSourceAbsolutePaths(homeDirectory: URL) -> [String] {
+        [
+            "/Applications",
+            homeDirectory.appendingPathComponent("Applications", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Caches", isDirectory: true).path,
+            "/Library/Caches",
+            homeDirectory.appendingPathComponent("Library/Application Support", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Containers", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Logs", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Preferences", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Developer/CoreSimulator", isDirectory: true).path,
+            homeDirectory.appendingPathComponent(".npm", isDirectory: true).path,
+            homeDirectory.appendingPathComponent(".pnpm-store", isDirectory: true).path,
+            homeDirectory.appendingPathComponent(".cache/yarn", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Caches/Yarn", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Library/Caches/pnpm", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Developer", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("Projects", isDirectory: true).path
+        ]
+        .map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+    }
+
+    private func pathsOverlap(_ lhs: String, _ rhs: String) -> Bool {
+        let normalizedLHS = URL(fileURLWithPath: lhs).standardizedFileURL.path
+        let normalizedRHS = URL(fileURLWithPath: rhs).standardizedFileURL.path
+
+        return isPathEqualOrDescendant(normalizedLHS, ancestor: normalizedRHS) ||
+            isPathEqualOrDescendant(normalizedRHS, ancestor: normalizedLHS)
+    }
+
+    private func customFolderCandidatePaths(
+        for rootPath: String,
+        avoiding blockedPaths: [String],
+        exactOnlyBlockedRoots: Set<String>,
+        fileManager: FileManager
+    ) -> [String] {
+        let normalizedRoot = URL(fileURLWithPath: rootPath).standardizedFileURL.path
+        guard normalizedRoot != "/" else { return [] }
+
+        var pendingPaths: [String] = [normalizedRoot]
+        var acceptedPaths = Set<String>()
+        var visitedPaths = Set<String>()
+        let maxPathVisits = 1024
+
+        while let currentPath = pendingPaths.popLast() {
+            guard visitedPaths.insert(currentPath).inserted else { continue }
+            if visitedPaths.count > maxPathVisits {
+                return []
+            }
+
+            if isBlockedPath(
+                currentPath,
+                blockedPaths: blockedPaths,
+                exactOnlyBlockedRoots: exactOnlyBlockedRoots
+            ) {
+                continue
+            }
+
+            let containsBlockedDescendant = blockedPaths.contains { blockedPath in
+                blockedPath != currentPath && isPathEqualOrDescendant(blockedPath, ancestor: currentPath)
+            }
+            if !containsBlockedDescendant {
+                acceptedPaths.insert(currentPath)
+                continue
+            }
+
+            let childPaths = childDirectoryPaths(of: currentPath, fileManager: fileManager)
+            if childPaths.isEmpty {
+                continue
+            }
+            pendingPaths.append(contentsOf: childPaths)
+        }
+
+        return acceptedPaths.sorted(by: pathSort)
+    }
+
+    private func isBlockedPath(
+        _ path: String,
+        blockedPaths: [String],
+        exactOnlyBlockedRoots: Set<String>
+    ) -> Bool {
+        for blockedPath in blockedPaths {
+            if path == blockedPath {
+                return true
+            }
+            if isPathEqualOrDescendant(path, ancestor: blockedPath),
+               !exactOnlyBlockedRoots.contains(blockedPath) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func isPathEqualOrDescendant(_ path: String, ancestor: String) -> Bool {
+        if path == ancestor {
+            return true
+        }
+        if ancestor == "/" {
+            return true
+        }
+        return path.hasPrefix(ancestor + "/")
+    }
+
+    private func childDirectoryPaths(of parentPath: String, fileManager: FileManager) -> [String] {
+        let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
+        guard let childURLs = try? fileManager.contentsOfDirectory(
+            at: parentURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return childURLs.compactMap { childURL in
+            let values = try? childURL.resourceValues(forKeys: [.isDirectoryKey])
+            guard values?.isDirectory == true else { return nil }
+            return childURL.standardizedFileURL.path
+        }
+        .sorted(by: pathSort)
+    }
+
+    private func pathSort(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsDepth = lhs.split(separator: "/").count
+        let rhsDepth = rhs.split(separator: "/").count
+        if lhsDepth == rhsDepth {
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+        return lhsDepth < rhsDepth
+    }
+
+    private func formatDisplayPath(_ path: String, homeDirectory: URL) -> String {
+        let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let homePath = homeDirectory.standardizedFileURL.path
+
+        if normalizedPath == homePath {
+            return "~"
+        }
+        if normalizedPath.hasPrefix(homePath + "/") {
+            return "~" + normalizedPath.dropFirst(homePath.count)
+        }
+        return normalizedPath
+    }
+
     private func loadChildrenIfNeeded(for item: StorageManagedItem) {
         guard item.isExpandable else { return }
         guard drilledItemsByParentID[item.id] == nil else { return }
@@ -695,10 +1023,23 @@ final class StorageManagementViewModel: ObservableObject {
 
             guard let self, !Task.isCancelled, generation == scanGeneration else { return }
 
+            let selectedIDsBeforeChildLoad = selectedItemIDs
             loadingParentItemIDs.remove(parentID)
             drilledItemsByParentID[parentID] = children
             rebuildItemIndex()
             selectedItemIDs = selectedItemIDs.intersection(selectableItemIDs)
+
+            let loadedChildIDs = Set(children.filter { !$0.isProtected }.map(\.id))
+            if !loadedChildIDs.isEmpty {
+                for loadedChildID in loadedChildIDs {
+                    let hasSelectedAncestor = selectedIDsBeforeChildLoad.contains { selectedID in
+                        isAncestorPath(ancestor: selectedID, descendant: loadedChildID)
+                    }
+                    if hasSelectedAncestor {
+                        selectedItemIDs.insert(loadedChildID)
+                    }
+                }
+            }
 
             if let preset = activePreset {
                 applyPreset(preset, keepPresetActive: true)
@@ -753,29 +1094,8 @@ final class StorageManagementViewModel: ObservableObject {
         )
     }
 
-    private func selectNonOverlapping(itemID: String) {
-        selectedItemIDs = Set(
-            selectedItemIDs.filter { selectedID in
-                !isAncestorPath(ancestor: selectedID, descendant: itemID)
-                    && !isAncestorPath(ancestor: itemID, descendant: selectedID)
-            }
-        )
-        selectedItemIDs.insert(itemID)
-    }
-
     private func normalizeSelection() {
-        let availableIDs = selectedItemIDs.intersection(selectableItemIDs)
-        let orderedIDs = availableIDs.sorted { lhs, rhs in
-            if lhs.count == rhs.count {
-                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-            }
-            return lhs.count < rhs.count
-        }
-
-        selectedItemIDs.removeAll()
-        for id in orderedIDs {
-            selectNonOverlapping(itemID: id)
-        }
+        selectedItemIDs = selectedItemIDs.intersection(selectableItemIDs)
     }
 
     private var normalizedSelectedItems: [StorageManagedItem] {
@@ -800,6 +1120,72 @@ final class StorageManagementViewModel: ObservableObject {
         }
 
         return normalized
+    }
+
+    private var sortedDeletionPreviewItems: [StorageManagedItem] {
+        normalizedSelectedItems.sorted { lhs, rhs in
+            if lhs.sizeBytes == rhs.sizeBytes {
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
+            return lhs.sizeBytes > rhs.sizeBytes
+        }
+    }
+
+    private func subtreeSelectableIDs(for itemID: String) -> Set<String> {
+        let normalizedRootID = itemID
+        let prefix = normalizedRootID + "/"
+
+        return Set(
+            itemIndex.values
+                .filter { !$0.isProtected }
+                .filter { item in
+                    item.id == normalizedRootID || item.id.hasPrefix(prefix)
+                }
+                .map(\.id)
+        )
+    }
+
+    private func effectiveSelectedCount(in candidateIDs: Set<String>) -> Int {
+        candidateIDs.reduce(into: 0) { partial, candidateID in
+            if isEffectivelySelected(candidateID) {
+                partial += 1
+            }
+        }
+    }
+
+    private func isEffectivelySelected(_ itemID: String) -> Bool {
+        if selectedItemIDs.contains(itemID) {
+            return true
+        }
+
+        return selectedItemIDs.contains { selectedID in
+            selectedID != itemID && isAncestorPath(ancestor: selectedID, descendant: itemID)
+        }
+    }
+
+    private func materializeSelectedAncestorsCovering(targetIDs: Set<String>) {
+        let selectedAncestorIDs = selectedItemIDs.filter { selectedID in
+            targetIDs.contains { targetID in
+                selectedID != targetID && isAncestorPath(ancestor: selectedID, descendant: targetID)
+            }
+        }
+        .sorted { lhs, rhs in lhs.count < rhs.count }
+
+        guard !selectedAncestorIDs.isEmpty else { return }
+
+        for selectedAncestorID in selectedAncestorIDs {
+            let ancestorSubtreeIDs = subtreeSelectableIDs(for: selectedAncestorID)
+            selectedItemIDs.remove(selectedAncestorID)
+            selectedItemIDs.formUnion(ancestorSubtreeIDs.subtracting([selectedAncestorID]))
+        }
+    }
+
+    private func selectedAncestors(of itemID: String) -> [String] {
+        selectedItemIDs
+            .filter { selectedID in
+                selectedID != itemID && isAncestorPath(ancestor: selectedID, descendant: itemID)
+            }
+            .sorted { lhs, rhs in lhs.count < rhs.count }
     }
 
     private func isAncestorPath(ancestor: String, descendant: String) -> Bool {

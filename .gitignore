@@ -2,6 +2,7 @@ DerivedData/
 .build/
 build/
 .derived-live-install/
+.tmp-fix-wt/
 *.xcuserstate
 *.xcworkspace/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/

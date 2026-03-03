@@ -2,8 +2,12 @@ import AppKit
 import SwiftUI
 
 struct StorageManagementView: View {
+    private static let appIconCache = NSCache<NSString, NSImage>()
+
     @ObservedObject var viewModel: StorageManagementViewModel
     let onBack: () -> Void
+    var showBackButton: Bool = true
+    var showHeader: Bool = true
 
     @State private var isLooseExpanded = true
     @State private var didHandleInitialAccess = false
@@ -12,58 +16,50 @@ struct StorageManagementView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            actionHeader
+            if showHeader {
+                actionHeader
+            }
 
             if viewModel.isScanning {
                 scanningCard
             }
 
-            projectionCard
-            if !viewModel.ringBuckets.isEmpty {
-                ringCard
-            }
             selectionSummaryCard
 
-            if !viewModel.trackedFolders.isEmpty {
-                trackedFoldersCard
-            }
+            ScrollView(showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !viewModel.ringBuckets.isEmpty {
+                        ringCard
+                    }
 
-            if let resultMessage = viewModel.resultMessage, !resultMessage.isEmpty {
-                infoMessageCard(
-                    text: resultMessage,
-                    foreground: PopoverTheme.green,
-                    background: PopoverTheme.greenDim
-                )
-            }
+                    if let resultMessage = viewModel.resultMessage, !resultMessage.isEmpty {
+                        infoMessageCard(
+                            text: resultMessage,
+                            foreground: PopoverTheme.green,
+                            background: PopoverTheme.greenDim
+                        )
+                    }
 
-            if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
-                infoMessageCard(
-                    text: errorMessage,
-                    foreground: PopoverTheme.red,
-                    background: PopoverTheme.redDim
-                )
-            }
+                    if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
+                        infoMessageCard(
+                            text: errorMessage,
+                            foreground: PopoverTheme.red,
+                            background: PopoverTheme.redDim
+                        )
+                    }
 
-            groupsCard
+                    groupsCard
+                }
+            }
+            .frame(maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
             if !didHandleInitialAccess {
                 didHandleInitialAccess = true
                 requestInitialAccessIfNeeded()
             }
             viewModel.loadIfNeeded()
-        }
-        .confirmationDialog(
-            "Move selected items to Trash?",
-            isPresented: $viewModel.showingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Move to Trash", role: .destructive) {
-                Task { await viewModel.deleteSelected() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Selected: \(viewModel.selectedAllowedCount) • \(MetricFormatter.bytes(viewModel.selectedAllowedBytes))")
         }
         .confirmationDialog(
             "Force quit still-running apps?",
@@ -82,61 +78,72 @@ struct StorageManagementView: View {
         } message: {
             Text(viewModel.forceQuitPromptMessage)
         }
+        .onChange(of: viewModel.showingDeleteConfirmation) { _, isPresented in
+            if isPresented {
+                isSearchFieldFocused = false
+            }
+        }
     }
 
     private var actionHeader: some View {
         HStack(spacing: 8) {
-            Button {
-                onBack()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
+            HStack(spacing: 8) {
+                if showBackButton {
+                    Button {
+                        onBack()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(PopoverTheme.textSecondary)
                 }
-                .font(.system(size: 11, weight: .medium))
+
+                if let lastUpdated = viewModel.lastUpdated {
+                    Text("Updated \(MetricFormatter.relativeTime(from: lastUpdated))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textSecondary)
 
             Spacer(minLength: 0)
 
-            if let lastUpdated = viewModel.lastUpdated {
-                Text("Updated \(MetricFormatter.relativeTime(from: lastUpdated))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textMuted)
-            }
-
-            Button {
-                viewModel.refresh()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Refresh")
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.refresh()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Refresh")
+                    }
+                    .font(.system(size: 11, weight: .medium))
                 }
-                .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textSecondary)
-            .disabled(viewModel.isScanning || viewModel.isDeleting)
+                .buttonStyle(.plain)
+                .foregroundStyle(PopoverTheme.textSecondary)
+                .disabled(viewModel.isScanning || viewModel.isDeleting)
 
-            Button {
-                addFoldersFromPanel()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                    Text("Add Folder")
+                Button {
+                    addFoldersFromPanel()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                        Text("Add Folder")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.accentContrastText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(PopoverTheme.accent)
+                    )
                 }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(PopoverTheme.accentContrastText)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(PopoverTheme.accent)
-                )
+                .buttonStyle(.plain)
+                .disabled(viewModel.isDeleting)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isDeleting)
         }
     }
 
@@ -178,77 +185,6 @@ struct StorageManagementView: View {
         }
     }
 
-    private var projectionCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Projection")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(PopoverTheme.textPrimary)
-
-            projectionRow(
-                title: "Current",
-                usedText: MetricFormatter.usage(used: viewModel.currentUsedBytes, total: viewModel.currentTotalBytes),
-                ratio: viewModel.currentUsageRatio,
-                color: PopoverTheme.mint
-            )
-
-            projectionRow(
-                title: "After Cleanup",
-                usedText: MetricFormatter.usage(used: viewModel.projectedUsedBytes, total: viewModel.currentTotalBytes),
-                ratio: viewModel.projectedUsageRatio,
-                color: PopoverTheme.blue
-            )
-
-            HStack {
-                Text("Will Delete")
-                    .font(.system(size: 10))
-                    .foregroundStyle(PopoverTheme.textSecondary)
-                Spacer(minLength: 0)
-                Text(MetricFormatter.bytes(viewModel.willDeleteBytes))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.orange)
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(PopoverTheme.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-        )
-    }
-
-    private func projectionRow(
-        title: String,
-        usedText: String,
-        ratio: Double,
-        color: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textSecondary)
-                Spacer(minLength: 0)
-                Text(usedText)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.textMuted)
-            }
-
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(PopoverTheme.borderMedium)
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(color)
-                        .frame(width: geometry.size.width * min(max(ratio, 0), 1))
-                }
-            }
-            .frame(height: 6)
-        }
-    }
-
     private var ringCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Disk Distribution")
@@ -257,7 +193,10 @@ struct StorageManagementView: View {
 
             StorageRingChartView(
                 buckets: viewModel.ringBuckets,
-                totalBytes: viewModel.scannedTopLevelBytes
+                totalBytes: viewModel.scannedTopLevelBytes,
+                onSelectBucketForDeletion: { bucket in
+                    viewModel.selectRingBucketForDeletion(bucket.id)
+                }
             )
         }
         .padding(10)
@@ -284,134 +223,100 @@ struct StorageManagementView: View {
                     .foregroundStyle(PopoverTheme.textSecondary)
                     .lineLimit(1)
             }
-            .frame(maxWidth: isSearchExpanded ? 96 : .infinity, alignment: .leading)
+            .frame(width: isSearchExpanded ? 96 : nil, alignment: .leading)
             .animation(.easeInOut(duration: 0.22), value: isSearchExpanded)
 
-            Menu {
-                Button {
-                    viewModel.clearPresetSelection()
-                } label: {
-                    if viewModel.activePreset == nil {
-                        Label("All Targets", systemImage: "checkmark")
-                    } else {
-                        Text("All Targets")
-                    }
-                }
+            Spacer(minLength: 6)
 
-                Divider()
+            HStack(spacing: 6) {
+                if isSearchExpanded {
+                    HStack(spacing: 5) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(PopoverTheme.textMuted)
 
-                ForEach(StorageCleanupPreset.allCases) { preset in
-                    Button {
-                        viewModel.applyPreset(preset)
-                    } label: {
-                        if viewModel.activePreset == preset {
-                            Label(preset.title, systemImage: "checkmark")
-                        } else {
-                            Text(preset.title)
+                        TextField("Search app", text: $viewModel.searchQuery)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 10))
+                            .focused($isSearchFieldFocused)
+
+                        if !viewModel.searchQuery.isEmpty {
+                            Button {
+                                viewModel.searchQuery = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(PopoverTheme.textMuted)
+                            }
+                            .buttonStyle(.plain)
                         }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 11, weight: .medium))
-                    Text(viewModel.activePreset?.title ?? "Filter")
-                        .font(.system(size: 10, weight: .semibold))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                }
-                .foregroundStyle(PopoverTheme.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(PopoverTheme.bgElevated)
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-                )
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize(horizontal: true, vertical: false)
 
-            if isSearchExpanded {
-                HStack(spacing: 5) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(PopoverTheme.textMuted)
-
-                    TextField("Search app", text: $viewModel.searchQuery)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 10))
-                        .focused($isSearchFieldFocused)
-
-                    if !viewModel.searchQuery.isEmpty {
                         Button {
-                            viewModel.searchQuery = ""
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isSearchExpanded = false
+                            }
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 10))
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(PopoverTheme.textMuted)
                         }
                         .buttonStyle(.plain)
                     }
-
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .frame(width: 152)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(PopoverTheme.bgElevated)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                    )
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isSearchExpanded = false
+                        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                            isSearchExpanded = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                            isSearchFieldFocused = true
                         }
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(PopoverTheme.textMuted)
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(.plain)
+                    .foregroundStyle(PopoverTheme.textSecondary)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .frame(width: 152)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(PopoverTheme.bgElevated)
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-                )
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                Button {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
-                        isSearchExpanded = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                        isSearchFieldFocused = true
-                    }
+
+                Button(role: .destructive) {
+                    viewModel.requestDeleteSelection()
                 } label: {
-                    Image(systemName: "magnifyingglass")
+                    Image(systemName: "trash")
                         .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(PopoverTheme.bgElevated)
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(PopoverTheme.textSecondary)
-            }
+                .foregroundStyle(viewModel.canDeleteSelection ? PopoverTheme.red : PopoverTheme.textMuted)
+                .disabled(!viewModel.canDeleteSelection || viewModel.isScanning)
+                .help(viewModel.deleteInfoTooltip)
+                .accessibilityLabel("Move to Trash")
 
-            if viewModel.isDeleting {
-                ProgressView()
-                    .controlSize(.small)
+                if viewModel.isDeleting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
-
-            Button(role: .destructive) {
-                viewModel.requestDeleteSelection()
-            } label: {
-                Text("Move to Trash")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(viewModel.canDeleteSelection ? PopoverTheme.red : PopoverTheme.textMuted)
-            .disabled(!viewModel.canDeleteSelection || viewModel.isScanning)
-            .help(viewModel.deleteInfoTooltip)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -553,10 +458,19 @@ struct StorageManagementView: View {
                 }
                 .buttonStyle(.plain)
 
-                Image(systemName: "app.dashed")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(PopoverTheme.blue)
-                    .frame(width: 14)
+                if let appIcon = appIconImage(for: group) {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(width: 14, height: 14)
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(PopoverTheme.blue)
+                        .frame(width: 14)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.displayName)
@@ -632,7 +546,7 @@ struct StorageManagementView: View {
 
     private func itemRow(_ row: StorageListRow) -> some View {
         let item = row.item
-        let isSelected = viewModel.selectedItemIDs.contains(item.id)
+        let selectionState = viewModel.itemSelectionState(item.id)
         let isExpanded = viewModel.isItemExpanded(item.id)
         let isLoading = viewModel.isLoadingChildren(for: item.id)
 
@@ -657,9 +571,9 @@ struct StorageManagementView: View {
             Button {
                 viewModel.toggleSelection(for: item.id)
             } label: {
-                Image(systemName: selectionSymbol(isSelected: isSelected, item: item))
+                Image(systemName: selectionSymbol(state: selectionState, item: item))
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(selectionColor(isSelected: isSelected, item: item))
+                    .foregroundStyle(selectionColor(state: selectionState, item: item))
             }
             .buttonStyle(.plain)
             .disabled(item.isProtected || viewModel.isDeleting)
@@ -760,18 +674,18 @@ struct StorageManagementView: View {
         }
     }
 
-    private func selectionSymbol(isSelected: Bool, item: StorageManagedItem) -> String {
+    private func selectionSymbol(state: StorageSelectionState, item: StorageManagedItem) -> String {
         if item.isProtected {
             return "lock.circle.fill"
         }
-        return isSelected ? "checkmark.circle.fill" : "circle"
+        return selectionStateSymbol(state)
     }
 
-    private func selectionColor(isSelected: Bool, item: StorageManagedItem) -> Color {
+    private func selectionColor(state: StorageSelectionState, item: StorageManagedItem) -> Color {
         if item.isProtected {
             return PopoverTheme.orange
         }
-        return isSelected ? PopoverTheme.accent : PopoverTheme.textMuted
+        return selectionStateColor(state)
     }
 
     private func icon(for item: StorageManagedItem) -> String {
@@ -806,6 +720,30 @@ struct StorageManagementView: View {
         case .folder:
             return PopoverTheme.purple
         }
+    }
+
+    private func appIconImage(for group: StorageAppGroup) -> NSImage? {
+        let cacheKey = group.id as NSString
+        if let cachedIcon = Self.appIconCache.object(forKey: cacheKey) {
+            return cachedIcon
+        }
+
+        if let appBundle = group.items.first(where: { $0.kind == .appBundle }),
+           appBundle.url.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame,
+           FileManager.default.fileExists(atPath: appBundle.url.path) {
+            let icon = NSWorkspace.shared.icon(forFile: appBundle.url.path)
+            Self.appIconCache.setObject(icon, forKey: cacheKey)
+            return icon
+        }
+
+        if let bundleIdentifier = group.bundleIdentifier,
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
+            let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+            Self.appIconCache.setObject(icon, forKey: cacheKey)
+            return icon
+        }
+
+        return nil
     }
 
     private func addFoldersFromPanel() {

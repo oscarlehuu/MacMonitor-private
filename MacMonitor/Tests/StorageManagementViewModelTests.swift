@@ -86,6 +86,352 @@ final class StorageManagementViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedItemIDs, [allowed.id])
     }
 
+    func testSelectRingBucketForDeletionSelectsAllItemsInGroupBucket() async {
+        let manager = FakeStorageManager()
+        let groupID = "group.cursor"
+        let bundleID = "com.todesktop.cursor"
+        let appBundle = makeItem(
+            path: "/Applications/Cursor.app",
+            name: "Cursor",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 400,
+            protected: false,
+            appGroupID: groupID,
+            bundleIdentifier: bundleID
+        )
+        let cache = makeItem(
+            path: "/Users/test/Library/Caches/\(bundleID)",
+            name: "Cache",
+            category: .cache,
+            kind: .appCache,
+            sizeBytes: 120,
+            protected: false,
+            appGroupID: groupID,
+            bundleIdentifier: bundleID
+        )
+        let group = StorageAppGroup(
+            id: groupID,
+            displayName: "Cursor",
+            bundleIdentifier: bundleID,
+            items: [appBundle, cache]
+        )
+        let loose = makeItem(
+            path: "/tmp/Loose",
+            name: "Loose",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 80,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(appGroups: [group], looseItems: [loose])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectRingBucketForDeletion("group:\(groupID)")
+
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(appBundle.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(cache.id))
+        XCTAssertFalse(viewModel.selectedItemIDs.contains(loose.id))
+    }
+
+    func testSelectRingBucketForDeletionSelectsItemSubtree() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/Desktop",
+            name: "Desktop",
+            category: .folder,
+            kind: .customFolder,
+            sizeBytes: 300,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/Desktop/nested",
+            name: "nested",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent, child])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectRingBucketForDeletion("item:\(parent.id)")
+
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(parent.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(child.id))
+    }
+
+    func testSelectRingBucketForDeletionSelectsCollapsedOtherBuckets() async {
+        let manager = FakeStorageManager()
+        let looseItems: [StorageManagedItem] = (0..<11).map { index in
+            makeItem(
+                path: "/tmp/item-\(index)",
+                name: "Item-\(index)",
+                category: .folder,
+                kind: .looseFolder,
+                sizeBytes: UInt64(100 + index),
+                protected: false
+            )
+        }
+        manager.scanResult = makeScanResult(looseItems: looseItems)
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectRingBucketForDeletion("other")
+
+        XCTAssertEqual(
+            viewModel.selectedItemIDs,
+            Set([
+                "/tmp/item-0",
+                "/tmp/item-1"
+            ])
+        )
+    }
+
+    func testDeletionPreviewRowsIncludeAllowedItemsSortedBySizeThenName() async {
+        let manager = FakeStorageManager()
+        let protected = makeItem(
+            path: "/System/Library/DoNotDelete",
+            name: "DoNotDelete",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 900,
+            protected: true
+        )
+        let gamma = makeItem(
+            path: "/tmp/Gamma",
+            name: "Gamma",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 400,
+            protected: false
+        )
+        let alpha = makeItem(
+            path: "/tmp/Alpha",
+            name: "Alpha",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 200,
+            protected: false
+        )
+        let beta = makeItem(
+            path: "/tmp/Beta",
+            name: "Beta",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 200,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [protected, gamma, alpha, beta])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [protected.id, gamma.id, beta.id, alpha.id]
+
+        XCTAssertEqual(viewModel.selectedAllowedCount, 3)
+        XCTAssertEqual(viewModel.selectedAllowedBytes, 800)
+        XCTAssertEqual(
+            viewModel.deletionPreviewRows.map(\.displayName),
+            ["Gamma", "Alpha", "Beta"]
+        )
+        XCTAssertEqual(
+            viewModel.deletionPreviewRows.map(\.path),
+            ["/tmp/Gamma", "/tmp/Alpha", "/tmp/Beta"]
+        )
+        XCTAssertEqual(
+            viewModel.deletionPreviewListRows.map(\.item.displayName),
+            ["Gamma", "Alpha", "Beta"]
+        )
+        XCTAssertEqual(
+            viewModel.deletionPreviewListRows.map(\.depth),
+            [0, 0, 0]
+        )
+    }
+
+    func testIsItemInDeletionScopeMarksDescendantsOfSelectedParent() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/Project",
+            name: "Project",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 500,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/Project/node_modules",
+            name: "node_modules",
+            category: .folder,
+            kind: .nodeModules,
+            sizeBytes: 300,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent, child])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [parent.id]
+
+        XCTAssertTrue(viewModel.isItemInDeletionScope(parent.id))
+        XCTAssertTrue(viewModel.isItemInDeletionScope(child.id))
+    }
+
+    func testToggleSelectionOnParentSelectsChildrenAndChildUntickKeepsParentPartial() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/Containers",
+            name: "Containers",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 300,
+            protected: false
+        )
+        let childA = makeItem(
+            path: "/tmp/Containers/A",
+            name: "A",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 100,
+            protected: false,
+            parentID: parent.id
+        )
+        let childB = makeItem(
+            path: "/tmp/Containers/B",
+            name: "B",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent, childA, childB])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+
+        viewModel.toggleSelection(for: parent.id)
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(parent.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(childA.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(childB.id))
+        XCTAssertEqual(viewModel.itemSelectionState(parent.id), .all)
+
+        viewModel.toggleSelection(for: childA.id)
+        XCTAssertFalse(viewModel.selectedItemIDs.contains(childA.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(childB.id))
+        XCTAssertEqual(viewModel.itemSelectionState(parent.id), .partial)
+    }
+
+    func testItemSelectionStateTreatsSelectedAncestorAsSelectedChild() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/Parent",
+            name: "Parent",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 300,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/Parent/Child",
+            name: "Child",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent, child])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [parent.id]
+
+        XCTAssertEqual(viewModel.itemSelectionState(child.id), .all)
+        XCTAssertTrue(viewModel.isItemInDeletionScope(child.id))
+    }
+
+    func testExpandSelectedParentAutoSelectsNewlyLoadedChildren() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/ContainerRoot",
+            name: "ContainerRoot",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 200,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/ContainerRoot/Data",
+            name: "Data",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 140,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent])
+        manager.drilledItemsByParentID[parent.id] = [child]
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.toggleSelection(for: parent.id)
+        viewModel.toggleItemExpansion(parent.id)
+
+        for _ in 0..<40 where viewModel.isLoadingChildren(for: parent.id) {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertFalse(viewModel.isLoadingChildren(for: parent.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(parent.id))
+        XCTAssertTrue(viewModel.selectedItemIDs.contains(child.id))
+        XCTAssertEqual(viewModel.itemSelectionState(child.id), .all)
+    }
+
+    func testToggleSelectionClearsDeepChildWhenMultipleAncestorsSelected() async {
+        let manager = FakeStorageManager()
+        let root = makeItem(
+            path: "/tmp/Tree",
+            name: "Tree",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 300,
+            protected: false
+        )
+        let branch = makeItem(
+            path: "/tmp/Tree/Branch",
+            name: "Branch",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 200,
+            protected: false,
+            parentID: root.id
+        )
+        let leaf = makeItem(
+            path: "/tmp/Tree/Branch/Leaf",
+            name: "Leaf",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: branch.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [root, branch, leaf])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [root.id, branch.id, leaf.id]
+
+        viewModel.toggleSelection(for: leaf.id)
+
+        XCTAssertTrue(viewModel.selectedItemIDs.isEmpty)
+        XCTAssertEqual(viewModel.itemSelectionState(leaf.id), .none)
+        XCTAssertFalse(viewModel.isItemInDeletionScope(leaf.id))
+    }
+
     func testDeleteSelectedSendsOnlyAllowedIDs() async {
         let manager = FakeStorageManager()
         let coordinator = FakeRunningAppPreflightCoordinator()
@@ -419,6 +765,141 @@ final class StorageManagementViewModelTests: XCTestCase {
         defaults.synchronize()
 
         XCTAssertFalse(viewModel.shouldRequestInitialAccess())
+    }
+
+    func testAddCustomFolderSkipsPathAlreadyCoveredByDefaultSources() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let pathCoveredByDefault = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+
+        viewModel.addCustomFolder(pathCoveredByDefault)
+
+        XCTAssertTrue(viewModel.trackedFolders.isEmpty)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 0)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddCustomFolderSkipsExactProjectsDefaultRoot() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let projectsRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Projects", isDirectory: true)
+
+        viewModel.addCustomFolder(projectsRoot)
+
+        XCTAssertTrue(viewModel.trackedFolders.isEmpty)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 0)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddCustomFolderAllowsDescendantInsideProjectsRoot() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let fileManager = FileManager.default
+        let projectsRoot = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Projects", isDirectory: true)
+        let projectsRootExisted = fileManager.fileExists(atPath: projectsRoot.path)
+        let repoFolder = projectsRoot
+            .appendingPathComponent("MacMonitor-Test-\(UUID().uuidString)", isDirectory: true)
+        try? fileManager.createDirectory(at: repoFolder, withIntermediateDirectories: true)
+
+        defer {
+            try? fileManager.removeItem(at: repoFolder)
+            if !projectsRootExisted {
+                try? fileManager.removeItem(at: projectsRoot)
+            }
+        }
+
+        viewModel.addCustomFolder(repoFolder)
+
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+        XCTAssertEqual(viewModel.trackedFolders.first?.standardizedFileURL.path, repoFolder.standardizedFileURL.path)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 1)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddCustomFolderSkipsPathAlreadyCoveredByTrackedFolder() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let fileManager = FileManager.default
+
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("MacMonitor-TrackedRoot-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("Nested", isDirectory: true)
+        try? fileManager.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        viewModel.addCustomFolder(root)
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+
+        viewModel.addCustomFolder(child)
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 1)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddCustomFolderCollapsesTrackedChildrenWhenAddingParent() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let fileManager = FileManager.default
+
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("MacMonitor-CollapseRoot-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("Nested", isDirectory: true)
+        try? fileManager.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        viewModel.addCustomFolder(child)
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+
+        viewModel.addCustomFolder(root)
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+        XCTAssertEqual(viewModel.trackedFolders.first?.standardizedFileURL.path, root.standardizedFileURL.path)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 1)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddCustomFolderSkipsRootPath() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+
+        viewModel.addCustomFolder(URL(fileURLWithPath: "/"))
+
+        XCTAssertTrue(viewModel.trackedFolders.isEmpty)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 0)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddedScanSourcePathsExcludeMissingTrackedFolders() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let fileManager = FileManager.default
+
+        let missingRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("MacMonitor-Missing-\(UUID().uuidString)", isDirectory: true)
+
+        viewModel.addCustomFolder(missingRoot)
+
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 0)
+    }
+
+    func testAddCustomFolderSkipsMissingChildWhenMissingParentAlreadyTracked() {
+        let manager = FakeStorageManager()
+        let viewModel = makeViewModel(manager: manager)
+        let fileManager = FileManager.default
+
+        let missingRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("MacMonitor-MissingRoot-\(UUID().uuidString)", isDirectory: true)
+        let missingChild = missingRoot.appendingPathComponent("Nested", isDirectory: true)
+
+        viewModel.addCustomFolder(missingRoot)
+        viewModel.addCustomFolder(missingChild)
+
+        XCTAssertEqual(viewModel.trackedFolders.count, 1)
+        XCTAssertEqual(viewModel.addedScanSourcePaths.count, 0)
+        XCTAssertNil(viewModel.errorMessage)
     }
 
     private func makeViewModel(

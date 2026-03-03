@@ -49,6 +49,7 @@ final class RAMDetailsViewModel: ObservableObject {
     @Published var selectedPortIDs: Set<String> = []
     @Published var showingTerminateConfirmation = false
     @Published var showingForceKillConfirmation = false
+    @Published private(set) var searchQuery = ""
 
     private let processCollector: ProcessListCollecting
     private let listeningPortCollector: ListeningPortCollecting
@@ -113,6 +114,7 @@ final class RAMDetailsViewModel: ObservableObject {
     func setMode(_ mode: RAMDetailsMode) {
         guard mode != self.mode else { return }
         self.mode = mode
+        searchQuery = ""
         selectedProcessIDs.removeAll()
         selectedPortIDs.removeAll()
         showingTerminateConfirmation = false
@@ -138,6 +140,12 @@ final class RAMDetailsViewModel: ObservableObject {
         showAllMine = enabled
         selectedProcessIDs.removeAll()
         refresh()
+    }
+
+    func setSearchQuery(_ query: String) {
+        guard query != searchQuery else { return }
+        searchQuery = query
+        pruneSelectionToVisibleRows()
     }
 
     func refresh() {
@@ -285,6 +293,14 @@ final class RAMDetailsViewModel: ObservableObject {
         processes.reduce(0) { $0 + $1.rankingBytes }
     }
 
+    var filteredRowsBytes: UInt64 {
+        filteredProcesses.reduce(0) { $0 + $1.rankingBytes }
+    }
+
+    var hasActiveSearch: Bool {
+        normalizedSearchToken != nil
+    }
+
     var defaultTopRows: Int {
         maxRows
     }
@@ -315,6 +331,23 @@ final class RAMDetailsViewModel: ObservableObject {
             return "1 process is still running after graceful termination. Force kill may lose unsaved work."
         }
         return "\(pendingForceKillPIDCount) processes are still running after graceful termination. Force kill may lose unsaved work."
+    }
+
+    var filteredProcesses: [ProcessMemoryItem] {
+        guard let token = normalizedSearchToken else { return processes }
+        return processes.filter { process in
+            process.name.lowercased().contains(token) || String(process.pid).contains(token)
+        }
+    }
+
+    var filteredListeningPorts: [ListeningPort] {
+        guard let token = normalizedSearchToken else { return listeningPorts }
+        return listeningPorts.filter { row in
+            row.processName.lowercased().contains(token) ||
+                row.endpoint.lowercased().contains(token) ||
+                String(row.port).contains(token) ||
+                String(row.pid).contains(token)
+        }
     }
 
     private var selectedAllowedProcesses: [ProcessMemoryItem] {
@@ -361,6 +394,7 @@ final class RAMDetailsViewModel: ObservableObject {
 
             processes = refreshed
             selectedProcessIDs = selectedProcessIDs.intersection(Set(refreshed.filter { !$0.isProtected }.map(\.pid)))
+            pruneSelectionToVisibleRows()
             lastUpdated = Date()
             errorMessage = nil
         } catch {
@@ -386,6 +420,7 @@ final class RAMDetailsViewModel: ObservableObject {
 
             listeningPorts = refreshedPorts
             selectedPortIDs = selectedPortIDs.intersection(Set(refreshedPorts.filter { !$0.isProtected }.map(\.id)))
+            pruneSelectionToVisibleRows()
             lastUpdated = Date()
             errorMessage = nil
         } catch {
@@ -583,5 +618,21 @@ final class RAMDetailsViewModel: ObservableObject {
     private func resetPendingPortsTermination() {
         pendingPortsTerminationContext = nil
         pendingForceKillPIDCount = 0
+    }
+
+    private var normalizedSearchToken: String? {
+        let normalized = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func pruneSelectionToVisibleRows() {
+        switch mode {
+        case .processes:
+            let visibleIDs = Set(filteredProcesses.filter { !$0.isProtected }.map(\.pid))
+            selectedProcessIDs = selectedProcessIDs.intersection(visibleIDs)
+        case .ports:
+            let visibleIDs = Set(filteredListeningPorts.filter { !$0.isProtected }.map(\.id))
+            selectedPortIDs = selectedPortIDs.intersection(visibleIDs)
+        }
     }
 }
