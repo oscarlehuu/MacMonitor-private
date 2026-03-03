@@ -2363,7 +2363,7 @@ struct PopoverRootView: View {
     private func memorySegments(for memory: MemorySnapshot) -> [MemoryUsageSegment] {
         let total = max(memory.totalBytes, 1)
         let usedBytes = min(memory.usedBytes, total)
-        let cachedBytes = min(memory.cachedFilesBytes ?? memory.inactiveBytes ?? 0, total)
+        let cachedBytes = min(memory.inactiveBytes ?? 0, total)
         let fallbackFreeBytes = max(total - min(total, usedBytes + cachedBytes), 0)
         let freeBytes = min(memory.freeBytes ?? fallbackFreeBytes, total)
 
