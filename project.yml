@@ -30,7 +30,7 @@ targets:
         INFOPLIST_FILE: MacMonitor/Config/App-Info.plist
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
-        SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor-open/appcast.xml"
+        SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/macmonitor/appcast.xml"
         SPARKLE_PUBLIC_ED_KEY: "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU="
       configs:
         Release:

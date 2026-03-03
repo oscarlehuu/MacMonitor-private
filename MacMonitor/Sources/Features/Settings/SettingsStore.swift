@@ -249,7 +249,6 @@ final class SettingsStore: ObservableObject {
     static let mainPopoverDefaultWidth: CGFloat = 920
     static let mainPopoverMinWidth: CGFloat = 640
     static let mainPopoverMaxWidth: CGFloat = 1280
-    static let mainPopoverFixedHeight: CGFloat = 760
 
     static func normalizedMainPopoverWidth(_ width: CGFloat) -> CGFloat {
         min(max(width, mainPopoverMinWidth), mainPopoverMaxWidth)
