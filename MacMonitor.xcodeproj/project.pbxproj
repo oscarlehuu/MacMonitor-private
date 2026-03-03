@@ -963,7 +963,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
-				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-open/appcast.xml";
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Debug;
@@ -1160,7 +1160,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
-				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor-open/appcast.xml";
+				SPARKLE_APPCAST_URL = "https://oscarlehuu.github.io/macmonitor/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU=";
 			};
 			name = Release;
