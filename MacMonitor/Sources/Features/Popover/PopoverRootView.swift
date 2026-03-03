@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 private enum MainPopoverTab: CaseIterable, Hashable {
@@ -50,108 +49,7 @@ private struct StorageUsageSegment: Identifiable {
     let color: Color
 }
 
-private struct StorageDeletePreviewGroupSection: Identifiable {
-    let group: StorageAppGroup
-    let rows: [StorageListRow]
-
-    var id: String { group.id }
-}
-
-private struct StorageScanSourceChipView: View {
-    let title: String
-    let foreground: Color
-    let fill: Color
-    let stroke: Color
-    let sources: [String]
-    let emptyText: String
-
-    @State private var isShowingSources = false
-    @State private var isHoveringChip = false
-    @State private var isHoveringPopover = false
-    @State private var closeTask: Task<Void, Never>?
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(fill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .stroke(stroke, lineWidth: 1)
-            )
-            .onHover { hovering in
-                isHoveringChip = hovering
-                if hovering {
-                    closeTask?.cancel()
-                    isShowingSources = true
-                } else {
-                    scheduleCloseIfNeeded()
-                }
-            }
-            .popover(isPresented: $isShowingSources, arrowEdge: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PopoverTheme.textPrimary)
-
-                    Divider()
-
-                    if sources.isEmpty {
-                        Text(emptyText)
-                            .font(.system(size: 11))
-                            .foregroundStyle(PopoverTheme.textMuted)
-                    } else {
-                        ScrollView(showsIndicators: true) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(sources, id: \.self) { source in
-                                    Text(source)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(PopoverTheme.textSecondary)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                        .frame(maxHeight: 180)
-                    }
-                }
-                .frame(width: 320, alignment: .leading)
-                .padding(10)
-                .background(PopoverTheme.bgCard)
-                .onHover { hovering in
-                    isHoveringPopover = hovering
-                    if hovering {
-                        closeTask?.cancel()
-                    } else {
-                        scheduleCloseIfNeeded()
-                    }
-                }
-            }
-            .onDisappear {
-                closeTask?.cancel()
-            }
-    }
-
-    private func scheduleCloseIfNeeded() {
-        closeTask?.cancel()
-        closeTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            guard !Task.isCancelled else { return }
-            if !isHoveringChip && !isHoveringPopover {
-                isShowingSources = false
-            }
-        }
-    }
-}
-
 struct PopoverRootView: View {
-    private static let modalAppIconCache = NSCache<NSString, NSImage>()
-
     @ObservedObject var viewModel: SystemSummaryViewModel
     @ObservedObject var ramDetailsViewModel: RAMDetailsViewModel
     @ObservedObject var ramPolicyViewModel: RAMPolicySettingsViewModel
@@ -160,18 +58,10 @@ struct PopoverRootView: View {
     @ObservedObject var batteryScheduleViewModel: BatteryScheduleViewModel
     @ObservedObject var settings: SettingsStore
     @ObservedObject var appUpdateController: AppUpdateController
-    let popoverWindowProvider: (() -> NSWindow?)?
     let diagnosticsExporter: DiagnosticsExporter
 
     @State private var hasNormalizedLegacyScreen = false
     @State private var diagnosticsStatusMessage: String?
-    @State private var popoverResizeDragStartWidth: CGFloat?
-    @State private var popoverResizePreviewWidth: CGFloat?
-    @State private var deleteConfirmationAcknowledged = false
-    @State private var deleteConfirmationSnapshot: StorageSelectionSnapshot?
-    @State private var deleteConfirmationRootItemIDs: Set<String> = []
-    @State private var didConfirmStorageDeletion = false
-    @State private var hoveredStorageSegmentID: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -179,57 +69,64 @@ struct PopoverRootView: View {
             content
             footer
         }
-        .frame(
-            width: popoverResizePreviewWidth ?? settings.mainPopoverCurrentWidth,
-            height: SettingsStore.mainPopoverFixedHeight
-        )
+        .frame(width: 440, height: 620)
         .background(popoverBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
-        .overlay(alignment: .bottomTrailing) {
-            popoverResizeHandle
-        }
-        .overlay {
-            if storageManagementViewModel.showingDeleteConfirmation {
-                storageDeleteConfirmationOverlay
-            }
-        }
         .shadow(color: Color.black.opacity(0.45), radius: 28, y: 14)
         .preferredColorScheme(settings.appTheme.isDark ? .dark : .light)
         .id(settings.appTheme)
         .onAppear {
             normalizeLegacyScreenIfNeeded()
+            ramDetailsViewModel.setMode(.processes)
             ramDetailsViewModel.start()
             storageManagementViewModel.loadIfNeeded()
         }
         .onDisappear {
             ramDetailsViewModel.stop()
-            resetPopoverResizeDragState()
         }
-        .onChange(of: storageManagementViewModel.showingDeleteConfirmation) { _, isPresented in
-            if isPresented {
-                didConfirmStorageDeletion = false
-                deleteConfirmationAcknowledged = false
-                deleteConfirmationSnapshot = storageManagementViewModel.makeSelectionSnapshot()
-                deleteConfirmationRootItemIDs = storageManagementViewModel.deletionPreviewRootItemIDs
-                return
+        .alert("Terminate selected processes?", isPresented: $ramDetailsViewModel.showingTerminateConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Terminate", role: .destructive) {
+                Task { await ramDetailsViewModel.terminateSelected() }
             }
-
-            if !didConfirmStorageDeletion, let snapshot = deleteConfirmationSnapshot {
-                storageManagementViewModel.restoreSelectionSnapshot(snapshot)
-            }
-            didConfirmStorageDeletion = false
-            deleteConfirmationAcknowledged = false
-            deleteConfirmationRootItemIDs = []
-            deleteConfirmationSnapshot = nil
+        } message: {
+            Text("MacMonitor proceeds with allowed processes only. Protected processes are skipped.")
         }
-        .onChange(of: storageManagementViewModel.selectedItemIDs) { _, _ in
-            if storageManagementViewModel.showingDeleteConfirmation {
-                deleteConfirmationAcknowledged = false
+        .confirmationDialog(
+            "Move selected items to Trash?",
+            isPresented: $storageManagementViewModel.showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                Task { await storageManagementViewModel.deleteSelected() }
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Selected: \(storageManagementViewModel.selectedAllowedCount) • " +
+                    MetricFormatter.bytes(storageManagementViewModel.selectedAllowedBytes)
+            )
+        }
+        .confirmationDialog(
+            "Force quit still-running apps?",
+            isPresented: $storageManagementViewModel.showingForceQuitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Force Quit and Move to Trash", role: .destructive) {
+                Task { await storageManagementViewModel.confirmForceQuitAndDelete() }
+            }
+            Button("Skip Running Apps") {
+                Task { await storageManagementViewModel.skipForceQuitAndDelete() }
+            }
+            Button("Cancel Cleanup", role: .cancel) {
+                storageManagementViewModel.cancelForceQuitPrompt()
+            }
+        } message: {
+            Text(storageManagementViewModel.forceQuitPromptMessage)
         }
     }
 
@@ -371,45 +268,28 @@ struct PopoverRootView: View {
     }
 
     private var content: some View {
-        Group {
-            switch viewModel.screen {
-            case .storageManagement, .storage:
-                unifiedStorageScreen
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(20)
-            case .ramPolicyManager:
-                ScrollView(showsIndicators: true) {
+        ScrollView(showsIndicators: true) {
+            Group {
+                switch viewModel.screen {
+                case .storageManagement:
+                    storageManagementScreen
+                case .ramPolicyManager:
                     policiesScreen
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                }
-            case .trends:
-                ScrollView(showsIndicators: true) {
+                case .storage:
+                    storageOverviewScreen
+                case .trends:
                     trendsOverviewScreen
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                }
-            case .settings:
-                ScrollView(showsIndicators: true) {
+                case .settings:
                     settingsOverviewScreen
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                }
-            case .battery:
-                ScrollView(showsIndicators: true) {
+                case .battery:
                     batteryOverviewScreen
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                }
-            case .temperature, .ram:
-                ScrollView(showsIndicators: true) {
+                case .temperature, .ram:
                     memoryOverviewScreen
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
         }
-        .disabled(storageManagementViewModel.showingDeleteConfirmation)
     }
 
     private var batteryOverviewScreen: some View {
@@ -424,17 +304,13 @@ struct PopoverRootView: View {
     private var memoryOverviewScreen: some View {
         VStack(alignment: .leading, spacing: 16) {
             memorySummaryCard
-            RAMDetailsView(
-                viewModel: ramDetailsViewModel,
-                memorySnapshot: nil,
-                onBack: viewModel.showRAM,
-                showsBackButton: false
-            )
+            memoryProcessesCard
         }
         .onAppear {
             if viewModel.screen != .ram {
                 viewModel.showRAM()
             }
+            ramDetailsViewModel.setMode(.processes)
             ramDetailsViewModel.start()
             ramDetailsViewModel.refresh()
         }
@@ -444,26 +320,21 @@ struct PopoverRootView: View {
     private var memorySummaryCard: some View {
         if let memory = viewModel.snapshot?.memory {
             let segments = memorySegments(for: memory)
-            let appMemoryText = memoryByteText(memory.appMemoryBytes.map { min($0, memory.totalBytes) })
-            let wiredMemoryText = memoryByteText(memory.wiredMemoryBytes.map { min($0, memory.totalBytes) })
-            let compressedText = memoryByteText(memory.compressedBytes.map { min($0, memory.totalBytes) })
-            let cachedFilesText = memoryByteText((memory.cachedFilesBytes ?? memory.inactiveBytes).map { min($0, memory.totalBytes) })
-            let swapUsedText = memoryByteText(memory.swapUsedBytes)
 
             panelCard {
-                Text("Memory Pressure")
+                Text("Physical Memory")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(PopoverTheme.textMuted)
                     .tracking(0.5)
 
                 HStack {
-                    Text("Physical Memory: \(MetricFormatter.bytes(memory.totalBytes))")
+                    Text("\(MetricFormatter.bytes(memory.totalBytes)) Total")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(PopoverTheme.textSecondary)
 
                     Spacer(minLength: 8)
 
-                    Text("Memory Used: \(MetricFormatter.bytes(memory.usedBytes))")
+                    Text("\(MetricFormatter.bytes(memory.usedBytes)) Used")
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(PopoverTheme.textPrimary)
                 }
@@ -471,28 +342,30 @@ struct PopoverRootView: View {
                 usageTrack(segments: segments)
                     .frame(height: 10)
 
-                HStack(alignment: .top, spacing: 10) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 10),
+                        GridItem(.flexible(), spacing: 10)
+                    ],
+                    spacing: 10
+                ) {
                     ForEach(segments) { segment in
-                        memorySegmentCard(segment)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(segment.color)
+                                    .frame(width: 7, height: 7)
 
-                Divider()
-                    .overlay(PopoverTheme.borderSubtle)
+                                Text(segment.title)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(PopoverTheme.textMuted)
+                                    .lineLimit(1)
+                            }
 
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        memoryStatRow(title: "Physical Memory", value: MetricFormatter.bytes(memory.totalBytes))
-                        memoryStatRow(title: "Memory Used", value: MetricFormatter.bytes(memory.usedBytes))
-                        memoryStatRow(title: "Cached Files", value: cachedFilesText)
-                        memoryStatRow(title: "Swap Used", value: swapUsedText)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        memoryStatRow(title: "App Memory", value: appMemoryText)
-                        memoryStatRow(title: "Wired Memory", value: wiredMemoryText)
-                        memoryStatRow(title: "Compressed", value: compressedText)
+                            Text(MetricFormatter.bytes(segment.bytes))
+                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(PopoverTheme.textPrimary)
+                        }
                     }
                 }
             }
@@ -505,16 +378,159 @@ struct PopoverRootView: View {
         }
     }
 
-    private var unifiedStorageScreen: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            storageSummaryCard
-            StorageManagementView(
-                viewModel: storageManagementViewModel,
-                onBack: viewModel.showStorage,
-                showBackButton: false,
-                showHeader: false
+    private var memoryProcessesCard: some View {
+        panelCard {
+            HStack {
+                Text("Top Memory Processes")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .tracking(0.5)
+
+                Spacer(minLength: 6)
+
+                Button {
+                    ramDetailsViewModel.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh process list")
+                .disabled(ramDetailsViewModel.isLoading)
+            }
+
+            HStack {
+                Text("Process Name")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                Spacer(minLength: 8)
+                Text("Memory")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
+            .padding(.bottom, 4)
+
+            let rows = Array(ramDetailsViewModel.processes.prefix(10))
+
+            if rows.isEmpty {
+                HStack(spacing: 8) {
+                    if ramDetailsViewModel.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    Text(ramDetailsViewModel.isLoading ? "Loading processes..." : "No process data available yet.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(rows) { process in
+                        processRow(process)
+                    }
+                }
+            }
+
+            if let resultMessage = ramDetailsViewModel.resultMessage {
+                Text(resultMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.green)
+                    .lineLimit(2)
+            }
+
+            if let errorMessage = ramDetailsViewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.red)
+                    .lineLimit(2)
+            }
+
+            Button {
+                ramDetailsViewModel.requestTerminateSelected()
+            } label: {
+                Label(terminateButtonTitle, systemImage: "xmark.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(ramDetailsViewModel.canTerminateSelection ? PopoverTheme.red : PopoverTheme.textMuted)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(ramDetailsViewModel.canTerminateSelection ? PopoverTheme.redDim : PopoverTheme.bgElevated)
             )
-            .frame(maxHeight: .infinity, alignment: .top)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        ramDetailsViewModel.canTerminateSelection ? PopoverTheme.red.opacity(0.25) : PopoverTheme.borderSubtle,
+                        lineWidth: 1
+                    )
+            )
+            .disabled(!ramDetailsViewModel.canTerminateSelection)
+            .help(ramDetailsViewModel.terminationInfoTooltip)
+        }
+    }
+
+    private func processRow(_ process: ProcessMemoryItem) -> some View {
+        let isSelected = ramDetailsViewModel.selectedProcessIDs.contains(process.pid)
+
+        return Button {
+            ramDetailsViewModel.toggleSelection(for: process.pid)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: checkboxSymbol(for: process, isSelected: isSelected))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(checkboxColor(for: process, isSelected: isSelected))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(process.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(process.isProtected ? PopoverTheme.textMuted : PopoverTheme.textPrimary)
+                        .lineLimit(1)
+
+                    Text(process.isProtected ? "Protected" : process.metricLabel)
+                        .font(.system(size: 10))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(MetricFormatter.bytes(process.rankingBytes))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(PopoverTheme.bgElevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(process.isProtected || ramDetailsViewModel.isTerminating)
+        .opacity(process.isProtected ? 0.65 : 1.0)
+    }
+
+    private var storageOverviewScreen: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            storageSummaryCard
+            storageAutomationCard
+            storageAppsCard
+
+            if let resultMessage = storageManagementViewModel.resultMessage, !resultMessage.isEmpty {
+                infoBanner(text: resultMessage, tint: PopoverTheme.green, background: PopoverTheme.greenDim)
+            }
+
+            if let errorMessage = storageManagementViewModel.errorMessage, !errorMessage.isEmpty {
+                infoBanner(text: errorMessage, tint: PopoverTheme.red, background: PopoverTheme.redDim)
+            }
         }
         .onAppear {
             if viewModel.screen != .storage {
@@ -524,754 +540,302 @@ struct PopoverRootView: View {
         }
     }
 
-    private var storageDeleteConfirmationOverlay: some View {
-        let previewGroupSections = deleteConfirmationPreviewGroupSections()
-        let previewLooseRows = deleteConfirmationPreviewLooseRows()
-        let hasPreviewRows = !previewGroupSections.isEmpty || !previewLooseRows.isEmpty
+    private var storageSummaryCard: some View {
+        let segments = storageSegments()
 
-        return ZStack {
-            Color.black.opacity(0.38)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    cancelStorageDeleteConfirmation()
-                }
+        return panelCard {
+            Label {
+                Text("Macintosh HD")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .tracking(0.5)
+            } icon: {
+                Image(systemName: "internaldrive")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.textMuted)
+            }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Move selected items to Trash?")
-                    .font(.system(size: 13, weight: .semibold))
+            HStack {
+                Text("\(MetricFormatter.bytes(storageManagementViewModel.currentTotalBytes)) Total")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textSecondary)
+
+                Spacer(minLength: 8)
+
+                Text("\(MetricFormatter.bytes(storageManagementViewModel.currentUsedBytes)) Used")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(PopoverTheme.textPrimary)
+            }
 
-                Text(
-                    "Selected: \(storageManagementViewModel.selectedAllowedCount) • " +
-                    MetricFormatter.bytes(storageManagementViewModel.selectedAllowedBytes)
-                )
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(PopoverTheme.textSecondary)
+            usageTrack(segments: segments)
+                .frame(height: 12)
 
-                if !hasPreviewRows {
-                    Text("No selected items.")
-                        .font(.system(size: 10))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(Array(previewGroupSections.enumerated()), id: \.element.id) { index, section in
-                                storageDeletePreviewGroupRow(section)
-
-                                if storageManagementViewModel.expandedGroupIDs.contains(section.group.id) {
-                                    ForEach(section.rows) { row in
-                                        storageDeletePreviewRow(row, depthOffset: 1)
-                                    }
-                                }
-
-                                if index < previewGroupSections.count - 1 || !previewLooseRows.isEmpty {
-                                    storageDeletePreviewDivider
-                                }
-                            }
-
-                            if !previewLooseRows.isEmpty {
-                                storageDeletePreviewLooseHeader
-
-                                ForEach(Array(previewLooseRows.enumerated()), id: \.element.id) { index, row in
-                                    if index > 0 {
-                                        storageDeletePreviewDivider
-                                    }
-                                    storageDeletePreviewRow(row, depthOffset: 0)
-                                }
-                            }
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 8
+            ) {
+                ForEach(segments) { segment in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(segment.color)
+                                .frame(width: 7, height: 7)
+                            Text(segment.title)
+                                .font(.system(size: 10))
+                                .foregroundStyle(PopoverTheme.textMuted)
+                                .lineLimit(1)
                         }
+
+                        Text(MetricFormatter.bytes(segment.bytes))
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(PopoverTheme.textPrimary)
+                            .lineLimit(1)
                     }
-                    .frame(maxHeight: 212)
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(PopoverTheme.bgElevated.opacity(0.9))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-                    )
                 }
+            }
+        }
+    }
+
+    private var storageAutomationCard: some View {
+        panelCard {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Cleanup Selection")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+
+                    Text(
+                        storageManagementViewModel.selectedAllowedBytes > 0
+                            ? "Ready to remove \(MetricFormatter.bytes(storageManagementViewModel.selectedAllowedBytes))."
+                            : "Scan and select app data you want to move to Trash."
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 8)
 
                 Button {
-                    deleteConfirmationAcknowledged.toggle()
+                    viewModel.showStorageManagement()
                 } label: {
-                    HStack(spacing: 8) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .stroke(PopoverTheme.borderMedium, lineWidth: 1.2)
-                                .frame(width: 16, height: 16)
-
-                            if deleteConfirmationAcknowledged {
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(PopoverTheme.accent)
-                                    .frame(width: 16, height: 16)
-
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(PopoverTheme.accentContrastText)
-                            }
-                        }
-
-                        Text("I reviewed these items and still want to move them to Trash.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(PopoverTheme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .contentShape(Rectangle())
+                    Text("Open")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(PopoverTheme.bgElevated)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
-                .disabled(storageManagementViewModel.isDeleting)
-
-                HStack(spacing: 8) {
-                    Button("Cancel") {
-                        cancelStorageDeleteConfirmation()
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-                    .foregroundStyle(PopoverTheme.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(PopoverTheme.bgElevated)
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-                    )
-
-                    Spacer(minLength: 0)
-
-                    Button("Move to Trash") {
-                        didConfirmStorageDeletion = true
-                        Task { await storageManagementViewModel.deleteSelected() }
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.defaultAction)
-                    .foregroundStyle(
-                        deleteConfirmationAcknowledged
-                            ? PopoverTheme.accentContrastText
-                            : PopoverTheme.textMuted
-                    )
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(
-                                deleteConfirmationAcknowledged
-                                    ? PopoverTheme.red
-                                    : PopoverTheme.bgElevated
-                            )
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
-                    )
-                    .disabled(
-                        !deleteConfirmationAcknowledged ||
-                            storageManagementViewModel.selectedAllowedCount == 0 ||
-                            storageManagementViewModel.isDeleting
-                    )
-                }
             }
-            .padding(12)
-            .frame(maxWidth: 382)
+        }
+    }
+
+    private var storageAppsCard: some View {
+        panelCard {
+            HStack {
+                Label {
+                    Text("Installed Applications")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                        .tracking(0.5)
+                } icon: {
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    storageManagementViewModel.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .disabled(storageManagementViewModel.isScanning)
+                .help("Refresh storage scan")
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+
+                TextField("Search applications...", text: $storageManagementViewModel.searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(PopoverTheme.textPrimary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(PopoverTheme.bgCard)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(PopoverTheme.bgElevated)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.36), radius: 20, y: 10)
-            .padding(.horizontal, 12)
-        }
-        .zIndex(200)
-    }
 
-    private func cancelStorageDeleteConfirmation() {
-        storageManagementViewModel.showingDeleteConfirmation = false
-    }
-
-    private var storageDeletePreviewLooseHeader: some View {
-        HStack(spacing: 8) {
-            Spacer()
-                .frame(width: 12)
-
-            Image(systemName: "tray.full")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(PopoverTheme.mint)
-                .frame(width: 12)
-
-            Text("Other Targets")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(PopoverTheme.textSecondary)
-
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-    }
-
-    private var storageDeletePreviewDivider: some View {
-        Rectangle()
-            .fill(PopoverTheme.borderSubtle)
-            .frame(height: 1)
-            .padding(.leading, 8)
-    }
-
-    private func storageDeletePreviewGroupRow(_ section: StorageDeletePreviewGroupSection) -> some View {
-        let group = section.group
-        let selectionState = storageManagementViewModel.groupSelectionState(group)
-        let isExpanded = storageManagementViewModel.expandedGroupIDs.contains(group.id)
-
-        return HStack(spacing: 8) {
-            Button {
-                storageManagementViewModel.toggleGroupExpansion(group.id)
-            } label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+            HStack {
+                Text("Application")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(PopoverTheme.textMuted)
-                    .frame(width: 10)
-            }
-            .buttonStyle(.plain)
-            .disabled(storageManagementViewModel.isDeleting)
 
+                Spacer(minLength: 8)
+
+                Text("Size")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(PopoverTheme.textMuted)
+
+                Spacer().frame(width: 52)
+            }
+            .padding(.horizontal, 2)
+
+            let groups = Array(storageManagementViewModel.visibleAppGroups.prefix(8))
+
+            if groups.isEmpty {
+                HStack(spacing: 8) {
+                    if storageManagementViewModel.isScanning {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    Text(storageManagementViewModel.isScanning ? "Scanning applications..." : "No apps found for this query.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(PopoverTheme.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(groups) { group in
+                        storageAppRow(group)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    storageManagementViewModel.requestDeleteSelection()
+                } label: {
+                    Text(storageDeleteButtonTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(storageManagementViewModel.canDeleteSelection ? PopoverTheme.red : PopoverTheme.textMuted)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(storageManagementViewModel.canDeleteSelection ? PopoverTheme.redDim : PopoverTheme.bgElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(
+                            storageManagementViewModel.canDeleteSelection ? PopoverTheme.red.opacity(0.24) : PopoverTheme.borderSubtle,
+                            lineWidth: 1
+                        )
+                )
+                .disabled(!storageManagementViewModel.canDeleteSelection)
+
+                Button {
+                    viewModel.showStorageManagement()
+                } label: {
+                    Text("Manage")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(PopoverTheme.textPrimary)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(PopoverTheme.bgElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private func storageAppRow(_ group: StorageAppGroup) -> some View {
+        let selectionState = storageManagementViewModel.groupSelectionState(group)
+
+        return HStack(spacing: 10) {
             Button {
                 storageManagementViewModel.toggleGroupSelection(group.id)
             } label: {
-                Image(systemName: modalGroupSelectionSymbol(selectionState))
+                Image(systemName: selectionStateSymbol(selectionState))
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(modalGroupSelectionColor(selectionState))
+                    .foregroundStyle(selectionStateColor(selectionState))
+                    .frame(width: 18)
             }
             .buttonStyle(.plain)
-            .disabled(storageManagementViewModel.isDeleting)
 
-            if let appIcon = modalAppIconImage(for: group) {
-                Image(nsImage: appIcon)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 12, height: 12)
-                    .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
-            } else {
-                Image(systemName: "app.dashed")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(PopoverTheme.blue)
-                    .frame(width: 12)
-            }
+            Image(systemName: "app.fill")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(PopoverTheme.blue)
+                .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.displayName)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(PopoverTheme.textPrimary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
 
-                if let bundleIdentifier = group.bundleIdentifier {
-                    Text(bundleIdentifier)
-                        .font(.system(size: 9))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                Text(group.bundleIdentifier ?? "\(group.items.count) cleanup targets")
+                    .font(.system(size: 10))
+                    .foregroundStyle(PopoverTheme.textMuted)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
 
             Text(MetricFormatter.bytes(group.totalBytes))
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(PopoverTheme.textSecondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(
-                    selectionState == .none
-                        ? Color.clear
-                        : PopoverTheme.bgCardHover.opacity(selectionState == .all ? 0.9 : 0.6)
-                )
-        )
-    }
-
-    private func storageDeletePreviewRow(_ row: StorageListRow, depthOffset: Int) -> some View {
-        let item = row.item
-        let isDirectlySelected = storageManagementViewModel.selectedItemIDs.contains(item.id)
-        let isInDeletionScope = storageManagementViewModel.isItemInDeletionScope(item.id)
-        let isIncludedByAncestor = isInDeletionScope && !isDirectlySelected
-        let isExpanded = storageManagementViewModel.isItemExpanded(item.id)
-        let isLoading = storageManagementViewModel.isLoadingChildren(for: item.id)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Spacer()
-                    .frame(width: CGFloat(row.depth + depthOffset) * 12)
-
-                if item.isExpandable {
-                    Button {
-                        storageManagementViewModel.toggleItemExpansion(item.id)
-                    } label: {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(PopoverTheme.textMuted)
-                            .frame(width: 10)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(storageManagementViewModel.isDeleting)
-                } else {
-                    Spacer()
-                        .frame(width: 10)
-                }
-
-                Button {
-                    storageManagementViewModel.toggleSelection(for: item.id)
-                } label: {
-                    Image(systemName: modalSelectionSymbol(
-                        isDirectlySelected: isDirectlySelected,
-                        isIncludedByAncestor: isIncludedByAncestor,
-                        item: item
-                    ))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(modalSelectionColor(
-                            isDirectlySelected: isDirectlySelected,
-                            isIncludedByAncestor: isIncludedByAncestor,
-                            item: item
-                        ))
-                }
-                .buttonStyle(.plain)
-                .disabled(
-                    item.isProtected ||
-                        storageManagementViewModel.isDeleting
-                )
-
-                if let appIcon = modalAppIconImage(for: item) {
-                    Image(nsImage: appIcon)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                        .frame(width: 12, height: 12)
-                        .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
-                } else {
-                    Image(systemName: storageItemIcon(for: item))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(storageItemColor(for: item.category))
-                        .frame(width: 12)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.displayName)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(PopoverTheme.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    Text(item.url.path)
-                        .font(.system(size: 9))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    if isIncludedByAncestor {
-                        Text("Included via parent selection")
-                            .font(.system(size: 8))
-                            .foregroundStyle(PopoverTheme.orange)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                Text(MetricFormatter.bytes(item.sizeBytes))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.textSecondary)
-            }
-
-            if isExpanded && isLoading {
-                HStack(spacing: 4) {
-                    Spacer()
-                        .frame(width: CGFloat(row.depth + depthOffset + 1) * 12 + 16)
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Loading children...")
-                        .font(.system(size: 8))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(
-                    isInDeletionScope
-                        ? PopoverTheme.bgCardHover.opacity(isDirectlySelected ? 1 : 0.62)
-                        : Color.clear
-                )
-        )
-    }
-
-    private func deleteConfirmationPreviewGroupSections() -> [StorageDeletePreviewGroupSection] {
-        storageManagementViewModel.appGroups.compactMap { group in
-            let filteredRows = storageManagementViewModel.rows(for: group).filter { row in
-                isPreviewRowVisible(itemID: row.item.id)
-            }
-            guard !filteredRows.isEmpty else { return nil }
-            return StorageDeletePreviewGroupSection(group: group, rows: filteredRows)
-        }
-    }
-
-    private func deleteConfirmationPreviewLooseRows() -> [StorageListRow] {
-        storageManagementViewModel.allLooseRows().filter { row in
-            isPreviewRowVisible(itemID: row.item.id)
-        }
-    }
-
-    private func isPreviewRowVisible(itemID: String) -> Bool {
-        let previewRootIDs = activeDeletePreviewRootItemIDs
-        guard !previewRootIDs.isEmpty else { return false }
-
-        if previewRootIDs.contains(itemID) {
-            return true
-        }
-        if previewRootIDs.contains(where: { rootID in
-            isAncestorPath(ancestor: rootID, descendant: itemID)
-        }) {
-            return true
-        }
-        return previewRootIDs.contains(where: { rootID in
-            isAncestorPath(ancestor: itemID, descendant: rootID)
-        })
-    }
-
-    private var activeDeletePreviewRootItemIDs: Set<String> {
-        deleteConfirmationRootItemIDs.union(storageManagementViewModel.deletionPreviewRootItemIDs)
-    }
-
-    private func isAncestorPath(ancestor: String, descendant: String) -> Bool {
-        if ancestor == descendant {
-            return true
-        }
-        return descendant.hasPrefix(ancestor + "/")
-    }
-
-    private func modalGroupSelectionSymbol(_ state: StorageSelectionState) -> String {
-        switch state {
-        case .none:
-            return "circle"
-        case .partial:
-            return "minus.circle.fill"
-        case .all:
-            return "checkmark.circle.fill"
-        }
-    }
-
-    private func modalGroupSelectionColor(_ state: StorageSelectionState) -> Color {
-        switch state {
-        case .none:
-            return PopoverTheme.textMuted
-        case .partial:
-            return PopoverTheme.orange
-        case .all:
-            return PopoverTheme.accent
-        }
-    }
-
-    private func modalAppIconImage(for group: StorageAppGroup) -> NSImage? {
-        let cacheKey = "group:\(group.id)" as NSString
-        if let cachedIcon = Self.modalAppIconCache.object(forKey: cacheKey) {
-            return cachedIcon
-        }
-
-        guard let appBundle = group.items.first(where: { $0.kind == .appBundle }),
-              appBundle.url.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame,
-              FileManager.default.fileExists(atPath: appBundle.url.path) else {
-            return nil
-        }
-
-        let icon = NSWorkspace.shared.icon(forFile: appBundle.url.path)
-        Self.modalAppIconCache.setObject(icon, forKey: cacheKey)
-        return icon
-    }
-
-    private func modalAppIconImage(for item: StorageManagedItem) -> NSImage? {
-        guard item.kind == .appBundle else { return nil }
-
-        let cacheKey = "item:\(item.id)" as NSString
-        if let cachedIcon = Self.modalAppIconCache.object(forKey: cacheKey) {
-            return cachedIcon
-        }
-
-        guard item.url.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame,
-              FileManager.default.fileExists(atPath: item.url.path) else {
-            return nil
-        }
-
-        let icon = NSWorkspace.shared.icon(forFile: item.url.path)
-        Self.modalAppIconCache.setObject(icon, forKey: cacheKey)
-        return icon
-    }
-
-    private func modalSelectionSymbol(
-        isDirectlySelected: Bool,
-        isIncludedByAncestor: Bool,
-        item: StorageManagedItem
-    ) -> String {
-        if item.isProtected {
-            return "lock.square.fill"
-        }
-        if isDirectlySelected {
-            return "checkmark.square.fill"
-        }
-        if isIncludedByAncestor {
-            return "checkmark.square"
-        }
-        return "square"
-    }
-
-    private func modalSelectionColor(
-        isDirectlySelected: Bool,
-        isIncludedByAncestor: Bool,
-        item: StorageManagedItem
-    ) -> Color {
-        if item.isProtected {
-            return PopoverTheme.orange
-        }
-        if isDirectlySelected {
-            return PopoverTheme.accent
-        }
-        if isIncludedByAncestor {
-            return PopoverTheme.orange
-        }
-        return PopoverTheme.textSecondary
-    }
-
-    private func storageItemIcon(for item: StorageManagedItem) -> String {
-        switch item.kind {
-        case .appBundle:
-            return "app.dashed"
-        case .appCache, .looseCache, .npmCache, .pnpmStore, .yarnCache:
-            return "externaldrive.badge.timemachine"
-        case .derivedData:
-            return "hammer"
-        case .xcodeArchives:
-            return "archivebox"
-        case .simulatorData:
-            return "iphone.rear.camera"
-        case .nodeModules:
-            return "shippingbox"
-        case .appSupport, .appContainer, .customFolder, .looseFolder, .drillDown:
-            return item.category.symbolName
-        case .appLogs:
-            return "doc.text"
-        case .appPreferences:
-            return "slider.horizontal.3"
-        }
-    }
-
-    private func storageItemColor(for category: StorageManagedItemCategory) -> Color {
-        switch category {
-        case .application:
-            return PopoverTheme.blue
-        case .cache:
-            return PopoverTheme.mint
-        case .folder:
-            return PopoverTheme.purple
-        }
-    }
-
-    private var storageTopActions: some View {
-        HStack(spacing: 8) {
-            Button {
-                storageManagementViewModel.refresh()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Refresh")
-                }
-                .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(PopoverTheme.textSecondary)
-            .disabled(
-                storageManagementViewModel.isScanning ||
-                    storageManagementViewModel.isDeleting ||
-                    storageManagementViewModel.showingDeleteConfirmation
-            )
+                .frame(minWidth: 72, alignment: .trailing)
 
             Button {
-                addStorageFoldersFromPanel()
+                quickDelete(group)
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                    Text("Add Folder")
-                }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(PopoverTheme.accentContrastText)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(PopoverTheme.accent)
-                )
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PopoverTheme.red)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(PopoverTheme.redDim)
+                    )
             }
             .buttonStyle(.plain)
-            .disabled(
-                storageManagementViewModel.isDeleting ||
-                    storageManagementViewModel.showingDeleteConfirmation
-            )
         }
-    }
-
-    private func addStorageFoldersFromPanel() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = true
-        panel.prompt = "Track"
-        panel.message = "Choose folders to scan and manage."
-        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-
-        if panel.runModal() == .OK {
-            for selectedURL in panel.urls {
-                storageManagementViewModel.addCustomFolder(selectedURL)
-            }
-        }
-    }
-
-    private var storageSummaryCard: some View {
-        let segments = storageSegments()
-        let hoveredSegment = segments.first { $0.id == hoveredStorageSegmentID }
-        let usedBytesText = MetricFormatter.bytes(storageManagementViewModel.currentUsedBytes)
-        let totalBytesText = MetricFormatter.bytes(storageManagementViewModel.currentTotalBytes)
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: "internaldrive")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textMuted)
-
-                Text("\(usedBytesText) / \(totalBytesText)")
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(PopoverTheme.textPrimary)
-                    .lineLimit(1)
-
-                if let hoveredSegment {
-                    Text("\(hoveredSegment.title) \(MetricFormatter.bytes(hoveredSegment.bytes))")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(PopoverTheme.textMuted)
-                        .lineLimit(1)
-                        .transition(.opacity)
-                }
-
-                Spacer(minLength: 8)
-                storageTopActions
-            }
-
-            compactStorageUsageTrack(segments: segments)
-                .frame(height: 12)
-
-            storageScanSourcesStrip
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(PopoverTheme.bgCard)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(PopoverTheme.bgElevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
-        .animation(.easeInOut(duration: 0.12), value: hoveredStorageSegmentID)
-    }
-
-    private var storageScanSourcesStrip: some View {
-        let defaultSources = storageManagementViewModel.defaultScanSourcePaths
-        let addedSources = storageManagementViewModel.addedScanSourcePaths
-
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                Text("Scan:")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.textSecondary)
-
-                storageScanSourceChip(
-                    title: "Default \(defaultSources.count)",
-                    foreground: PopoverTheme.textPrimary,
-                    fill: PopoverTheme.bgElevated,
-                    stroke: PopoverTheme.borderSubtle,
-                    sources: defaultSources,
-                    emptyText: "No default scan folders."
-                )
-
-                storageScanSourceChip(
-                    title: "Added \(addedSources.count)",
-                    foreground: addedSources.isEmpty ? PopoverTheme.textMuted : PopoverTheme.accent,
-                    fill: PopoverTheme.bgElevated,
-                    stroke: PopoverTheme.borderSubtle,
-                    sources: addedSources,
-                    emptyText: "No custom folders added."
-                )
-            }
-            .padding(.vertical, 1)
-        }
-    }
-
-    private func storageScanSourceChip(
-        title: String,
-        foreground: Color,
-        fill: Color,
-        stroke: Color,
-        sources: [String],
-        emptyText: String
-    ) -> some View {
-        StorageScanSourceChipView(
-            title: title,
-            foreground: foreground,
-            fill: fill,
-            stroke: stroke,
-            sources: sources,
-            emptyText: emptyText
-        )
-    }
-
-    private func compactStorageUsageTrack(segments: [StorageUsageSegment]) -> some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(PopoverTheme.borderMedium)
-
-                HStack(spacing: 0) {
-                    ForEach(segments) { segment in
-                        let width = geometry.size.width * max(0, min(segment.ratio, 1))
-
-                        Rectangle()
-                            .fill(segment.color)
-                            .frame(width: width)
-                            .overlay {
-                                if hoveredStorageSegmentID == segment.id {
-                                    Rectangle()
-                                        .stroke(PopoverTheme.textPrimary.opacity(0.7), lineWidth: 1)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                            .onHover { hovering in
-                                if hovering {
-                                    hoveredStorageSegmentID = segment.id
-                                } else if hoveredStorageSegmentID == segment.id {
-                                    hoveredStorageSegmentID = nil
-                                }
-                            }
-                            .help("\(segment.title): \(MetricFormatter.bytes(segment.bytes))")
-                    }
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        }
     }
 
     private var settingsOverviewScreen: some View {
@@ -1279,7 +843,8 @@ struct PopoverRootView: View {
             settingsMenuBarCard
             settingsAlertsCard
             settingsAdvancedBatteryCard
-            settingsGeneralDiagnosticsCard
+            settingsGeneralCard
+            settingsDiagnosticsCard
             settingsAboutCard
 
             Button {
@@ -1314,7 +879,7 @@ struct PopoverRootView: View {
             settingsPickerRow(
                 title: "Display Metric",
                 selection: $settings.menuBarDisplayMode,
-                options: MenuBarDisplayMode.userSelectableCases
+                options: MenuBarDisplayMode.allCases
             ) { option in
                 option.title
             }
@@ -1341,260 +906,26 @@ struct PopoverRootView: View {
         }
     }
 
-    private var settingsGeneralDiagnosticsCard: some View {
+    private var settingsGeneralCard: some View {
         settingsCard {
-            VStack(alignment: .leading, spacing: 0) {
-                settingsCompactLaunchAtLoginRow
-                settingsDivider
-                settingsCompactPopoverWidthRow
-                settingsDivider
-                settingsCompactUpdatesRow
-                settingsDivider
-                settingsCompactDiagnosticsRow
-            }
-        }
-    }
+            settingsSectionHeader("General", symbol: "slider.horizontal.3")
 
-    private var settingsCompactLaunchAtLoginRow: some View {
-        HStack(spacing: 10) {
-            settingsCompactRowLabel("Launch at Login", symbol: "power")
-
-            Spacer(minLength: 8)
-
-            if let launchAtLoginError = settings.launchAtLoginError {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(PopoverTheme.red)
-                    .help(launchAtLoginError)
-            }
-
-            Toggle("", isOn: $settings.launchAtLoginEnabled)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(settingsToggleTint)
-        }
-        .padding(.vertical, 7)
-    }
-
-    private var settingsCompactPopoverWidthRow: some View {
-        HStack(spacing: 10) {
-            settingsCompactRowLabel("Popover Width", symbol: "arrow.left.and.right")
-
-            Spacer(minLength: 8)
-
-            Text(formattedMainPopoverWidth(settings.mainPopoverCurrentWidth))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(settingsTextMuted)
-
-            settingsCompactActionButton(
-                "Save",
-                tint: settings.hasUnsavedMainPopoverWidth ? PopoverTheme.accent : settingsTextMuted,
-                isEnabled: settings.hasUnsavedMainPopoverWidth
-            ) {
-                settings.saveCurrentPopoverWidthAsDefault()
-            }
-            .help(
-                "Current \(formattedMainPopoverWidth(settings.mainPopoverCurrentWidth)) • " +
-                    "Default \(formattedMainPopoverWidth(settings.mainPopoverDefaultWidth))"
+            settingsToggleRow(
+                title: "Launch at Login",
+                subtitle: settings.launchAtLoginError ?? "Start MacMonitor automatically after login.",
+                subtitleColor: settings.launchAtLoginError == nil ? settingsTextMuted : PopoverTheme.red,
+                isOn: $settings.launchAtLoginEnabled
             )
         }
-        .padding(.vertical, 7)
-    }
-
-    private var settingsCompactUpdatesRow: some View {
-        let state = settingsCompactUpdateState
-
-        return HStack(spacing: 10) {
-            settingsCompactRowLabel("Updates", symbol: "arrow.triangle.2.circlepath")
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(state.color)
-                    .frame(width: 7, height: 7)
-
-                Text(state.label)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(settingsTextMuted)
-            }
-
-            settingsCompactActionButton(
-                settingsCompactUpdateActionTitle,
-                tint: state == .failed ? PopoverTheme.red : PopoverTheme.accent,
-                isEnabled: settingsCompactUpdateActionEnabled
-            ) {
-                if appUpdateController.canRestartToInstallUpdate {
-                    appUpdateController.restartToInstallUpdate()
-                } else {
-                    appUpdateController.checkForUpdates()
-                }
-            }
-        }
-        .padding(.vertical, 7)
-        .help(appUpdateController.detailMessage ?? appUpdateController.statusMessage)
-    }
-
-    private var settingsCompactDiagnosticsRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 10) {
-                settingsCompactRowLabel("Diagnostics", symbol: "square.and.arrow.up")
-
-                Spacer(minLength: 8)
-
-                settingsCompactActionButton("Export") {
-                    exportDiagnostics()
-                }
-                .help(diagnosticsStatusMessage ?? "Export diagnostics bundle")
-            }
-
-            if let diagnosticsStatusMessage {
-                Text(diagnosticsStatusMessage)
-                    .font(.system(size: 10))
-                    .foregroundStyle(settingsTextMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .padding(.vertical, 7)
-    }
-
-    private func settingsCompactRowLabel(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(settingsTextMuted)
-                .frame(width: 14)
-
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(settingsTextMain)
-        }
-    }
-
-    private func settingsCompactActionButton(
-        _ title: String,
-        tint: Color = PopoverTheme.accent,
-        isEnabled: Bool = true,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            action()
-        } label: {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isEnabled ? PopoverTheme.accentContrastText : settingsTextMain)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(isEnabled ? tint : settingsInputBackground)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1.0 : 0.65)
-    }
-
-    private enum SettingsCompactUpdateState: Equatable {
-        case ready
-        case disabled
-        case checking
-        case available
-        case upToDate
-        case failed
-
-        var label: String {
-            switch self {
-            case .ready:
-                return "Ready"
-            case .disabled:
-                return "Off"
-            case .checking:
-                return "Checking"
-            case .available:
-                return "Available"
-            case .upToDate:
-                return "Up to date"
-            case .failed:
-                return "Failed"
-            }
-        }
-
-        var color: Color {
-            switch self {
-            case .ready:
-                return PopoverTheme.textMuted
-            case .disabled:
-                return PopoverTheme.textMuted
-            case .checking:
-                return PopoverTheme.orange
-            case .available:
-                return PopoverTheme.blue
-            case .upToDate:
-                return PopoverTheme.green
-            case .failed:
-                return PopoverTheme.red
-            }
-        }
-    }
-
-    private var settingsCompactUpdateState: SettingsCompactUpdateState {
-        switch appUpdateController.updateStatus {
-        case .disabled, .unavailable:
-            return .disabled
-        case .failed:
-            return .failed
-        case .checking, .restarting:
-            return .checking
-        case .available, .updateReady, .downloaded:
-            return .available
-        case .upToDate:
-            return .upToDate
-        case .ready:
-            return .ready
-        }
-    }
-
-    private var settingsCompactUpdateActionTitle: String {
-        if appUpdateController.canRestartToInstallUpdate {
-            return "Restart"
-        }
-        if appUpdateController.updateStatus == .checking {
-            return "Checking"
-        }
-        if !appUpdateController.canCheckForUpdates {
-            return "Off"
-        }
-        if settingsCompactUpdateState == .failed {
-            return "Retry"
-        }
-        return "Check"
-    }
-
-    private var settingsCompactUpdateActionEnabled: Bool {
-        appUpdateController.canRestartToInstallUpdate || appUpdateController.canCheckForUpdates
     }
 
     private var settingsAlertsCard: some View {
         settingsCard {
-            HStack(spacing: 8) {
-                settingsSectionHeader("Alerts", symbol: "bell.badge")
-                Spacer(minLength: 6)
-                settingsAlertsHeaderHighlightColorPicker
-            }
+            settingsSectionHeader("Alerts", symbol: "bell.badge")
 
-            settingsAlertPickerToggleRow(
-                title: "Thermal Pressure Threshold",
-                selection: Binding(
-                    get: { settings.systemAlertSettings.thermalThreshold },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.thermalThreshold = newValue
-                        settings.systemAlertSettings = alertSettings
-                    }
-                ),
-                options: [.fair, .serious, .critical],
+            settingsToggleRow(
+                title: "Thermal Alerts",
+                subtitle: "Notify when thermal pressure reaches threshold.",
                 isOn: Binding(
                     get: { settings.systemAlertSettings.thermalAlertEnabled },
                     set: { newValue in
@@ -1603,73 +934,38 @@ struct PopoverRootView: View {
                         settings.systemAlertSettings = alertSettings
                     }
                 )
+            )
+
+            settingsDivider
+
+            settingsPickerRow(
+                title: "Thermal Threshold",
+                selection: Binding(
+                    get: { settings.systemAlertSettings.thermalThreshold },
+                    set: { newValue in
+                        var alertSettings = settings.systemAlertSettings
+                        alertSettings.thermalThreshold = newValue
+                        settings.systemAlertSettings = alertSettings
+                    }
+                ),
+                options: [.fair, .serious, .critical]
             ) { option in
                 option.title
             }
 
             settingsDivider
 
-            settingsAlertPercentToggleRow(
-                title: "RAM Alert Threshold",
-                selection: Binding(
-                    get: { settings.systemAlertSettings.ramUsagePercentThreshold },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.ramUsagePercentThreshold = min(max(newValue, 60), 99)
-                        settings.systemAlertSettings = alertSettings
-                    }
-                ),
-                isOn: Binding(
-                    get: { settings.systemAlertSettings.ramAlertEnabled },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.ramAlertEnabled = newValue
-                        settings.systemAlertSettings = alertSettings
-                    }
-                )
-            )
-
-            settingsAlertPercentToggleRow(
-                title: "Storage Alert Threshold",
+            settingsPickerRow(
+                title: "Storage Threshold",
                 selection: Binding(
                     get: { settings.systemAlertSettings.storageUsagePercentThreshold },
                     set: { newValue in
                         var alertSettings = settings.systemAlertSettings
-                        alertSettings.storageUsagePercentThreshold = min(max(newValue, 60), 99)
+                        alertSettings.storageUsagePercentThreshold = newValue
                         settings.systemAlertSettings = alertSettings
                     }
                 ),
-                isOn: Binding(
-                    get: { settings.systemAlertSettings.storageAlertEnabled },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.storageAlertEnabled = newValue
-                        settings.systemAlertSettings = alertSettings
-                    }
-                )
-            )
-
-            settingsDivider
-
-            settingsAlertPickerToggleRow(
-                title: "Battery Health Drop Threshold",
-                selection: Binding(
-                    get: { settings.systemAlertSettings.batteryHealthDropPercentThreshold },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.batteryHealthDropPercentThreshold = newValue
-                        settings.systemAlertSettings = alertSettings
-                    }
-                ),
-                options: [5, 10, 15, 20, 25, 30, 35, 40],
-                isOn: Binding(
-                    get: { settings.systemAlertSettings.batteryHealthDropAlertEnabled },
-                    set: { newValue in
-                        var alertSettings = settings.systemAlertSettings
-                        alertSettings.batteryHealthDropAlertEnabled = newValue
-                        settings.systemAlertSettings = alertSettings
-                    }
-                )
+                options: [80, 85, 90, 95]
             ) { value in
                 "\(value)%"
             }
@@ -1677,7 +973,7 @@ struct PopoverRootView: View {
             settingsDivider
 
             settingsPickerRow(
-                title: "Alert Cooldown (All)",
+                title: "Alert Cooldown",
                 selection: Binding(
                     get: { settings.systemAlertSettings.cooldownMinutes },
                     set: { newValue in
@@ -1686,7 +982,7 @@ struct PopoverRootView: View {
                         settings.systemAlertSettings = alertSettings
                     }
                 ),
-                options: [5, 10, 15, 30]
+                options: [15, 30, 45, 60, 120]
             ) { value in
                 "\(value)m"
             }
@@ -1694,63 +990,8 @@ struct PopoverRootView: View {
     }
 
     private var settingsAdvancedBatteryCard: some View {
-        let helperAvailability = batteryPolicyCoordinator.helperAvailability
-        let helperAvailable: Bool
-        switch helperAvailability {
-        case .available:
-            helperAvailable = true
-        case .unavailable:
-            helperAvailable = false
-        }
-
-        return settingsCard {
+        settingsCard {
             settingsSectionHeader("Advanced Battery (Gated)", symbol: "shield.lefthalf.filled")
-
-            Text("These controls only apply on lifecycle events (sleep/wake) or fallback battery parsing paths.")
-                .font(.system(size: 11))
-                .foregroundStyle(settingsTextMuted)
-
-            if case .unavailable(let reason) = helperAvailability {
-                infoBanner(
-                    text: "Helper unavailable: \(reason)",
-                    tint: PopoverTheme.orange,
-                    background: PopoverTheme.orangeDim
-                )
-
-                if batteryPolicyCoordinator.isInstallingHelper {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text("Installing helper...")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(settingsTextMuted)
-                    }
-                }
-
-                Button {
-                    Task {
-                        await batteryPolicyCoordinator.installHelperIfNeededAsync()
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wrench.and.screwdriver")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text("Install Helper")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(PopoverTheme.accentContrastText)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(PopoverTheme.blue)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(batteryPolicyCoordinator.isInstallingHelper)
-                .opacity(batteryPolicyCoordinator.isInstallingHelper ? 0.6 : 1.0)
-                .help("Install or update the privileged helper used for battery control.")
-            }
 
             settingsToggleRow(
                 title: "Sleep-aware Stop Charging",
@@ -1762,8 +1003,7 @@ struct PopoverRootView: View {
                         flags.sleepAwareStopChargingEnabled = value
                         settings.batteryAdvancedControlFeatureFlags = flags
                     }
-                ),
-                isEnabled: helperAvailable
+                )
             )
 
             settingsDivider
@@ -1778,15 +1018,29 @@ struct PopoverRootView: View {
                         flags.blockSleepUntilLimitEnabled = value
                         settings.batteryAdvancedControlFeatureFlags = flags
                     }
-                ),
-                isEnabled: helperAvailable
+                )
+            )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "Calibration Workflow",
+                subtitle: "Enable calibration lifecycle hooks (experimental).",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.calibrationWorkflowEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.calibrationWorkflowEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
             )
 
             settingsDivider
 
             settingsToggleRow(
                 title: "Hardware Percentage Refinement",
-                subtitle: "Use fallback percentage parsing only when standard percentage is unavailable.",
+                subtitle: "Use refined fallback battery percentage parsing.",
                 isOn: Binding(
                     get: { settings.batteryAdvancedControlFeatureFlags.hardwarePercentageRefinementEnabled },
                     set: { value in
@@ -1794,47 +1048,91 @@ struct PopoverRootView: View {
                         flags.hardwarePercentageRefinementEnabled = value
                         settings.batteryAdvancedControlFeatureFlags = flags
                     }
-                ),
-                isEnabled: helperAvailable
+                )
             )
+
+            settingsDivider
+
+            settingsToggleRow(
+                title: "MagSafe LED Control",
+                subtitle: "Reserved for supported hardware paths.",
+                isOn: Binding(
+                    get: { settings.batteryAdvancedControlFeatureFlags.magsafeLEDControlEnabled },
+                    set: { value in
+                        var flags = settings.batteryAdvancedControlFeatureFlags
+                        flags.magsafeLEDControlEnabled = value
+                        settings.batteryAdvancedControlFeatureFlags = flags
+                    }
+                )
+            )
+        }
+    }
+
+    private var settingsDiagnosticsCard: some View {
+        settingsCard {
+            settingsSectionHeader("Diagnostics", symbol: "stethoscope")
+
+            Text("Create a local support bundle with sanitized settings, snapshots, and battery lifecycle events.")
+                .font(.system(size: 11))
+                .foregroundStyle(settingsTextMuted)
+
+            Button {
+                exportDiagnostics()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Export Diagnostics")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(PopoverTheme.accentContrastText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(PopoverTheme.accent)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if let diagnosticsStatusMessage {
+                Text(diagnosticsStatusMessage)
+                    .font(.system(size: 10))
+                    .foregroundStyle(settingsTextMuted)
+                    .lineLimit(2)
+            }
         }
     }
 
     private var settingsAboutCard: some View {
         settingsCard {
-            HStack(spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 22, height: 22)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(settingsCardBorder, lineWidth: 1)
                     )
+                    .shadow(color: Color.black.opacity(0.24), radius: 6, y: 3)
 
-                Text("MacMonitor")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(settingsTextMain)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MacMonitor")
+                        .font(.system(size: 16.5, weight: .semibold))
+                        .foregroundStyle(settingsTextMain)
 
-                Spacer(minLength: 8)
+                    Text("Version \(appSemanticVersion)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(settingsTextMuted)
 
-                Text(appVersionLabel)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(settingsTextMuted)
-
-                Button {
-                    openPublicReleasePage()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                    Text("Apple Silicon Optimized")
+                        .font(.system(size: 11))
                         .foregroundStyle(settingsTextMuted)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open latest release notes")
-                .help("Open latest public release notes")
             }
-            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
@@ -1868,112 +1166,10 @@ struct PopoverRootView: View {
         }
     }
 
-    private func settingsAlertPercentToggleRow(
-        title: String,
-        selection: Binding<Int>,
-        isOn: Binding<Bool>
-    ) -> some View {
-        let thresholdEnabled = isOn.wrappedValue
-
-        return HStack(alignment: .center, spacing: 10) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(settingsTextMain)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                TextField("", value: selection, formatter: Self.settingsIntegerFormatter)
-                    .font(.system(size: 12, weight: .medium))
-                    .multilineTextAlignment(.trailing)
-                    .textFieldStyle(.plain)
-                    .frame(width: 44)
-
-                Text("%")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(settingsTextMuted)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(settingsInputBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(settingsCardBorder, lineWidth: 1)
-            )
-            .frame(width: settingsPickerWidth, alignment: .trailing)
-            .disabled(!thresholdEnabled)
-            .opacity(thresholdEnabled ? 1.0 : 0.6)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(settingsToggleTint)
-        }
-    }
-
-    private func settingsAlertPickerToggleRow<Option: Hashable>(
-        title: String,
-        selection: Binding<Option>,
-        options: [Option],
-        isOn: Binding<Bool>,
-        optionTitle: @escaping (Option) -> String
-    ) -> some View {
-        let thresholdEnabled = isOn.wrappedValue
-
-        return HStack(alignment: .center, spacing: 10) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(settingsTextMain)
-
-            Spacer(minLength: 8)
-
-            Menu {
-                ForEach(options, id: \.self) { option in
-                    Button {
-                        selection.wrappedValue = option
-                    } label: {
-                        Text(optionTitle(option))
-                    }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Text(optionTitle(selection.wrappedValue))
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .multilineTextAlignment(.trailing)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .foregroundStyle(thresholdEnabled ? settingsTextMain : settingsTextMuted)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(width: settingsPickerWidth, alignment: .trailing)
-                .background(settingsInputBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(settingsCardBorder, lineWidth: 1)
-                )
-                .opacity(thresholdEnabled ? 1.0 : 0.6)
-            }
-            .menuIndicator(.hidden)
-            .buttonStyle(.plain)
-            .disabled(!thresholdEnabled)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(settingsToggleTint)
-        }
-    }
-
     private func settingsPickerRow<Option: Hashable>(
         title: String,
         selection: Binding<Option>,
         options: [Option],
-        isEnabled: Bool = true,
         optionTitle: @escaping (Option) -> String
     ) -> some View {
         HStack(alignment: .center, spacing: 12) {
@@ -2014,8 +1210,6 @@ struct PopoverRootView: View {
             }
             .menuIndicator(.hidden)
             .buttonStyle(.plain)
-            .disabled(!isEnabled)
-            .opacity(isEnabled ? 1.0 : 0.6)
             .frame(width: settingsPickerWidth, alignment: .trailing)
         }
     }
@@ -2050,47 +1244,6 @@ struct PopoverRootView: View {
         Color(hex: 0x32D74B)
     }
 
-    private var settingsAlertsHeaderHighlightColorPicker: some View {
-        let selection = Binding<Color>(
-            get: { Color(hex: settings.systemAlertSettings.exceededThresholdHighlightColor) },
-            set: { selectedColor in
-                guard let hex = colorHexValue(from: selectedColor) else { return }
-                var alertSettings = settings.systemAlertSettings
-                alertSettings.exceededThresholdHighlightColor = hex
-                settings.systemAlertSettings = alertSettings
-            }
-        )
-
-        return ColorPicker("", selection: selection, supportsOpacity: false)
-            .labelsHidden()
-            .accessibilityLabel("Exceeded threshold color")
-            .frame(width: 24, height: 24)
-            .contentShape(Circle())
-            .opacity(0.001)
-            .overlay {
-                Circle()
-                    .fill(selection.wrappedValue)
-                    .overlay(
-                        Circle()
-                            .stroke(settingsCardBorder, lineWidth: 1)
-                    )
-                    .allowsHitTesting(false)
-            }
-            .help("Exceeded threshold color")
-    }
-
-    private func colorHexValue(from color: Color) -> String? {
-        guard let sRGBColor = NSColor(color).usingColorSpace(.sRGB) else {
-            return nil
-        }
-
-        let red = UInt32((sRGBColor.redComponent * 255.0).rounded())
-        let green = UInt32((sRGBColor.greenComponent * 255.0).rounded())
-        let blue = UInt32((sRGBColor.blueComponent * 255.0).rounded())
-        let value = (red << 16) | (green << 8) | blue
-        return String(format: "%06X", value)
-    }
-
     private func settingsSectionHeader(_ title: String, symbol: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
@@ -2121,18 +1274,6 @@ struct PopoverRootView: View {
         96
     }
 
-    private static let settingsIntegerFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .none
-        formatter.allowsFloats = false
-        formatter.minimum = 0
-        return formatter
-    }()
-
-    private func formattedMainPopoverWidth(_ width: CGFloat) -> String {
-        "\(Int(width.rounded())) pt"
-    }
-
     private func infoBanner(text: String, tint: Color, background: Color) -> some View {
         Text(text)
             .font(.system(size: 11))
@@ -2144,6 +1285,13 @@ struct PopoverRootView: View {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(background.opacity(0.7))
             )
+    }
+
+    private var storageManagementScreen: some View {
+        StorageManagementView(
+            viewModel: storageManagementViewModel,
+            onBack: viewModel.showStorage
+        )
     }
 
     private var trendsOverviewScreen: some View {
@@ -2201,74 +1349,6 @@ struct PopoverRootView: View {
         }
     }
 
-    private var popoverResizeHandle: some View {
-        Color.clear
-            .frame(width: 20, height: 20)
-            .padding(.trailing, 4)
-            .padding(.bottom, 4)
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.resizeLeftRight.set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in
-                        if popoverResizeDragStartWidth == nil {
-                            popoverResizeDragStartWidth = activePopoverWindowContentWidth ?? settings.mainPopoverCurrentWidth
-                        }
-                        let startWidth = popoverResizeDragStartWidth ?? settings.mainPopoverCurrentWidth
-                        let horizontalDelta = value.translation.width
-                        let targetWidth = SettingsStore.normalizedMainPopoverWidth(startWidth + horizontalDelta)
-                        if let previewWidth = popoverResizePreviewWidth,
-                           abs(previewWidth - targetWidth) <= 0.5 {
-                            return
-                        }
-                        popoverResizePreviewWidth = targetWidth
-                        applyActivePopoverWindowWidth(targetWidth)
-                    }
-                    .onEnded { value in
-                        let startWidth = popoverResizeDragStartWidth ?? settings.mainPopoverCurrentWidth
-                        let horizontalDelta = value.translation.width
-                        let finalWidth = SettingsStore.normalizedMainPopoverWidth(startWidth + horizontalDelta)
-                        applyActivePopoverWindowWidth(finalWidth)
-                        settings.updateMainPopoverCurrentWidth(finalWidth)
-                        resetPopoverResizeDragState()
-                    }
-            )
-            .help("Drag from the bottom-right corner to resize popover width")
-    }
-
-    private func resetPopoverResizeDragState() {
-        popoverResizeDragStartWidth = nil
-        popoverResizePreviewWidth = nil
-    }
-
-    private var activePopoverWindow: NSWindow? {
-        if let providedWindow = popoverWindowProvider?() {
-            return providedWindow
-        }
-        return NSApp.keyWindow ?? NSApp.mainWindow
-    }
-
-    private var activePopoverWindowContentWidth: CGFloat? {
-        activePopoverWindow?.contentLayoutRect.width
-    }
-
-    private func applyActivePopoverWindowWidth(_ width: CGFloat) {
-        guard let window = activePopoverWindow else { return }
-        let normalizedWidth = SettingsStore.normalizedMainPopoverWidth(width)
-        if abs(window.contentLayoutRect.width - normalizedWidth) <= 0.5 {
-            return
-        }
-        window.setContentSize(
-            NSSize(width: normalizedWidth, height: SettingsStore.mainPopoverFixedHeight)
-        )
-    }
-
     private func panelCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             content()
@@ -2320,55 +1400,17 @@ struct PopoverRootView: View {
         }
     }
 
-    private func memoryStatRow(title: String, value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 10))
-                .foregroundStyle(PopoverTheme.textMuted)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            Text(value)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(PopoverTheme.textPrimary)
-                .lineLimit(1)
-        }
-    }
-
-    private func memorySegmentCard(_ segment: MemoryUsageSegment) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(segment.color)
-                    .frame(width: 7, height: 7)
-
-                Text(segment.title)
-                    .font(.system(size: 11))
-                    .foregroundStyle(PopoverTheme.textMuted)
-                    .lineLimit(1)
-            }
-
-            Text(MetricFormatter.bytes(segment.bytes))
-                .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                .foregroundStyle(PopoverTheme.textPrimary)
-                .lineLimit(1)
-        }
-    }
-
-    private func memoryByteText(_ value: UInt64?) -> String {
-        guard let value else { return "--" }
-        return MetricFormatter.bytes(value)
-    }
-
     private func memorySegments(for memory: MemorySnapshot) -> [MemoryUsageSegment] {
         let total = max(memory.totalBytes, 1)
         let usedBytes = min(memory.usedBytes, total)
+        let compressedBytes = min(memory.compressedBytes ?? 0, total)
         let cachedBytes = min(memory.inactiveBytes ?? 0, total)
-        let freeBytes = max(total - min(total, usedBytes + cachedBytes), 0)
+        let accountedBytes = min(total, usedBytes + compressedBytes + cachedBytes)
+        let freeBytes = max(total - accountedBytes, 0)
 
         let rawSegments: [(id: String, title: String, bytes: UInt64, color: Color)] = [
-            ("used", "Memory Used", usedBytes, PopoverTheme.accent),
+            ("used", "Used", usedBytes, PopoverTheme.accent),
+            ("compressed", "Compressed", compressedBytes, PopoverTheme.blue),
             ("cached", "Cached Files", cachedBytes, PopoverTheme.orange),
             ("free", "Free", freeBytes, PopoverTheme.textMuted)
         ]
@@ -2412,6 +1454,66 @@ struct PopoverRootView: View {
         }
     }
 
+    private func selectionStateSymbol(_ state: StorageSelectionState) -> String {
+        switch state {
+        case .none:
+            return "circle"
+        case .partial:
+            return "minus.circle.fill"
+        case .all:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private func selectionStateColor(_ state: StorageSelectionState) -> Color {
+        switch state {
+        case .none:
+            return PopoverTheme.textMuted
+        case .partial:
+            return PopoverTheme.orange
+        case .all:
+            return PopoverTheme.accent
+        }
+    }
+
+    private func quickDelete(_ group: StorageAppGroup) {
+        storageManagementViewModel.clearPresetSelection()
+        if storageManagementViewModel.groupSelectionState(group) != .all {
+            storageManagementViewModel.toggleGroupSelection(group.id)
+        }
+        storageManagementViewModel.requestDeleteSelection()
+    }
+
+    private var storageDeleteButtonTitle: String {
+        let count = storageManagementViewModel.selectedAllowedCount
+        if count > 0 {
+            return "Move to Trash (\(count))"
+        }
+        return "Move to Trash"
+    }
+
+    private var terminateButtonTitle: String {
+        let count = ramDetailsViewModel.selectedAllowedCount
+        if count > 0 {
+            return "Quit (\(count))"
+        }
+        return "Quit Selected Processes"
+    }
+
+    private func checkboxSymbol(for process: ProcessMemoryItem, isSelected: Bool) -> String {
+        if process.isProtected {
+            return "lock.fill"
+        }
+        return isSelected ? "checkmark.square.fill" : "square"
+    }
+
+    private func checkboxColor(for process: ProcessMemoryItem, isSelected: Bool) -> Color {
+        if process.isProtected {
+            return PopoverTheme.textMuted
+        }
+        return isSelected ? PopoverTheme.accent : PopoverTheme.textMuted
+    }
+
     private var appSemanticVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
@@ -2451,11 +1553,9 @@ struct PopoverRootView: View {
         hasNormalizedLegacyScreen = true
 
         switch viewModel.screen {
-        case .temperature, .battery:
+        case .temperature:
             viewModel.showRAM()
-        case .storageManagement:
-            viewModel.showStorage()
-        case .ram, .storage, .trends, .settings, .ramPolicyManager:
+        case .battery, .ram, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
             break
         }
     }
@@ -2476,13 +1576,6 @@ struct PopoverRootView: View {
         } catch {
             diagnosticsStatusMessage = "Diagnostics export failed: \(error.localizedDescription)"
         }
-    }
-
-    private func openPublicReleasePage() {
-        guard let releaseURL = URL(string: "https://github.com/oscarlehuu/macmonitor-open/releases/latest") else {
-            return
-        }
-        NSWorkspace.shared.open(releaseURL)
     }
 
     private func toggleTheme() {
