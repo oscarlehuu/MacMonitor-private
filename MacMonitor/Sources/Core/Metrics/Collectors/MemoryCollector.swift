@@ -72,7 +72,7 @@ struct MemoryCollector: MemoryCollecting {
             usedBytes: usedBytes,
             totalBytes: totalBytes,
             pressure: pressure,
-            inactiveBytes: cachedFilesBytes,
+            inactiveBytes: inactiveBytes,
             compressedBytes: compressedBytes,
             freeBytes: freeBytes,
             appMemoryBytes: appMemoryBytes,

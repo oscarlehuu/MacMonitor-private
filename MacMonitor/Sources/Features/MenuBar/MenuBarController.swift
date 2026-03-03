@@ -225,23 +225,6 @@ final class MenuBarController: NSObject {
         return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1.0)
     }
 
-    private func metricPrefixIcon() -> NSImage? {
-        guard let symbolImage = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil) else {
-            return nil
-        }
-
-        let configured = symbolImage.withSymbolConfiguration(
-            NSImage.SymbolConfiguration(
-                pointSize: 11,
-                weight: .medium,
-                scale: .small
-            )
-        )
-        let image = configured ?? symbolImage
-        image.isTemplate = true
-        return image
-    }
-
     private func iconOnlySymbol() -> NSImage? {
         guard let symbolImage = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil) else {
             return nil
