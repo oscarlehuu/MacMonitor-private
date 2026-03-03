@@ -110,6 +110,29 @@ struct SystemAlertSettings: Codable, Equatable {
     var batteryHealthDropAlertEnabled: Bool
     var batteryHealthDropPercentThreshold: Int
     var cooldownMinutes: Int
+    var exceededThresholdHighlightColor: String
+
+    private static let defaultHighlightColor = "F55D3E"
+
+    init(
+        thermalAlertEnabled: Bool,
+        thermalThreshold: ThermalState,
+        storageAlertEnabled: Bool,
+        storageUsagePercentThreshold: Int,
+        batteryHealthDropAlertEnabled: Bool,
+        batteryHealthDropPercentThreshold: Int,
+        cooldownMinutes: Int,
+        exceededThresholdHighlightColor: String
+    ) {
+        self.thermalAlertEnabled = thermalAlertEnabled
+        self.thermalThreshold = thermalThreshold
+        self.storageAlertEnabled = storageAlertEnabled
+        self.storageUsagePercentThreshold = storageUsagePercentThreshold
+        self.batteryHealthDropAlertEnabled = batteryHealthDropAlertEnabled
+        self.batteryHealthDropPercentThreshold = batteryHealthDropPercentThreshold
+        self.cooldownMinutes = cooldownMinutes
+        self.exceededThresholdHighlightColor = exceededThresholdHighlightColor
+    }
 
     static let `default` = SystemAlertSettings(
         thermalAlertEnabled: true,
@@ -118,7 +141,8 @@ struct SystemAlertSettings: Codable, Equatable {
         storageUsagePercentThreshold: 90,
         batteryHealthDropAlertEnabled: true,
         batteryHealthDropPercentThreshold: 15,
-        cooldownMinutes: 45
+        cooldownMinutes: 45,
+        exceededThresholdHighlightColor: defaultHighlightColor
     )
 
     func normalized() -> SystemAlertSettings {
@@ -137,8 +161,57 @@ struct SystemAlertSettings: Codable, Equatable {
             storageUsagePercentThreshold: min(max(storageUsagePercentThreshold, 60), 99),
             batteryHealthDropAlertEnabled: batteryHealthDropAlertEnabled,
             batteryHealthDropPercentThreshold: min(max(batteryHealthDropPercentThreshold, 5), 40),
-            cooldownMinutes: min(max(cooldownMinutes, 5), 360)
+            cooldownMinutes: min(max(cooldownMinutes, 5), 360),
+            exceededThresholdHighlightColor: Self.normalizedHexColor(exceededThresholdHighlightColor)
         )
+    }
+
+    private static func normalizedHexColor(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noHash = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+        let uppercase = noHash.uppercased()
+        let validLength = uppercase.count == 6 || uppercase.count == 8
+        let isHex = uppercase.unicodeScalars.allSatisfy { scalar in
+            (scalar.value >= 48 && scalar.value <= 57)
+                || (scalar.value >= 65 && scalar.value <= 70)
+        }
+        return (validLength && isHex) ? uppercase : defaultHighlightColor
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case thermalAlertEnabled
+        case thermalThreshold
+        case storageAlertEnabled
+        case storageUsagePercentThreshold
+        case batteryHealthDropAlertEnabled
+        case batteryHealthDropPercentThreshold
+        case cooldownMinutes
+        case exceededThresholdHighlightColor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        thermalAlertEnabled = try container.decode(Bool.self, forKey: .thermalAlertEnabled)
+        thermalThreshold = try container.decode(ThermalState.self, forKey: .thermalThreshold)
+        storageAlertEnabled = try container.decode(Bool.self, forKey: .storageAlertEnabled)
+        storageUsagePercentThreshold = try container.decode(Int.self, forKey: .storageUsagePercentThreshold)
+        batteryHealthDropAlertEnabled = try container.decode(Bool.self, forKey: .batteryHealthDropAlertEnabled)
+        batteryHealthDropPercentThreshold = try container.decode(Int.self, forKey: .batteryHealthDropPercentThreshold)
+        cooldownMinutes = try container.decode(Int.self, forKey: .cooldownMinutes)
+        exceededThresholdHighlightColor = try container.decodeIfPresent(String.self, forKey: .exceededThresholdHighlightColor)
+            ?? Self.defaultHighlightColor
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(thermalAlertEnabled, forKey: .thermalAlertEnabled)
+        try container.encode(thermalThreshold, forKey: .thermalThreshold)
+        try container.encode(storageAlertEnabled, forKey: .storageAlertEnabled)
+        try container.encode(storageUsagePercentThreshold, forKey: .storageUsagePercentThreshold)
+        try container.encode(batteryHealthDropAlertEnabled, forKey: .batteryHealthDropAlertEnabled)
+        try container.encode(batteryHealthDropPercentThreshold, forKey: .batteryHealthDropPercentThreshold)
+        try container.encode(cooldownMinutes, forKey: .cooldownMinutes)
+        try container.encode(exceededThresholdHighlightColor, forKey: .exceededThresholdHighlightColor)
     }
 }
 
