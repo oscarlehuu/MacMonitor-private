@@ -309,7 +309,7 @@ jobs:
           download_prefix="${base_updates_url}/downloads/"
           updates_repo_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-          if git ls-remote --heads "${updates_repo_remote}" gh-pages >/dev/null 2>&1; then
+          if [[ -n "$(git ls-remote --heads "${updates_repo_remote}" gh-pages 2>/dev/null)" ]]; then
             git clone --depth 1 --branch gh-pages "${updates_repo_remote}" "${updates_dir}"
           else
             mkdir -p "${updates_dir}"
@@ -390,7 +390,7 @@ jobs:
 
           git clone --depth 1 --branch gh-pages "${source_remote}" "${source_updates_dir}"
 
-          if git ls-remote --heads "${public_remote}" gh-pages >/dev/null 2>&1; then
+          if [[ -n "$(git ls-remote --heads "${public_remote}" gh-pages 2>/dev/null)" ]]; then
             git clone --depth 1 --branch gh-pages "${public_remote}" "${public_updates_dir}"
           else
             mkdir -p "${public_updates_dir}"
