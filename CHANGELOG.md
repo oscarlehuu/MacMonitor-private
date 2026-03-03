@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/oscarlehuu/macmonitor/compare/v0.5.0...v0.5.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* remove stale popover window argument in menu bar controller ([#33](https://github.com/oscarlehuu/macmonitor/issues/33)) ([1f3165f](https://github.com/oscarlehuu/macmonitor/commit/1f3165f46432bb5c3c4331592b430c557fdcf155))
+
 ## [0.5.0](https://github.com/oscarlehuu/macmonitor/compare/v0.4.3...v0.5.0) (2026-03-03)
 
 
