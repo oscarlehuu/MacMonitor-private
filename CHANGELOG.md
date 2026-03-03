@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/oscarlehuu/macmonitor/compare/v0.5.1...v0.5.2) (2026-03-03)
+
+
+### Bug Fixes
+
+* align project sparkle appcast URL with public updates feed ([#35](https://github.com/oscarlehuu/macmonitor/issues/35)) ([788620d](https://github.com/oscarlehuu/macmonitor/commit/788620d16c8090483b78abf55c72ce95df0f02fe))
+
 ## [0.5.1](https://github.com/oscarlehuu/macmonitor/compare/v0.5.0...v0.5.1) (2026-03-03)
 
 
