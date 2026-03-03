@@ -1560,6 +1560,9 @@ struct PopoverRootView: View {
         if appUpdateController.canRestartToInstallUpdate {
             return "Restart"
         }
+        if appUpdateController.updateStatus == .checking {
+            return "Checking"
+        }
         if !appUpdateController.canCheckForUpdates {
             return "Off"
         }
