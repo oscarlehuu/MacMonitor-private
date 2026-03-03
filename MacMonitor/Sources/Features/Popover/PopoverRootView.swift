@@ -2364,8 +2364,7 @@ struct PopoverRootView: View {
         let total = max(memory.totalBytes, 1)
         let usedBytes = min(memory.usedBytes, total)
         let cachedBytes = min(memory.inactiveBytes ?? 0, total)
-        let fallbackFreeBytes = max(total - min(total, usedBytes + cachedBytes), 0)
-        let freeBytes = min(memory.freeBytes ?? fallbackFreeBytes, total)
+        let freeBytes = max(total - min(total, usedBytes + cachedBytes), 0)
 
         let rawSegments: [(id: String, title: String, bytes: UInt64, color: Color)] = [
             ("used", "Memory Used", usedBytes, PopoverTheme.accent),

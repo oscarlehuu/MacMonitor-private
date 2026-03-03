@@ -141,7 +141,7 @@ struct SystemAlertSettings: Codable, Equatable {
         storageUsagePercentThreshold: 90,
         batteryHealthDropAlertEnabled: true,
         batteryHealthDropPercentThreshold: 15,
-        cooldownMinutes: 45,
+        cooldownMinutes: 30,
         exceededThresholdHighlightColor: defaultHighlightColor
     )
 
