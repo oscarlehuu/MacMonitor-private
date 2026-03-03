@@ -521,7 +521,4 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    func updateMainPopoverCurrentWidth(_ width: CGFloat) {
-        mainPopoverCurrentWidth = Self.normalizedMainPopoverWidth(width)
-    }
 }

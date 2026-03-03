@@ -20,7 +20,7 @@ concurrency:
 
 env:
   SPARKLE_VERSION: 2.8.1
-  UPDATES_BASE_URL: ${{ vars.UPDATES_BASE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+  UPDATES_BASE_URL: ${{ vars.UPDATES_BASE_URL || 'https://oscarlehuu.github.io/macmonitor-open' }}
   PUBLIC_DISTRIBUTION_REPO: ${{ vars.PUBLIC_DISTRIBUTION_REPO || '' }}
 
 jobs:
