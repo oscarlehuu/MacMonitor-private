@@ -1,5 +1,11 @@
 # Release Checklist
 
+## Repository authority
+
+- Private source-of-truth repo: `oscarlehuu/macmonitor`.
+- Public distribution repo (binary + changelog only): `oscarlehuu/macmonitor-open`.
+- End users download installers from GitHub Releases in `oscarlehuu/macmonitor-open` (no custom download website required).
+
 ## Automated flow (default)
 
 Two workflows now own release automation:
@@ -24,6 +30,7 @@ Two workflows now own release automation:
      - `notes/MacMonitor-<version>-<build>.txt`
    - Regenerates and commits `appcast.xml` + per-release notes in that Pages branch.
    - Optional: mirrors Sparkle artifacts + `CHANGELOG.md` + release asset to a public distribution repo when `PUBLIC_DISTRIBUTION_REPO` is configured.
+   - Recommended distribution pattern: set `PUBLIC_DISTRIBUTION_REPO=oscarlehuu/macmonitor-open` so public users download only from GitHub Releases.
 
 ## Conventional Commit mapping
 
@@ -53,7 +60,7 @@ Use these commit types on merge PRs to `main`:
 ## Optional repository variables
 
 - `UPDATES_BASE_URL`: public base URL where update feed files are hosted.
-- If not set, release workflow defaults to `https://<github.repository_owner>.github.io/<repo-name>`.
+- If not set, release workflow defaults to `https://oscarlehuu.github.io/macmonitor-open`.
 - Recommended: set `UPDATES_BASE_URL` explicitly so workflow output and `SPARKLE_APPCAST_URL` stay aligned.
 - `PUBLIC_DISTRIBUTION_REPO`: target public repo in `owner/repo` format (example: `oscarlehuu/macmonitor-open`).
 
@@ -62,9 +69,9 @@ Use these commit types on merge PRs to `main`:
 1. Enable GitHub Pages in the private source repo.
 2. Set source to branch: `gh-pages`, folder: `/ (root)`.
 3. Ensure GitHub Actions can push directly to `gh-pages` (branch protection must allow it).
-4. If using public distribution mirror, enable GitHub Pages on the public repo (`gh-pages` branch, root).
-5. If using public distribution mirror, configure `PUBLIC_DISTRIBUTION_REPO` + `PUBLIC_DISTRIBUTION_TOKEN` in the private source repo.
-6. Verify that `<UPDATES_BASE_URL>/appcast.xml` is reachable.
+4. If using public distribution mirror, configure `PUBLIC_DISTRIBUTION_REPO` + `PUBLIC_DISTRIBUTION_TOKEN` in the private source repo.
+5. Verify that `<UPDATES_BASE_URL>/appcast.xml` is reachable.
+6. Confirm the latest release asset appears in `https://github.com/oscarlehuu/macmonitor-open/releases`.
 
 ## Manual fallback
 
