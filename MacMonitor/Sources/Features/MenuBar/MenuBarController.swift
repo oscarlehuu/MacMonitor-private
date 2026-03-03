@@ -56,9 +56,6 @@ final class MenuBarController: NSObject {
                 batteryScheduleViewModel: batteryScheduleViewModel,
                 settings: viewModel.settings,
                 appUpdateController: appUpdateController,
-                popoverWindowProvider: { [weak self] in
-                    self?.popover.contentViewController?.view.window
-                },
                 diagnosticsExporter: diagnosticsExporter
             )
         )
