@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_SCRIPT="${SCRIPT_DIR}/install-macmonitor-update.sh"
 
-REPO="oscarlehuu/macmonitor"
+REPO="oscarlehuu/MacMonitor-private"
 TAG=""
 ASSET_PATTERN="MacMonitor-*.zip"
 RELAUNCH=false
@@ -23,7 +23,7 @@ Options:
   -h, --help                 Show help.
 
 Example:
-  $(basename "$0") --repo oscarlehuu/macmonitor --relaunch
+  $(basename "$0") --repo oscarlehuu/MacMonitor-private --relaunch
 USAGE
 }
 

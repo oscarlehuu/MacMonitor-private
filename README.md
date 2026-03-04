@@ -25,18 +25,18 @@ Private-source macOS (Apple Silicon) menu bar monitor.
 - When the release PR is merged and a tag/release is published, `Publish Release Assets` builds/signs/notarizes the app, then:
   - uploads release assets (`.zip` + `.dmg`) to this private repo
   - publishes Sparkle appcast/update payload to `gh-pages` (for in-app updater; no custom website needed)
-- Optional: mirror binary release assets + `CHANGELOG.md` to a public distribution repo (for GitHub Downloads) by setting `PUBLIC_DISTRIBUTION_REPO` (repo variable) and `PUBLIC_DISTRIBUTION_TOKEN` (secret, fallback: existing `UPDATES_REPO_TOKEN`).
+- Release workflow mirrors binary release assets + `CHANGELOG.md` to the public distribution repo (`oscarlehuu/MacMonitor` by default) for GitHub Downloads. Override target with `PUBLIC_DISTRIBUTION_REPO`; auth uses `PUBLIC_DISTRIBUTION_TOKEN` (fallback: `UPDATES_REPO_TOKEN`).
 - Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `APPLE_NOTARY_API_KEY_BASE64`).
 - See `scripts/release-checklist.md` for full release flow and secrets.
-- Recommended variable: `UPDATES_BASE_URL` (set explicitly to match `SPARKLE_APPCAST_URL`; current fallback is `https://oscarlehuu.github.io/macmonitor-open`).
+- Recommended variable: `UPDATES_BASE_URL` (set explicitly to match `SPARKLE_APPCAST_URL`; current value is `https://oscarlehuu.github.io/MacMonitor`).
 
 ## Install new build
 Use:
 - `./scripts/install-macmonitor-update.sh`
-- `./scripts/install-latest-private-release.sh --repo oscarlehuu/macmonitor`
+- `./scripts/install-latest-private-release.sh --repo oscarlehuu/MacMonitor-private`
 
 ## Community
-- Public issue tracker: `https://github.com/oscarlehuu/macmonitor-open/issues/new/choose`
+- Public issue tracker: `https://github.com/oscarlehuu/MacMonitor/issues/new/choose`
 - Contributing guide: `CONTRIBUTING.md`
 - Code of conduct: `CODE_OF_CONDUCT.md`
 - Security policy: `SECURITY.md`
