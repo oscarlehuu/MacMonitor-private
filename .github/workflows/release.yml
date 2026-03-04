@@ -258,7 +258,13 @@ jobs:
           rm -rf "${dmg_staging_dir}/Applications"
           # Use a symlink instead of Finder alias to keep the Applications icon stable in CI-built DMGs.
           ln -s /Applications "${dmg_staging_dir}/Applications"
-          hdiutil create -volname "MacMonitor" -srcfolder "${dmg_staging_dir}" -ov -format UDZO "${dmg_path}"
+          hdiutil create \
+            -volname "MacMonitor" \
+            -srcfolder "${dmg_staging_dir}" \
+            -ov \
+            -format UDZO \
+            -fs HFS+ \
+            "${dmg_path}"
           dmg_notary_result_path="${RUNNER_TEMP}/dmg-notary-result.json"
 
           xcrun notarytool submit "${dmg_path}" \
