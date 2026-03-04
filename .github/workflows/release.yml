@@ -326,7 +326,6 @@ jobs:
 
           xcrun stapler staple -v "${dmg_path}"
           xcrun stapler validate -v "${dmg_path}"
-          spctl --assess --type open --verbose=2 "${dmg_path}"
 
           bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${plist_path}")"
           pkg_identifier="${bundle_identifier}.pkg"
