@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.7](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.6...v0.5.7) (2026-03-04)
+
+
+### Bug Fixes
+
+* **ui:** recover memory and storage popover updates ([c87f8d4](https://github.com/oscarlehuu/MacMonitor-private/commit/c87f8d49f237b3d6c1cc8ad16b403bdbf9bbfbd6))
+
 ## [0.5.4](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.3...v0.5.4) (2026-03-04)
 
 
