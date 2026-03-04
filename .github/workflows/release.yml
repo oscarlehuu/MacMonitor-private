@@ -255,11 +255,11 @@ jobs:
           rm -rf "${dmg_staging_dir}"
           mkdir -p "${dmg_staging_dir}"
           ditto "${app_path}" "${dmg_staging_dir}/MacMonitor.app"
-          if ! osascript \
+          rm -f "${dmg_staging_dir}/Applications"
+          osascript \
             -e "tell application \"Finder\" to make alias file to POSIX file \"/Applications\" at POSIX file \"${dmg_staging_dir}\"" \
-            >/dev/null 2>&1
-          then
-            rm -f "${dmg_staging_dir}/Applications"
+            >/dev/null 2>&1 || true
+          if [[ ! -e "${dmg_staging_dir}/Applications" && ! -L "${dmg_staging_dir}/Applications" ]]; then
             ln -s /Applications "${dmg_staging_dir}/Applications"
           fi
           hdiutil create -volname "MacMonitor" -srcfolder "${dmg_staging_dir}" -ov -format UDZO "${dmg_path}"
