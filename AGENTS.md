@@ -18,7 +18,8 @@
 
 ## Private Distribution Rule
 
-- Private source-of-truth repo: `oscarlehuu/macmonitor` (this repo).
-- Do not publish source snapshots to any public mirror repository.
-- Sparkle update artifacts are published as binary-only feed files on this repo's `gh-pages` branch.
-- Keep all release automation and signing/notarization secrets scoped to this private source repo.
+- Source code repo (private, source of truth): `oscarlehuu/MacMonitor-private` (this repo).
+- Public distribution repo (no source code, releases/issues): `oscarlehuu/MacMonitor`.
+- Never publish source snapshots or source history to `oscarlehuu/MacMonitor`.
+- Sparkle update artifacts are published as binary-only feed files on this repo's `gh-pages` branch, then mirrored to the public distribution repo.
+- Keep all release automation and signing/notarization secrets scoped to `oscarlehuu/MacMonitor-private` only.
