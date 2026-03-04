@@ -26,8 +26,8 @@ Two workflows now own release automation:
    - Uploads `.zip` + `.dmg` assets to source release.
    - Publishes Sparkle update feed artifacts to this repo's `gh-pages` branch:
      - `appcast.xml`
-     - `downloads/MacMonitor-<version>-<build>.zip` (Sparkle payload)
-     - `notes/MacMonitor-<version>-<build>.txt`
+     - `downloads/MacMonitor-<version>.zip` (Sparkle payload)
+     - `notes/MacMonitor-<version>.txt`
    - Regenerates and commits `appcast.xml` + per-release notes in that Pages branch.
    - Mirrors Sparkle artifacts + `CHANGELOG.md` + release assets to the public distribution repo (`oscarlehuu/MacMonitor` by default).
    - Override mirror target with `PUBLIC_DISTRIBUTION_REPO` when needed.

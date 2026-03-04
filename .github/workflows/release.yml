@@ -245,9 +245,9 @@ jobs:
           xcrun stapler validate -v "${app_path}"
           spctl --assess --type execute --verbose=2 "${app_path}"
 
-          asset_name="MacMonitor-${built_short_version}-${built_build_version}.zip"
+          asset_name="MacMonitor-${built_short_version}.zip"
           asset_path="${RUNNER_TEMP}/${asset_name}"
-          dmg_name="MacMonitor-${built_short_version}-${built_build_version}.dmg"
+          dmg_name="MacMonitor-${built_short_version}.dmg"
           dmg_path="${RUNNER_TEMP}/${dmg_name}"
           dmg_staging_dir="${RUNNER_TEMP}/dmg-staging"
 
@@ -255,13 +255,9 @@ jobs:
           rm -rf "${dmg_staging_dir}"
           mkdir -p "${dmg_staging_dir}"
           ditto "${app_path}" "${dmg_staging_dir}/MacMonitor.app"
-          rm -f "${dmg_staging_dir}/Applications"
-          osascript \
-            -e "tell application \"Finder\" to make alias file to POSIX file \"/Applications\" at POSIX file \"${dmg_staging_dir}\"" \
-            >/dev/null 2>&1 || true
-          if [[ ! -e "${dmg_staging_dir}/Applications" && ! -L "${dmg_staging_dir}/Applications" ]]; then
-            ln -s /Applications "${dmg_staging_dir}/Applications"
-          fi
+          rm -rf "${dmg_staging_dir}/Applications"
+          # Use a symlink instead of Finder alias to keep the Applications icon stable in CI-built DMGs.
+          ln -s /Applications "${dmg_staging_dir}/Applications"
           hdiutil create -volname "MacMonitor" -srcfolder "${dmg_staging_dir}" -ov -format UDZO "${dmg_path}"
           dmg_notary_result_path="${RUNNER_TEMP}/dmg-notary-result.json"
 
