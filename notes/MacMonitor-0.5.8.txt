@@ -1,0 +1,18 @@
+MacMonitor v0.5.8
+
+## [0.5.8](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.7...v0.5.8) (2026-03-04)
+
+
+### Bug Fixes
+
+* **release:** add notarized pkg distribution asset ([a91a6a8](https://github.com/oscarlehuu/MacMonitor-private/commit/a91a6a83d45a38b0b311bea051a53d99b99deecf))
+* **release:** auto-detect installer signing identity for pkg ([7cb8dd3](https://github.com/oscarlehuu/MacMonitor-private/commit/7cb8dd3e611233bdf792cbf1cca62824a75b8f45))
+* **release:** build DMG with HFS+ for stable Finder rendering ([b0a6839](https://github.com/oscarlehuu/MacMonitor-private/commit/b0a68394d93f523ad6cb2b8eb88a7e584ae7c40f))
+* **release:** remove brittle dmg spctl assessment ([6184d1c](https://github.com/oscarlehuu/MacMonitor-private/commit/6184d1cb3364ce89e41dc8d265f5fa5464312777))
+* **release:** require signed installer certificate for pkg ([fd69eeb](https://github.com/oscarlehuu/MacMonitor-private/commit/fd69eebfb5d60714c8ca2901944f1cd9f441be29))
+* **release:** simplify asset names and stabilize DMG Applications link ([d737ce7](https://github.com/oscarlehuu/MacMonitor-private/commit/d737ce7bf8d21c25b110212c01480630e23c8574))
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).
+
+<!-- CURSOR_SUMMARY -->
