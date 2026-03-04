@@ -44,7 +44,10 @@ final class UserNotificationSystemAlertNotifier: SystemAlertNotifying {
     private func requestAuthorizationIfNeeded() {
         guard !requestedAuthorization else { return }
         requestedAuthorization = true
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        center.requestAuthorization(
+            options: [.alert, .sound],
+            completionHandler: Self.handleAuthorizationResult
+        )
     }
 
     private func enqueueNotification(for alert: SystemAlert) {
@@ -59,6 +62,10 @@ final class UserNotificationSystemAlertNotifier: SystemAlertNotifying {
             trigger: nil
         )
 
-        center.add(request) { _ in }
+        center.add(request, withCompletionHandler: Self.handleEnqueueResult)
     }
+
+    nonisolated private static func handleAuthorizationResult(_: Bool, _: Error?) {}
+
+    nonisolated private static func handleEnqueueResult(_: Error?) {}
 }
