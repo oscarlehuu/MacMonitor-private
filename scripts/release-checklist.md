@@ -17,19 +17,19 @@ Two workflows now own release automation:
    - Docs/chore/test-only changes do not create a release.
 
 2. `.github/workflows/release.yml` (trigger: GitHub Release `published`)
-   - Builds release zip from tag version.
+   - Builds release assets (`.zip` + `.dmg`) from tag version.
    - Requires Developer ID signing + Apple notarization secrets and refuses to publish ad-hoc/unsigned app builds.
    - Sets app version at build time:
      - `MARKETING_VERSION = X.Y.Z` (from tag)
      - `CURRENT_PROJECT_VERSION = $GITHUB_RUN_NUMBER`
    - Submits the release bundle to Apple notarization, waits for acceptance, and staples the ticket to `MacMonitor.app`.
-   - Uploads zip asset to source release.
+   - Uploads `.zip` + `.dmg` assets to source release.
    - Publishes Sparkle update feed artifacts to this repo's `gh-pages` branch:
      - `appcast.xml`
-     - `downloads/MacMonitor-<version>-<build>.zip`
+     - `downloads/MacMonitor-<version>-<build>.zip` (Sparkle payload)
      - `notes/MacMonitor-<version>-<build>.txt`
    - Regenerates and commits `appcast.xml` + per-release notes in that Pages branch.
-   - Optional: mirrors Sparkle artifacts + `CHANGELOG.md` + release asset to a public distribution repo when `PUBLIC_DISTRIBUTION_REPO` is configured.
+   - Optional: mirrors Sparkle artifacts + `CHANGELOG.md` + release assets to a public distribution repo when `PUBLIC_DISTRIBUTION_REPO` is configured.
    - Recommended distribution pattern: set `PUBLIC_DISTRIBUTION_REPO=oscarlehuu/macmonitor-open` so public users download only from GitHub Releases.
 
 ## Conventional Commit mapping
