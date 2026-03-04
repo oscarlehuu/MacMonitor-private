@@ -247,8 +247,41 @@ jobs:
 
           asset_name="MacMonitor-${built_short_version}-${built_build_version}.zip"
           asset_path="${RUNNER_TEMP}/${asset_name}"
+          dmg_name="MacMonitor-${built_short_version}-${built_build_version}.dmg"
+          dmg_path="${RUNNER_TEMP}/${dmg_name}"
+          dmg_staging_dir="${RUNNER_TEMP}/dmg-staging"
 
           ditto -c -k --sequesterRsrc --keepParent "${app_path}" "${asset_path}"
+          rm -rf "${dmg_staging_dir}"
+          mkdir -p "${dmg_staging_dir}"
+          ditto "${app_path}" "${dmg_staging_dir}/MacMonitor.app"
+          hdiutil create -volname "MacMonitor" -srcfolder "${dmg_staging_dir}" -ov -format UDZO "${dmg_path}"
+          dmg_notary_result_path="${RUNNER_TEMP}/dmg-notary-result.json"
+
+          xcrun notarytool submit "${dmg_path}" \
+            --key "${notary_key_path}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --output-format json > "${dmg_notary_result_path}"
+
+          /usr/bin/python3 -m json.tool "${dmg_notary_result_path}" || cat "${dmg_notary_result_path}"
+          dmg_notary_status="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", ""))' "${dmg_notary_result_path}")"
+          dmg_notary_id="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("id", ""))' "${dmg_notary_result_path}")"
+          if [[ "${dmg_notary_status}" != "Accepted" ]]; then
+            echo "DMG notarization did not return Accepted status (status=${dmg_notary_status:-unknown})." >&2
+            if [[ -n "${dmg_notary_id}" ]]; then
+              echo "Fetching DMG notary rejection log for submission ${dmg_notary_id}..." >&2
+              xcrun notarytool log "${dmg_notary_id}" \
+                --key "${notary_key_path}" \
+                --key-id "${APPLE_NOTARY_KEY_ID}" \
+                --issuer "${APPLE_NOTARY_ISSUER_ID}" || true
+            fi
+            exit 1
+          fi
+
+          xcrun stapler staple -v "${dmg_path}"
+          xcrun stapler validate -v "${dmg_path}"
 
           notes_path="${RUNNER_TEMP}/release-notes.md"
           base_updates_url="${UPDATES_BASE_URL%/}"
@@ -265,6 +298,8 @@ jobs:
 
           echo "asset_name=${asset_name}" >> "${GITHUB_OUTPUT}"
           echo "asset_path=${asset_path}" >> "${GITHUB_OUTPUT}"
+          echo "dmg_name=${dmg_name}" >> "${GITHUB_OUTPUT}"
+          echo "dmg_path=${dmg_path}" >> "${GITHUB_OUTPUT}"
           echo "notes_path=${notes_path}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload asset to source release
@@ -277,12 +312,19 @@ jobs:
           tag="${{ steps.meta.outputs.tag }}"
           asset_path="${{ steps.build.outputs.asset_path }}"
           asset_name="${{ steps.build.outputs.asset_name }}"
+          dmg_path="${{ steps.build.outputs.dmg_path }}"
+          dmg_name="${{ steps.build.outputs.dmg_name }}"
           notes_path="${{ steps.build.outputs.notes_path }}"
 
           if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release upload "${tag}" "${asset_path}#${asset_name}" --clobber
+            gh release upload "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
+              --clobber
           else
-            gh release create "${tag}" "${asset_path}#${asset_name}" \
+            gh release create "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
               --title "MacMonitor ${tag}" \
               --notes-file "${notes_path}" \
               --latest
@@ -380,6 +422,8 @@ jobs:
           tag="${{ steps.meta.outputs.tag }}"
           asset_path="${{ steps.build.outputs.asset_path }}"
           asset_name="${{ steps.build.outputs.asset_name }}"
+          dmg_path="${{ steps.build.outputs.dmg_path }}"
+          dmg_name="${{ steps.build.outputs.dmg_name }}"
           notes_basename="${asset_name%.zip}.txt"
 
           source_updates_dir="${RUNNER_TEMP}/source-updates-site"
@@ -434,9 +478,15 @@ jobs:
           fi
 
           if gh release view "${tag}" --repo "${PUBLIC_DISTRIBUTION_REPO}" >/dev/null 2>&1; then
-            gh release upload "${tag}" "${asset_path}#${asset_name}" --repo "${PUBLIC_DISTRIBUTION_REPO}" --clobber
+            gh release upload "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
+              --repo "${PUBLIC_DISTRIBUTION_REPO}" \
+              --clobber
           else
-            gh release create "${tag}" "${asset_path}#${asset_name}" \
+            gh release create "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
               --repo "${PUBLIC_DISTRIBUTION_REPO}" \
               --title "MacMonitor ${tag}" \
               --notes "${public_release_notes}" \
