@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.2...v0.5.3) (2026-03-04)
+
+
+### Bug Fixes
+
+* **release:** add Applications shortcut to dmg ([#38](https://github.com/oscarlehuu/MacMonitor-private/issues/38)) ([a6e8cc9](https://github.com/oscarlehuu/MacMonitor-private/commit/a6e8cc9c450cadbf97953eed29bca5e0be982e31))
+
 ## [0.5.2](https://github.com/oscarlehuu/macmonitor/compare/v0.5.1...v0.5.2) (2026-03-03)
 
 
