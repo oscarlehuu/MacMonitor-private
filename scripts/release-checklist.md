@@ -48,8 +48,6 @@ Use these commit types on merge PRs to `main`:
 - `APPLE_CERTIFICATE_P12_BASE64`: Developer ID Application certificate (base64-encoded `.p12`).
 - `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
 - `APPLE_SIGNING_IDENTITY`: signing identity name (for example: `Developer ID Application: Your Name (TEAMID)`).
-- `APPLE_INSTALLER_SIGNING_IDENTITY`: installer signing identity name (for example: `Developer ID Installer: Your Name (TEAMID)`).
-- `APPLE_CERTIFICATE_P12_BASE64` must contain the private key for `APPLE_INSTALLER_SIGNING_IDENTITY` as well, or provide installer certificate secrets in Optional section.
 - `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID used by `notarytool`.
 - `APPLE_NOTARY_ISSUER_ID`: App Store Connect issuer UUID paired with the API key.
 - `APPLE_NOTARY_API_KEY_BASE64`: base64-encoded contents of `AuthKey_<APPLE_NOTARY_KEY_ID>.p8`.
@@ -58,6 +56,7 @@ Use these commit types on merge PRs to `main`:
 
 - `PUBLIC_DISTRIBUTION_TOKEN`: PAT (or fine-grained token) with `contents:write` access to the public distribution repo.
 - Backward-compatible fallback: if `PUBLIC_DISTRIBUTION_TOKEN` is unset, workflow uses `UPDATES_REPO_TOKEN`.
+- `APPLE_INSTALLER_SIGNING_IDENTITY`: installer signing identity name (for example: `Developer ID Installer: Your Name (TEAMID)`). If omitted, workflow auto-detects installer identity in imported keychain.
 - `APPLE_INSTALLER_CERTIFICATE_P12_BASE64`: optional separate Developer ID Installer certificate bundle (base64 `.p12`) when installer cert/key is not included in `APPLE_CERTIFICATE_P12_BASE64`.
 - `APPLE_INSTALLER_CERTIFICATE_PASSWORD`: password for `APPLE_INSTALLER_CERTIFICATE_P12_BASE64`.
 
