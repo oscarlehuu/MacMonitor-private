@@ -54,7 +54,7 @@ struct MemoryCollector: MemoryCollecting {
             internalBytes > 0 ? internalBytes : fallbackAppMemoryBytes
         )
 
-        let freePages = UInt64(freePagesExcludingSpeculative)
+        let freePages = UInt64(stats.free_count)
         let totalPages = max(1, UInt64(totalBytes / UInt64(pageSize)))
         let freeRatio = Double(freePages) / Double(totalPages)
 
@@ -72,7 +72,7 @@ struct MemoryCollector: MemoryCollecting {
             usedBytes: usedBytes,
             totalBytes: totalBytes,
             pressure: pressure,
-            inactiveBytes: inactiveBytes,
+            inactiveBytes: cachedFilesBytes,
             compressedBytes: compressedBytes,
             freeBytes: freeBytes,
             appMemoryBytes: appMemoryBytes,

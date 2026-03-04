@@ -56,6 +56,9 @@ final class MenuBarController: NSObject {
                 batteryScheduleViewModel: batteryScheduleViewModel,
                 settings: viewModel.settings,
                 appUpdateController: appUpdateController,
+                popoverWindowProvider: { [weak self] in
+                    self?.popover.contentViewController?.view.window
+                },
                 diagnosticsExporter: diagnosticsExporter
             )
         )
@@ -220,6 +223,23 @@ final class MenuBarController: NSObject {
         let green = CGFloat((hex >> 8) & 0xFF) / 255.0
         let blue = CGFloat(hex & 0xFF) / 255.0
         return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1.0)
+    }
+
+    private func metricPrefixIcon() -> NSImage? {
+        guard let symbolImage = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil) else {
+            return nil
+        }
+
+        let configured = symbolImage.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(
+                pointSize: 11,
+                weight: .medium,
+                scale: .small
+            )
+        )
+        let image = configured ?? symbolImage
+        image.isTemplate = true
+        return image
     }
 
     private func iconOnlySymbol() -> NSImage? {
