@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.4](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.3...v0.5.4) (2026-03-04)
+
+
+### Bug Fixes
+
+* prevent notifier callback crash and improve dmg Applications alias ([#40](https://github.com/oscarlehuu/MacMonitor-private/issues/40)) ([3dc691a](https://github.com/oscarlehuu/MacMonitor-private/commit/3dc691a40eab55d5464df42150b88fedac65fde7))
+* **release:** add Applications shortcut to dmg ([#38](https://github.com/oscarlehuu/MacMonitor-private/issues/38)) ([a6e8cc9](https://github.com/oscarlehuu/MacMonitor-private/commit/a6e8cc9c450cadbf97953eed29bca5e0be982e31))
+
 ## [0.5.3](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.2...v0.5.3) (2026-03-04)
 
 
