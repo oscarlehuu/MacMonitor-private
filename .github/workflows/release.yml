@@ -84,14 +84,8 @@ jobs:
           [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_P12_BASE64" && exit 1)
           [[ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_PASSWORD" && exit 1)
           [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] || (echo "Missing required secret: APPLE_SIGNING_IDENTITY" && exit 1)
-          if [[ -n "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" && -z "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:-}" ]]; then
-            echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_PASSWORD (because APPLE_INSTALLER_CERTIFICATE_P12_BASE64 is set)" >&2
-            exit 1
-          fi
-          if [[ -z "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" && -n "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:-}" ]]; then
-            echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_P12_BASE64 (because APPLE_INSTALLER_CERTIFICATE_PASSWORD is set)" >&2
-            exit 1
-          fi
+          [[ -n "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" ]] || (echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_P12_BASE64" && exit 1)
+          [[ -n "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:-}" ]] || (echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_PASSWORD" && exit 1)
           [[ -n "${APPLE_NOTARY_KEY_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_KEY_ID" && exit 1)
           [[ -n "${APPLE_NOTARY_ISSUER_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_ISSUER_ID" && exit 1)
           [[ -n "${APPLE_NOTARY_API_KEY_BASE64:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_API_KEY_BASE64" && exit 1)
@@ -153,14 +147,12 @@ jobs:
           security set-keychain-settings -lut 21600 "${keychain_path}"
           security unlock-keychain -p "${keychain_password}" "${keychain_path}"
           security import "${cert_path}" -k "${keychain_path}" -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
-          if [[ -n "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" ]]; then
-            if echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 --decode > "${installer_cert_path}" 2>/dev/null; then
-              :
-            else
-              echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 -D > "${installer_cert_path}"
-            fi
-            security import "${installer_cert_path}" -k "${keychain_path}" -P "${APPLE_INSTALLER_CERTIFICATE_PASSWORD}" -T /usr/bin/productsign -T /usr/bin/security
+          if echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 --decode > "${installer_cert_path}" 2>/dev/null; then
+            :
+          else
+            echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 -D > "${installer_cert_path}"
           fi
+          security import "${installer_cert_path}" -k "${keychain_path}" -P "${APPLE_INSTALLER_CERTIFICATE_PASSWORD}" -T /usr/bin/productsign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
           security list-keychains -d user -s "${keychain_path}" login.keychain-db
           security default-keychain -s "${keychain_path}"
@@ -170,12 +162,12 @@ jobs:
             installer_signing_identity="$(security find-identity -v -p basic "${keychain_path}" | sed -n 's/.*\"\\(Developer ID Installer:.*\\)\".*/\\1/p' | head -n1 || true)"
           fi
           if [[ -z "${installer_signing_identity}" ]]; then
-            echo "No Developer ID Installer identity found. PKG will be generated unsigned." >&2
-            pkg_signing_mode="unsigned"
-          else
-            echo "Using installer signing identity: ${installer_signing_identity}"
-            pkg_signing_mode="signed"
+            echo "No Developer ID Installer identity found after importing APPLE_INSTALLER_CERTIFICATE_P12_BASE64." >&2
+            echo "Set APPLE_INSTALLER_SIGNING_IDENTITY or provide a .p12 containing Developer ID Installer private key." >&2
+            exit 1
           fi
+          echo "Using installer signing identity: ${installer_signing_identity}"
+          pkg_signing_mode="signed+notarized"
 
           signing_args=(
             CODE_SIGN_STYLE=Manual
@@ -340,40 +332,35 @@ jobs:
             --version "${built_short_version}" \
             "${pkg_unsigned_path}"
 
-          if [[ "${pkg_signing_mode}" == "signed" ]]; then
-            productsign --sign "${installer_signing_identity}" "${pkg_unsigned_path}" "${pkg_path}"
-            pkgutil --check-signature "${pkg_path}"
+          productsign --sign "${installer_signing_identity}" "${pkg_unsigned_path}" "${pkg_path}"
+          pkgutil --check-signature "${pkg_path}"
 
-            pkg_notary_result_path="${RUNNER_TEMP}/pkg-notary-result.json"
-            xcrun notarytool submit "${pkg_path}" \
-              --key "${notary_key_path}" \
-              --key-id "${APPLE_NOTARY_KEY_ID}" \
-              --issuer "${APPLE_NOTARY_ISSUER_ID}" \
-              --wait \
-              --output-format json > "${pkg_notary_result_path}"
+          pkg_notary_result_path="${RUNNER_TEMP}/pkg-notary-result.json"
+          xcrun notarytool submit "${pkg_path}" \
+            --key "${notary_key_path}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --output-format json > "${pkg_notary_result_path}"
 
-            /usr/bin/python3 -m json.tool "${pkg_notary_result_path}" || cat "${pkg_notary_result_path}"
-            pkg_notary_status="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", ""))' "${pkg_notary_result_path}")"
-            pkg_notary_id="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("id", ""))' "${pkg_notary_result_path}")"
-            if [[ "${pkg_notary_status}" != "Accepted" ]]; then
-              echo "PKG notarization did not return Accepted status (status=${pkg_notary_status:-unknown})." >&2
-              if [[ -n "${pkg_notary_id}" ]]; then
-                echo "Fetching PKG notary rejection log for submission ${pkg_notary_id}..." >&2
-                xcrun notarytool log "${pkg_notary_id}" \
-                  --key "${notary_key_path}" \
-                  --key-id "${APPLE_NOTARY_KEY_ID}" \
-                  --issuer "${APPLE_NOTARY_ISSUER_ID}" || true
-              fi
-              exit 1
+          /usr/bin/python3 -m json.tool "${pkg_notary_result_path}" || cat "${pkg_notary_result_path}"
+          pkg_notary_status="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", ""))' "${pkg_notary_result_path}")"
+          pkg_notary_id="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("id", ""))' "${pkg_notary_result_path}")"
+          if [[ "${pkg_notary_status}" != "Accepted" ]]; then
+            echo "PKG notarization did not return Accepted status (status=${pkg_notary_status:-unknown})." >&2
+            if [[ -n "${pkg_notary_id}" ]]; then
+              echo "Fetching PKG notary rejection log for submission ${pkg_notary_id}..." >&2
+              xcrun notarytool log "${pkg_notary_id}" \
+                --key "${notary_key_path}" \
+                --key-id "${APPLE_NOTARY_KEY_ID}" \
+                --issuer "${APPLE_NOTARY_ISSUER_ID}" || true
             fi
-
-            xcrun stapler staple -v "${pkg_path}"
-            xcrun stapler validate -v "${pkg_path}"
-            spctl --assess --type install --verbose=2 "${pkg_path}"
-          else
-            cp "${pkg_unsigned_path}" "${pkg_path}"
-            echo "Skipping PKG notarization because installer signing identity is unavailable." >&2
+            exit 1
           fi
+
+          xcrun stapler staple -v "${pkg_path}"
+          xcrun stapler validate -v "${pkg_path}"
+          spctl --assess --type install --verbose=2 "${pkg_path}"
 
           rm -f "${pkg_unsigned_path}"
 
