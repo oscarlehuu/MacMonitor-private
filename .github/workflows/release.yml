@@ -255,6 +255,7 @@ jobs:
           rm -rf "${dmg_staging_dir}"
           mkdir -p "${dmg_staging_dir}"
           ditto "${app_path}" "${dmg_staging_dir}/MacMonitor.app"
+          ln -s /Applications "${dmg_staging_dir}/Applications"
           hdiutil create -volname "MacMonitor" -srcfolder "${dmg_staging_dir}" -ov -format UDZO "${dmg_path}"
           dmg_notary_result_path="${RUNNER_TEMP}/dmg-notary-result.json"
 
