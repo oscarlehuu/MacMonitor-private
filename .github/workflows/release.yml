@@ -72,6 +72,9 @@ jobs:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+          APPLE_INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_BASE64 }}
+          APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
           APPLE_NOTARY_API_KEY_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_BASE64 }}
@@ -81,6 +84,15 @@ jobs:
           [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_P12_BASE64" && exit 1)
           [[ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ]] || (echo "Missing required secret: APPLE_CERTIFICATE_PASSWORD" && exit 1)
           [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] || (echo "Missing required secret: APPLE_SIGNING_IDENTITY" && exit 1)
+          [[ -n "${APPLE_INSTALLER_SIGNING_IDENTITY:-}" ]] || (echo "Missing required secret: APPLE_INSTALLER_SIGNING_IDENTITY" && exit 1)
+          if [[ -n "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" && -z "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:-}" ]]; then
+            echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_PASSWORD (because APPLE_INSTALLER_CERTIFICATE_P12_BASE64 is set)" >&2
+            exit 1
+          fi
+          if [[ -z "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" && -n "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:-}" ]]; then
+            echo "Missing required secret: APPLE_INSTALLER_CERTIFICATE_P12_BASE64 (because APPLE_INSTALLER_CERTIFICATE_PASSWORD is set)" >&2
+            exit 1
+          fi
           [[ -n "${APPLE_NOTARY_KEY_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_KEY_ID" && exit 1)
           [[ -n "${APPLE_NOTARY_ISSUER_ID:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_ISSUER_ID" && exit 1)
           [[ -n "${APPLE_NOTARY_API_KEY_BASE64:-}" ]] || (echo "Missing required secret: APPLE_NOTARY_API_KEY_BASE64" && exit 1)
@@ -111,6 +123,9 @@ jobs:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+          APPLE_INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_BASE64 }}
+          APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
           APPLE_NOTARY_API_KEY_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_BASE64 }}
@@ -127,6 +142,7 @@ jobs:
           keychain_path="${RUNNER_TEMP}/build.keychain-db"
           keychain_password="$(openssl rand -hex 16)"
           cert_path="${RUNNER_TEMP}/build-cert.p12"
+          installer_cert_path="${RUNNER_TEMP}/installer-cert.p12"
 
           if echo "${APPLE_CERTIFICATE_P12_BASE64}" | base64 --decode > "${cert_path}" 2>/dev/null; then
             :
@@ -138,9 +154,24 @@ jobs:
           security set-keychain-settings -lut 21600 "${keychain_path}"
           security unlock-keychain -p "${keychain_password}" "${keychain_path}"
           security import "${cert_path}" -k "${keychain_path}" -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          if [[ -n "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64:-}" ]]; then
+            if echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 --decode > "${installer_cert_path}" 2>/dev/null; then
+              :
+            else
+              echo "${APPLE_INSTALLER_CERTIFICATE_P12_BASE64}" | base64 -D > "${installer_cert_path}"
+            fi
+            security import "${installer_cert_path}" -k "${keychain_path}" -P "${APPLE_INSTALLER_CERTIFICATE_PASSWORD}" -T /usr/bin/productsign -T /usr/bin/security
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
           security list-keychains -d user -s "${keychain_path}" login.keychain-db
           security default-keychain -s "${keychain_path}"
+
+          if ! security find-identity -v -p basic "${keychain_path}" | grep -F "\"${APPLE_INSTALLER_SIGNING_IDENTITY}\"" >/dev/null 2>&1; then
+            echo "Installer signing identity not found in imported keychain: ${APPLE_INSTALLER_SIGNING_IDENTITY}" >&2
+            echo "Provide a certificate bundle containing Developer ID Installer, or set APPLE_INSTALLER_CERTIFICATE_P12_BASE64 + APPLE_INSTALLER_CERTIFICATE_PASSWORD." >&2
+            security find-identity -v -p basic "${keychain_path}" || true
+            exit 1
+          fi
 
           signing_args=(
             CODE_SIGN_STYLE=Manual
@@ -291,6 +322,51 @@ jobs:
 
           xcrun stapler staple -v "${dmg_path}"
           xcrun stapler validate -v "${dmg_path}"
+          spctl --assess --type open --verbose=2 "${dmg_path}"
+
+          bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${plist_path}")"
+          pkg_identifier="${bundle_identifier}.pkg"
+          pkg_unsigned_path="${RUNNER_TEMP}/MacMonitor-${built_short_version}-unsigned.pkg"
+          pkg_name="MacMonitor-${built_short_version}.pkg"
+          pkg_path="${RUNNER_TEMP}/${pkg_name}"
+
+          pkgbuild \
+            --component "${app_path}" \
+            --install-location "/Applications" \
+            --identifier "${pkg_identifier}" \
+            --version "${built_short_version}" \
+            "${pkg_unsigned_path}"
+
+          productsign --sign "${APPLE_INSTALLER_SIGNING_IDENTITY}" "${pkg_unsigned_path}" "${pkg_path}"
+          pkgutil --check-signature "${pkg_path}"
+
+          pkg_notary_result_path="${RUNNER_TEMP}/pkg-notary-result.json"
+          xcrun notarytool submit "${pkg_path}" \
+            --key "${notary_key_path}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --output-format json > "${pkg_notary_result_path}"
+
+          /usr/bin/python3 -m json.tool "${pkg_notary_result_path}" || cat "${pkg_notary_result_path}"
+          pkg_notary_status="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("status", ""))' "${pkg_notary_result_path}")"
+          pkg_notary_id="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("id", ""))' "${pkg_notary_result_path}")"
+          if [[ "${pkg_notary_status}" != "Accepted" ]]; then
+            echo "PKG notarization did not return Accepted status (status=${pkg_notary_status:-unknown})." >&2
+            if [[ -n "${pkg_notary_id}" ]]; then
+              echo "Fetching PKG notary rejection log for submission ${pkg_notary_id}..." >&2
+              xcrun notarytool log "${pkg_notary_id}" \
+                --key "${notary_key_path}" \
+                --key-id "${APPLE_NOTARY_KEY_ID}" \
+                --issuer "${APPLE_NOTARY_ISSUER_ID}" || true
+            fi
+            exit 1
+          fi
+
+          xcrun stapler staple -v "${pkg_path}"
+          xcrun stapler validate -v "${pkg_path}"
+          spctl --assess --type install --verbose=2 "${pkg_path}"
+          rm -f "${pkg_unsigned_path}"
 
           notes_path="${RUNNER_TEMP}/release-notes.md"
           base_updates_url="${UPDATES_BASE_URL%/}"
@@ -303,12 +379,15 @@ jobs:
             echo "- Signing identity: ${APPLE_SIGNING_IDENTITY}"
             echo "- Notarized: yes"
             echo "- Sparkle appcast: ${sparkle_appcast_url}"
+            echo "- Installer package: ${pkg_name}"
           } > "${notes_path}"
 
           echo "asset_name=${asset_name}" >> "${GITHUB_OUTPUT}"
           echo "asset_path=${asset_path}" >> "${GITHUB_OUTPUT}"
           echo "dmg_name=${dmg_name}" >> "${GITHUB_OUTPUT}"
           echo "dmg_path=${dmg_path}" >> "${GITHUB_OUTPUT}"
+          echo "pkg_name=${pkg_name}" >> "${GITHUB_OUTPUT}"
+          echo "pkg_path=${pkg_path}" >> "${GITHUB_OUTPUT}"
           echo "notes_path=${notes_path}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload asset to source release
@@ -323,17 +402,21 @@ jobs:
           asset_name="${{ steps.build.outputs.asset_name }}"
           dmg_path="${{ steps.build.outputs.dmg_path }}"
           dmg_name="${{ steps.build.outputs.dmg_name }}"
+          pkg_path="${{ steps.build.outputs.pkg_path }}"
+          pkg_name="${{ steps.build.outputs.pkg_name }}"
           notes_path="${{ steps.build.outputs.notes_path }}"
 
           if gh release view "${tag}" >/dev/null 2>&1; then
             gh release upload "${tag}" \
               "${asset_path}#${asset_name}" \
               "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
               --clobber
           else
             gh release create "${tag}" \
               "${asset_path}#${asset_name}" \
               "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
               --title "MacMonitor ${tag}" \
               --notes-file "${notes_path}" \
               --latest
@@ -433,6 +516,8 @@ jobs:
           asset_name="${{ steps.build.outputs.asset_name }}"
           dmg_path="${{ steps.build.outputs.dmg_path }}"
           dmg_name="${{ steps.build.outputs.dmg_name }}"
+          pkg_path="${{ steps.build.outputs.pkg_path }}"
+          pkg_name="${{ steps.build.outputs.pkg_name }}"
           notes_basename="${asset_name%.zip}.txt"
 
           source_updates_dir="${RUNNER_TEMP}/source-updates-site"
@@ -490,12 +575,14 @@ jobs:
             gh release upload "${tag}" \
               "${asset_path}#${asset_name}" \
               "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
               --repo "${PUBLIC_DISTRIBUTION_REPO}" \
               --clobber
           else
             gh release create "${tag}" \
               "${asset_path}#${asset_name}" \
               "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
               --repo "${PUBLIC_DISTRIBUTION_REPO}" \
               --title "MacMonitor ${tag}" \
               --notes "${public_release_notes}" \

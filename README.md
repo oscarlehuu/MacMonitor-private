@@ -23,10 +23,10 @@ Private-source macOS (Apple Silicon) menu bar monitor.
   - `feat!:` or `BREAKING CHANGE:` => major
 - Docs/chore/test-only merges do not create a release.
 - When the release PR is merged and a tag/release is published, `Publish Release Assets` builds/signs/notarizes the app, then:
-  - uploads release assets (`.zip` + `.dmg`) to this private repo
+  - uploads release assets (`.zip` + `.dmg` + `.pkg`) to this private repo
   - publishes Sparkle appcast/update payload to `gh-pages` (for in-app updater; no custom website needed)
 - Release workflow mirrors binary release assets + `CHANGELOG.md` to the public distribution repo (`oscarlehuu/MacMonitor` by default) for GitHub Downloads. Override target with `PUBLIC_DISTRIBUTION_REPO`; auth uses `PUBLIC_DISTRIBUTION_TOKEN` (fallback: `UPDATES_REPO_TOKEN`).
-- Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `APPLE_NOTARY_API_KEY_BASE64`).
+- Required CI secrets are documented in `scripts/release-checklist.md` (`RELEASE_PLEASE_TOKEN`, `SPARKLE_PRIVATE_KEY`, `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_INSTALLER_SIGNING_IDENTITY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `APPLE_NOTARY_API_KEY_BASE64`; optional installer cert override: `APPLE_INSTALLER_CERTIFICATE_P12_BASE64`, `APPLE_INSTALLER_CERTIFICATE_PASSWORD`).
 - See `scripts/release-checklist.md` for full release flow and secrets.
 - Recommended variable: `UPDATES_BASE_URL` (set explicitly to match `SPARKLE_APPCAST_URL`; current value is `https://oscarlehuu.github.io/MacMonitor`).
 
