@@ -1,0 +1,13 @@
+MacMonitor v0.5.10
+
+## [0.5.10](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.9...v0.5.10) (2026-03-05)
+
+
+### Bug Fixes
+
+* restore view model API compatibility for release build ([#48](https://github.com/oscarlehuu/MacMonitor-private/issues/48)) ([780db7b](https://github.com/oscarlehuu/MacMonitor-private/commit/780db7bb6c88ce69f133f67dfb46217d5f3b0d9f))
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).
+
+<!-- CURSOR_SUMMARY -->
