@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.9](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.8...v0.5.9) (2026-03-05)
+
+
+### Bug Fixes
+
+* improve menu bar composer preview and network rate handling ([#46](https://github.com/oscarlehuu/MacMonitor-private/issues/46)) ([d47330a](https://github.com/oscarlehuu/MacMonitor-private/commit/d47330af5366ffcadaa2b1d9bca2dca85449c570))
+
 ## [0.5.8](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.7...v0.5.8) (2026-03-04)
 
 
