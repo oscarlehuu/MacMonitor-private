@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.10](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.9...v0.5.10) (2026-03-05)
+
+
+### Bug Fixes
+
+* restore view model API compatibility for release build ([#48](https://github.com/oscarlehuu/MacMonitor-private/issues/48)) ([780db7b](https://github.com/oscarlehuu/MacMonitor-private/commit/780db7bb6c88ce69f133f67dfb46217d5f3b0d9f))
+
 ## [0.5.9](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.8...v0.5.9) (2026-03-05)
 
 
