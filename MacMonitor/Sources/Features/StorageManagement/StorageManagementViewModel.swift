@@ -577,6 +577,10 @@ final class StorageManagementViewModel: ObservableObject {
         selectedAllowedCount > 0 && !isDeleting && pendingDeletionContext == nil
     }
 
+    var isDeleteFlowInteractionLocked: Bool {
+        isDeleting || pendingDeletionContext != nil || showingForceQuitConfirmation
+    }
+
     var deleteInfoTooltip: String {
         "Only non-protected items are moved to Trash."
     }

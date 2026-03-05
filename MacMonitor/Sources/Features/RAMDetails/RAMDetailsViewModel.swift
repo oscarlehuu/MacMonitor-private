@@ -63,6 +63,7 @@ final class RAMDetailsViewModel: ObservableObject {
 
     private var refreshCancellable: AnyCancellable?
     private var hasStarted = false
+    private var isRefreshActive = true
     private var pendingPortsTerminationContext: PendingPortsTerminationContext?
     private(set) var pendingRefreshTask: Task<Void, Never>?
 
@@ -92,13 +93,10 @@ final class RAMDetailsViewModel: ObservableObject {
         guard !hasStarted else { return }
         hasStarted = true
 
-        refresh()
-
-        refreshCancellable = Timer.publish(every: refreshInterval, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.refresh()
-            }
+        if isRefreshActive {
+            refresh()
+            subscribeRefreshTimerIfNeeded()
+        }
     }
 
     func stop() {
@@ -109,6 +107,31 @@ final class RAMDetailsViewModel: ObservableObject {
         pendingRefreshTask?.cancel()
         pendingRefreshTask = nil
         resetPendingPortsTermination()
+    }
+
+    func setRefreshActive(_ isActive: Bool) {
+        guard isRefreshActive != isActive else { return }
+        isRefreshActive = isActive
+        if isActive {
+            if hasStarted {
+                subscribeRefreshTimerIfNeeded()
+                refresh()
+            }
+        } else {
+            pendingRefreshTask?.cancel()
+            pendingRefreshTask = nil
+            refreshCancellable?.cancel()
+            refreshCancellable = nil
+        }
+    }
+
+    private func subscribeRefreshTimerIfNeeded() {
+        guard refreshCancellable == nil else { return }
+        refreshCancellable = Timer.publish(every: refreshInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refresh()
+            }
     }
 
     func setMode(_ mode: RAMDetailsMode) {
