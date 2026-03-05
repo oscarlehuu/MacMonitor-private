@@ -31,11 +31,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
+        let currentBundleVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        let runningWithSameBundle = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { $0.processIdentifier != currentPID && !$0.isTerminated }
+
+        if !runningWithSameBundle.isEmpty,
+           AppUpdateController.consumePendingRelaunchVersion(matching: currentBundleVersion) {
+            return false
+        }
 
         // Allow a grace period for relaunch handoff where the old instance
         // may still be alive briefly while the new one starts.
         let maxAttempts = 10
         let delayBetweenAttempts: TimeInterval = 0.5
+
+        if runningWithSameBundle.isEmpty {
+            _ = AppUpdateController.consumePendingRelaunchVersion(matching: nil)
+            return false
+        }
 
         for _ in 0..<maxAttempts {
             let runningWithSameBundle = NSRunningApplication
