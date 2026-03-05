@@ -152,18 +152,36 @@ private struct StorageScanSourceChipView: View {
 @MainActor
 private final class PopoverColorPanelController: NSObject, ObservableObject {
     private static weak var activeController: PopoverColorPanelController?
+    private var closeObserver: NSObjectProtocol?
     private var onChange: ((Color) -> Void)?
+    private var onPresentationChange: ((Bool) -> Void)?
+    private var isPresenting = false
 
-    func present(color: Color, onChange: @escaping (Color) -> Void) {
+    func present(
+        color: Color,
+        onChange: @escaping (Color) -> Void,
+        onPresentationChange: ((Bool) -> Void)? = nil
+    ) {
+        if let previousController = Self.activeController,
+           previousController !== self {
+            previousController.releaseOwnershipForHandoff()
+        }
+
         self.onChange = onChange
+        self.onPresentationChange = onPresentationChange
 
         let panel = NSColorPanel.shared
         Self.activeController = self
+        installCloseObserver(for: panel)
         panel.setTarget(self)
         panel.setAction(#selector(handleColorChange(_:)))
         panel.isContinuous = true
         panel.showsAlpha = false
         panel.color = NSColor(color)
+        if !isPresenting {
+            isPresenting = true
+            onPresentationChange?(true)
+        }
         // Defer to the next run loop so the popover button click can finish
         // before we ask AppKit to surface the shared color panel above it.
         Task { @MainActor in
@@ -174,17 +192,57 @@ private final class PopoverColorPanelController: NSObject, ObservableObject {
     }
 
     func disconnectIfActive() {
-        guard Self.activeController === self else { return }
+        guard Self.activeController === self || isPresenting else { return }
 
         let panel = NSColorPanel.shared
-        Self.activeController = nil
-        panel.setTarget(nil)
-        panel.setAction(nil)
+        if Self.activeController === self {
+            Self.activeController = nil
+            panel.setTarget(nil)
+            panel.setAction(nil)
+        }
+        tearDownPresentation()
         onChange = nil
     }
 
     @objc private func handleColorChange(_ sender: NSColorPanel) {
         onChange?(Color(nsColor: sender.color))
+    }
+
+    private func installCloseObserver(for panel: NSColorPanel) {
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+        }
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.disconnectIfActive()
+            }
+        }
+    }
+
+    private func tearDownPresentation() {
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+            self.closeObserver = nil
+        }
+        if isPresenting {
+            onPresentationChange?(false)
+            isPresenting = false
+        }
+        onPresentationChange = nil
+    }
+
+    private func releaseOwnershipForHandoff() {
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+            self.closeObserver = nil
+        }
+        onChange = nil
+        onPresentationChange = nil
+        isPresenting = false
     }
 }
 
@@ -205,13 +263,18 @@ private struct PopoverColorSwatchButton<Swatch: View>: View {
     @Binding var selection: Color
     let accessibilityLabel: String
     let helpText: String?
+    let onPresentationChange: ((Bool) -> Void)?
     @ViewBuilder let swatch: (Color) -> Swatch
 
     @StateObject private var colorPanelController = PopoverColorPanelController()
 
     var body: some View {
         Button {
-            colorPanelController.present(color: selection) { selection = $0 }
+            colorPanelController.present(
+                color: selection,
+                onChange: { selection = $0 },
+                onPresentationChange: onPresentationChange
+            )
         } label: {
             swatch(selection)
         }
@@ -237,6 +300,7 @@ struct PopoverRootView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var appUpdateController: AppUpdateController
     let popoverWindowProvider: (() -> NSWindow?)?
+    let auxiliaryPanelPresentationHandler: ((Bool) -> Void)?
     let diagnosticsExporter: DiagnosticsExporter
 
     @State private var hasNormalizedLegacyScreen = false
@@ -2424,7 +2488,8 @@ struct PopoverRootView: View {
                             }
                         ),
                         accessibilityLabel: "Block color",
-                        helpText: "Color"
+                        helpText: "Color",
+                        onPresentationChange: auxiliaryPanelPresentationHandler
                     ) { color in
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(color)
@@ -2563,7 +2628,8 @@ struct PopoverRootView: View {
         return PopoverColorSwatchButton(
             selection: selection,
             accessibilityLabel: "Exceeded threshold color",
-            helpText: "Exceeded threshold color"
+            helpText: "Exceeded threshold color",
+            onPresentationChange: auxiliaryPanelPresentationHandler
         ) { color in
             Circle()
                 .fill(color)
