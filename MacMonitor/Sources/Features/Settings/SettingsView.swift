@@ -381,10 +381,14 @@ struct SettingsView: View {
         switch format {
         case .percentUsage:
             return "%"
+        case .percentUsageLeft:
+            return "%/L"
         case .numberUsage:
             return "123"
         case .numberLeft:
             return "LFT"
+        case .numberUsageLeft:
+            return "#/L"
         }
     }
 }

@@ -140,6 +140,46 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertNil(TrendInlineAlertResolver.inlineAlert(for: .memory, from: alerts))
     }
 
+    func testStartupPreservesPreviousNetworkRateWhenCollectorIsUnavailable() {
+        let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
+        let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
+        let historyDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SystemSummaryViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        let store = SnapshotStore(baseDirectoryURL: historyDirectory)
+        let previousSnapshot = SystemSnapshot(
+            timestamp: Date(timeIntervalSince1970: 1_000),
+            memory: MemorySnapshot(usedBytes: 1, totalBytes: 2, pressure: .normal),
+            storage: StorageSnapshot(usedBytes: 1, totalBytes: 2),
+            battery: .unavailable,
+            thermal: ThermalSnapshot(state: .nominal),
+            cpu: CPUSnapshot(usagePercent: 10),
+            network: NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000),
+            gpu: .unavailable,
+            refreshReason: .interval
+        )
+        store.save([previousSnapshot])
+
+        let viewModel = SystemSummaryViewModel(
+            engine: MetricsEngine(
+                memoryCollector: DummyMemoryCollector(),
+                storageCollector: DummyStorageCollector(),
+                batteryCollector: DummyBatteryCollector(),
+                thermalCollector: DummyThermalCollector(),
+                cpuCollector: DummyCPUCollector(),
+                networkCollector: UnavailableNetworkCollector(),
+                settings: settings
+            ),
+            snapshotStore: store,
+            settings: settings
+        )
+
+        viewModel.start()
+        defer { viewModel.stop() }
+
+        XCTAssertEqual(viewModel.snapshot?.network.downloadBytesPerSecond, 9_000)
+        XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
+    }
+
     private func makeViewModel() -> SystemSummaryViewModel {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
@@ -221,6 +261,12 @@ private struct DummyCPUCollector: CPUCollecting {
 private struct DummyNetworkCollector: NetworkCollecting {
     func collect() -> NetworkSnapshot {
         NetworkSnapshot(downloadBytesPerSecond: 1_000, uploadBytesPerSecond: 500)
+    }
+}
+
+private struct UnavailableNetworkCollector: NetworkCollecting {
+    func collect() -> NetworkSnapshot {
+        .unavailable
     }
 }
 
