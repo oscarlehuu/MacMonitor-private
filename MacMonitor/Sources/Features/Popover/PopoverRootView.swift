@@ -172,6 +172,12 @@ struct PopoverRootView: View {
     @State private var deleteConfirmationRootItemIDs: Set<String> = []
     @State private var didConfirmStorageDeletion = false
     @State private var hoveredStorageSegmentID: String?
+    @State private var isMemorySummaryExpanded = false
+    @State private var isStorageSummaryExpanded = false
+    @State private var cachedDeletePreviewGroupSections: [StorageDeletePreviewGroupSection] = []
+    @State private var cachedDeletePreviewLooseRows: [StorageListRow] = []
+    @State private var isMenuBarComposerPresented = false
+    @State private var menuBarComposerDraftConfiguration: MenuBarComposerConfiguration = .default
 
     var body: some View {
         VStack(spacing: 0) {
@@ -201,7 +207,11 @@ struct PopoverRootView: View {
         .preferredColorScheme(settings.appTheme.isDark ? .dark : .light)
         .id(settings.appTheme)
         .onAppear {
+            isMemorySummaryExpanded = false
+            isStorageSummaryExpanded = false
+            hoveredStorageSegmentID = nil
             normalizeLegacyScreenIfNeeded()
+            updateRAMRefreshActivity(for: viewModel.screen)
             ramDetailsViewModel.start()
             storageManagementViewModel.loadIfNeeded()
         }
@@ -209,12 +219,16 @@ struct PopoverRootView: View {
             ramDetailsViewModel.stop()
             resetPopoverResizeDragState()
         }
+        .onChange(of: viewModel.screen) { _, screen in
+            updateRAMRefreshActivity(for: screen)
+        }
         .onChange(of: storageManagementViewModel.showingDeleteConfirmation) { _, isPresented in
             if isPresented {
                 didConfirmStorageDeletion = false
                 deleteConfirmationAcknowledged = false
                 deleteConfirmationSnapshot = storageManagementViewModel.makeSelectionSnapshot()
                 deleteConfirmationRootItemIDs = storageManagementViewModel.deletionPreviewRootItemIDs
+                refreshDeletePreviewCache()
                 return
             }
 
@@ -225,10 +239,22 @@ struct PopoverRootView: View {
             deleteConfirmationAcknowledged = false
             deleteConfirmationRootItemIDs = []
             deleteConfirmationSnapshot = nil
+            clearDeletePreviewCache()
         }
         .onChange(of: storageManagementViewModel.selectedItemIDs) { _, _ in
             if storageManagementViewModel.showingDeleteConfirmation {
                 deleteConfirmationAcknowledged = false
+                refreshDeletePreviewCache()
+            }
+        }
+        .onChange(of: storageManagementViewModel.expandedItemIDs) { _, _ in
+            if storageManagementViewModel.showingDeleteConfirmation {
+                refreshDeletePreviewCache()
+            }
+        }
+        .onChange(of: storageManagementViewModel.drilledItemsByParentID) { _, _ in
+            if storageManagementViewModel.showingDeleteConfirmation {
+                refreshDeletePreviewCache()
             }
         }
     }
@@ -435,8 +461,6 @@ struct PopoverRootView: View {
             if viewModel.screen != .ram {
                 viewModel.showRAM()
             }
-            ramDetailsViewModel.start()
-            ramDetailsViewModel.refresh()
         }
     }
 
@@ -451,10 +475,26 @@ struct PopoverRootView: View {
             let swapUsedText = memoryByteText(memory.swapUsedBytes)
 
             panelCard {
-                Text("Memory Pressure")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(PopoverTheme.textMuted)
-                    .tracking(0.5)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Memory")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(PopoverTheme.textMuted)
+                            .tracking(0.5)
+
+                        Text("Memory Pressure")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(PopoverTheme.textMuted)
+                            .tracking(0.5)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    summaryDisclosureButton(
+                        isExpanded: isMemorySummaryExpanded,
+                        onToggle: { isMemorySummaryExpanded.toggle() }
+                    )
+                }
 
                 HStack {
                     Text("Physical Memory: \(MetricFormatter.bytes(memory.totalBytes))")
@@ -463,39 +503,44 @@ struct PopoverRootView: View {
 
                     Spacer(minLength: 8)
 
-                    Text("Memory Used: \(MetricFormatter.bytes(memory.usedBytes))")
+                    Text("Memory Used: \(MetricFormatter.bytes(memory.usedBytes)) / \(MetricFormatter.bytes(memory.totalBytes))")
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(PopoverTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
 
-                usageTrack(segments: segments)
-                    .frame(height: 10)
+                if isMemorySummaryExpanded {
+                    usageTrack(segments: segments)
+                        .frame(height: 10)
 
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(segments) { segment in
-                        memorySegmentCard(segment)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-
-                Divider()
-                    .overlay(PopoverTheme.borderSubtle)
-
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        memoryStatRow(title: "Physical Memory", value: MetricFormatter.bytes(memory.totalBytes))
-                        memoryStatRow(title: "Memory Used", value: MetricFormatter.bytes(memory.usedBytes))
-                        memoryStatRow(title: "Cached Files", value: cachedFilesText)
-                        memoryStatRow(title: "Swap Used", value: swapUsedText)
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(segments) { segment in
+                            memorySegmentCard(segment)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        memoryStatRow(title: "App Memory", value: appMemoryText)
-                        memoryStatRow(title: "Wired Memory", value: wiredMemoryText)
-                        memoryStatRow(title: "Compressed", value: compressedText)
+                    Divider()
+                        .overlay(PopoverTheme.borderSubtle)
+
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            memoryStatRow(title: "Physical Memory", value: MetricFormatter.bytes(memory.totalBytes))
+                            memoryStatRow(title: "Memory Used", value: MetricFormatter.bytes(memory.usedBytes))
+                            memoryStatRow(title: "Cached Files", value: cachedFilesText)
+                            memoryStatRow(title: "Swap Used", value: swapUsedText)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            memoryStatRow(title: "App Memory", value: appMemoryText)
+                            memoryStatRow(title: "Wired Memory", value: wiredMemoryText)
+                            memoryStatRow(title: "Compressed", value: compressedText)
+                        }
                     }
                 }
             }
+            .animation(.easeInOut(duration: 0.18), value: isMemorySummaryExpanded)
         } else {
             panelCard {
                 Text("Collecting memory metrics...")
@@ -525,8 +570,8 @@ struct PopoverRootView: View {
     }
 
     private var storageDeleteConfirmationOverlay: some View {
-        let previewGroupSections = deleteConfirmationPreviewGroupSections()
-        let previewLooseRows = deleteConfirmationPreviewLooseRows()
+        let previewGroupSections = cachedDeletePreviewGroupSections
+        let previewLooseRows = cachedDeletePreviewLooseRows
         let hasPreviewRows = !previewGroupSections.isEmpty || !previewLooseRows.isEmpty
 
         return ZStack {
@@ -623,7 +668,7 @@ struct PopoverRootView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(storageManagementViewModel.isDeleting)
+                .disabled(storageManagementViewModel.isDeleteFlowInteractionLocked)
 
                 HStack(spacing: 8) {
                     Button("Cancel") {
@@ -673,7 +718,7 @@ struct PopoverRootView: View {
                     .disabled(
                         !deleteConfirmationAcknowledged ||
                             storageManagementViewModel.selectedAllowedCount == 0 ||
-                            storageManagementViewModel.isDeleting
+                            storageManagementViewModel.isDeleteFlowInteractionLocked
                     )
                 }
             }
@@ -739,7 +784,7 @@ struct PopoverRootView: View {
                     .frame(width: 10)
             }
             .buttonStyle(.plain)
-            .disabled(storageManagementViewModel.isDeleting)
+            .disabled(storageManagementViewModel.isDeleteFlowInteractionLocked)
 
             Button {
                 storageManagementViewModel.toggleGroupSelection(group.id)
@@ -749,7 +794,7 @@ struct PopoverRootView: View {
                     .foregroundStyle(modalGroupSelectionColor(selectionState))
             }
             .buttonStyle(.plain)
-            .disabled(storageManagementViewModel.isDeleting)
+            .disabled(storageManagementViewModel.isDeleteFlowInteractionLocked)
 
             if let appIcon = modalAppIconImage(for: group) {
                 Image(nsImage: appIcon)
@@ -822,7 +867,7 @@ struct PopoverRootView: View {
                             .frame(width: 10)
                     }
                     .buttonStyle(.plain)
-                    .disabled(storageManagementViewModel.isDeleting)
+                    .disabled(storageManagementViewModel.isDeleteFlowInteractionLocked)
                 } else {
                     Spacer()
                         .frame(width: 10)
@@ -846,7 +891,7 @@ struct PopoverRootView: View {
                 .buttonStyle(.plain)
                 .disabled(
                     item.isProtected ||
-                        storageManagementViewModel.isDeleting
+                        storageManagementViewModel.isDeleteFlowInteractionLocked
                 )
 
                 if let appIcon = modalAppIconImage(for: item) {
@@ -914,24 +959,32 @@ struct PopoverRootView: View {
         )
     }
 
-    private func deleteConfirmationPreviewGroupSections() -> [StorageDeletePreviewGroupSection] {
-        storageManagementViewModel.appGroups.compactMap { group in
+    private func refreshDeletePreviewCache() {
+        let previewRootIDs = activeDeletePreviewRootItemIDs
+        guard !previewRootIDs.isEmpty else {
+            clearDeletePreviewCache()
+            return
+        }
+
+        cachedDeletePreviewGroupSections = storageManagementViewModel.appGroups.compactMap { group in
             let filteredRows = storageManagementViewModel.rows(for: group).filter { row in
-                isPreviewRowVisible(itemID: row.item.id)
+                isPreviewRowVisible(itemID: row.item.id, previewRootIDs: previewRootIDs)
             }
             guard !filteredRows.isEmpty else { return nil }
             return StorageDeletePreviewGroupSection(group: group, rows: filteredRows)
         }
-    }
 
-    private func deleteConfirmationPreviewLooseRows() -> [StorageListRow] {
-        storageManagementViewModel.allLooseRows().filter { row in
-            isPreviewRowVisible(itemID: row.item.id)
+        cachedDeletePreviewLooseRows = storageManagementViewModel.allLooseRows().filter { row in
+            isPreviewRowVisible(itemID: row.item.id, previewRootIDs: previewRootIDs)
         }
     }
 
-    private func isPreviewRowVisible(itemID: String) -> Bool {
-        let previewRootIDs = activeDeletePreviewRootItemIDs
+    private func clearDeletePreviewCache() {
+        cachedDeletePreviewGroupSections = []
+        cachedDeletePreviewLooseRows = []
+    }
+
+    private func isPreviewRowVisible(itemID: String, previewRootIDs: Set<String>) -> Bool {
         guard !previewRootIDs.isEmpty else { return false }
 
         if previewRootIDs.contains(itemID) {
@@ -1098,7 +1151,7 @@ struct PopoverRootView: View {
             .foregroundStyle(PopoverTheme.textSecondary)
             .disabled(
                 storageManagementViewModel.isScanning ||
-                    storageManagementViewModel.isDeleting ||
+                    storageManagementViewModel.isDeleteFlowInteractionLocked ||
                     storageManagementViewModel.showingDeleteConfirmation
             )
 
@@ -1120,7 +1173,7 @@ struct PopoverRootView: View {
             }
             .buttonStyle(.plain)
             .disabled(
-                storageManagementViewModel.isDeleting ||
+                storageManagementViewModel.isDeleteFlowInteractionLocked ||
                     storageManagementViewModel.showingDeleteConfirmation
             )
         }
@@ -1148,7 +1201,7 @@ struct PopoverRootView: View {
         let usedBytesText = MetricFormatter.bytes(storageManagementViewModel.currentUsedBytes)
         let totalBytesText = MetricFormatter.bytes(storageManagementViewModel.currentTotalBytes)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: isStorageSummaryExpanded ? 8 : 0) {
             HStack(alignment: .center, spacing: 8) {
                 Image(systemName: "internaldrive")
                     .font(.system(size: 11, weight: .semibold))
@@ -1159,7 +1212,7 @@ struct PopoverRootView: View {
                     .foregroundStyle(PopoverTheme.textPrimary)
                     .lineLimit(1)
 
-                if let hoveredSegment {
+                if isStorageSummaryExpanded, let hoveredSegment {
                     Text("\(hoveredSegment.title) \(MetricFormatter.bytes(hoveredSegment.bytes))")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(PopoverTheme.textMuted)
@@ -1169,12 +1222,24 @@ struct PopoverRootView: View {
 
                 Spacer(minLength: 8)
                 storageTopActions
+
+                summaryDisclosureButton(
+                    isExpanded: isStorageSummaryExpanded,
+                    onToggle: {
+                        isStorageSummaryExpanded.toggle()
+                        if !isStorageSummaryExpanded {
+                            hoveredStorageSegmentID = nil
+                        }
+                    }
+                )
             }
 
-            compactStorageUsageTrack(segments: segments)
-                .frame(height: 12)
+            if isStorageSummaryExpanded {
+                compactStorageUsageTrack(segments: segments)
+                    .frame(height: 12)
 
-            storageScanSourcesStrip
+                storageScanSourcesStrip
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -1187,6 +1252,7 @@ struct PopoverRootView: View {
                 .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
         )
         .animation(.easeInOut(duration: 0.12), value: hoveredStorageSegmentID)
+        .animation(.easeInOut(duration: 0.18), value: isStorageSummaryExpanded)
     }
 
     private var storageScanSourcesStrip: some View {
@@ -1309,35 +1375,47 @@ struct PopoverRootView: View {
 
     private var settingsMenuBarCard: some View {
         settingsCard {
-            settingsSectionHeader("Menu Bar Display Status", symbol: "rectangle.topthird.inset.filled")
+            settingsSectionHeader("Menu Bar Display", symbol: "rectangle.topthird.inset.filled")
 
-            settingsPickerRow(
-                title: "Display Metric",
-                selection: $settings.menuBarDisplayMode,
-                options: MenuBarDisplayMode.userSelectableCases
-            ) { option in
-                option.title
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Preview")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(settingsTextMain)
+
+                    Text(
+                        menuBarComposerPreviewAttributedString(
+                            configuration: settings.menuBarComposerConfiguration,
+                            baseColor: settingsTextMuted
+                        )
+                    )
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    menuBarComposerDraftConfiguration = settings.menuBarComposerConfiguration
+                    isMenuBarComposerPresented = true
+                } label: {
+                    Label("Settings", systemImage: "slider.horizontal.3")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(settingsTextMain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(settingsInputBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(settingsCardBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
-
-            settingsDivider
-
-            settingsPickerRow(
-                title: "Memory Format",
-                selection: $settings.menuBarMemoryFormat,
-                options: MenuBarMetricDisplayFormat.allCases
-            ) { option in
-                option.title
-            }
-
-            settingsDivider
-
-            settingsPickerRow(
-                title: "Storage Format",
-                selection: $settings.menuBarStorageFormat,
-                options: MenuBarMetricDisplayFormat.allCases
-            ) { option in
-                option.title
-            }
+        }
+        .sheet(isPresented: $isMenuBarComposerPresented) {
+            menuBarComposerSheet
         }
     }
 
@@ -2061,6 +2139,303 @@ struct PopoverRootView: View {
         }
     }
 
+    private var menuBarComposerSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Menu Bar Composer")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(settingsTextMain)
+
+                Spacer(minLength: 8)
+
+                Button("Cancel") {
+                    isMenuBarComposerPresented = false
+                }
+                .buttonStyle(.bordered)
+
+                Button("Done") {
+                    settings.menuBarComposerConfiguration = menuBarComposerDraftConfiguration
+                    isMenuBarComposerPresented = false
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            settingsDivider
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Preview")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(settingsTextMain)
+                Text(
+                    menuBarComposerPreviewAttributedString(
+                        configuration: menuBarComposerDraftConfiguration,
+                        baseColor: settingsTextMuted
+                    )
+                )
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+            }
+
+            Text("Compose freely with metric and text blocks. Use text blocks for separators, emoji, or any wording.")
+                .font(.system(size: 11))
+                .foregroundStyle(settingsTextMuted)
+                .lineLimit(2)
+
+            HStack(spacing: 6) {
+                menuBarComposerAddMetricButton(kind: .memory, symbol: "memorychip.fill")
+                menuBarComposerAddMetricButton(kind: .storage, symbol: "internaldrive.fill")
+                menuBarComposerAddMetricButton(kind: .cpu, symbol: "cpu.fill")
+                menuBarComposerAddMetricButton(kind: .network, symbol: "network")
+                Button {
+                    addMenuBarComposerTextBlock()
+                } label: {
+                    Label("Text", systemImage: "textformat")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            settingsDivider
+
+            ScrollView(showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(menuBarComposerDraftConfiguration.blocks.enumerated()), id: \.element.id) { index, block in
+                        menuBarComposerBlockRow(index: index, block: block)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(16)
+        .frame(width: 700, height: 520, alignment: .topLeading)
+        .background(PopoverTheme.bgPanel)
+        .onAppear {
+            menuBarComposerDraftConfiguration = settings.menuBarComposerConfiguration
+        }
+    }
+
+    private func menuBarComposerAddMetricButton(kind: MenuBarComposerBlockKind, symbol: String) -> some View {
+        Button {
+            addMenuBarComposerMetricBlock(kind)
+        } label: {
+            Label(kind.title, systemImage: symbol)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func menuBarComposerBlockRow(index: Int, block: MenuBarComposerBlock) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { menuBarComposerBlock(at: index)?.isEnabled ?? false },
+                        set: { isEnabled in
+                            updateMenuBarComposerConfiguration { config in
+                                guard config.blocks.indices.contains(index) else { return }
+                                config.blocks[index].isEnabled = isEnabled
+                            }
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(settingsToggleTint)
+
+                Text(block.kind.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(settingsTextMain)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    moveMenuBarComposerBlock(at: index, direction: -1)
+                } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(index == 0)
+
+                Button {
+                    moveMenuBarComposerBlock(at: index, direction: 1)
+                } label: {
+                    Image(systemName: "arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(index == menuBarComposerDraftConfiguration.blocks.count - 1)
+
+                Button(role: .destructive) {
+                    removeMenuBarComposerBlock(at: index)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if block.kind == .text {
+                TextField(
+                    "Text or emoji",
+                    text: Binding(
+                        get: { menuBarComposerBlock(at: index)?.text ?? "" },
+                        set: { value in
+                            updateMenuBarComposerConfiguration { config in
+                                guard config.blocks.indices.contains(index) else { return }
+                                config.blocks[index].text = value
+                            }
+                        }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+            } else {
+                HStack(spacing: 8) {
+                    TextField(
+                        "Label",
+                        text: Binding(
+                            get: { menuBarComposerBlock(at: index)?.label ?? "" },
+                            set: { value in
+                                updateMenuBarComposerConfiguration { config in
+                                    guard config.blocks.indices.contains(index) else { return }
+                                    config.blocks[index].label = value
+                                }
+                            }
+                        )
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+
+                    Menu {
+                        ForEach(block.kind.supportedFormats, id: \.self) { format in
+                            Button {
+                                updateMenuBarComposerConfiguration { config in
+                                    guard config.blocks.indices.contains(index) else { return }
+                                    config.blocks[index].format = format
+                                }
+                            } label: {
+                                Text(format.title)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(block.format.title)
+                                .font(.system(size: 12, weight: .medium))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(settingsInputBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(settingsCardBorder, lineWidth: 1)
+                        )
+                    }
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+                    .disabled(block.kind.supportedFormats.count <= 1)
+                    .opacity(block.kind.supportedFormats.count <= 1 ? 0.6 : 1)
+
+                    ColorPicker(
+                        "Color",
+                        selection: Binding(
+                            get: {
+                                Color(hex: menuBarComposerBlock(at: index)?.colorHex ?? block.kind.defaultColorHex)
+                            },
+                            set: { selectedColor in
+                                guard let hex = colorHexValue(from: selectedColor) else { return }
+                                updateMenuBarComposerConfiguration { config in
+                                    guard config.blocks.indices.contains(index) else { return }
+                                    config.blocks[index].colorHex = hex
+                                }
+                            }
+                        ),
+                        supportsOpacity: false
+                    )
+                    .labelsHidden()
+                }
+            }
+        }
+        .padding(10)
+        .background(settingsInputBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(settingsCardBorder, lineWidth: 1)
+        )
+        .opacity(block.isEnabled ? 1 : 0.68)
+    }
+
+    private func menuBarComposerBlock(at index: Int) -> MenuBarComposerBlock? {
+        guard menuBarComposerDraftConfiguration.blocks.indices.contains(index) else {
+            return nil
+        }
+        return menuBarComposerDraftConfiguration.blocks[index]
+    }
+
+    private func addMenuBarComposerMetricBlock(_ kind: MenuBarComposerBlockKind) {
+        guard kind.isMetric else { return }
+        updateMenuBarComposerConfiguration { config in
+            config.blocks.append(.metric(kind))
+        }
+    }
+
+    private func addMenuBarComposerTextBlock() {
+        updateMenuBarComposerConfiguration { config in
+            config.blocks.append(.text("•"))
+        }
+    }
+
+    private func moveMenuBarComposerBlock(at index: Int, direction: Int) {
+        updateMenuBarComposerConfiguration { config in
+            guard config.blocks.indices.contains(index) else { return }
+            let destination = index + direction
+            guard config.blocks.indices.contains(destination) else { return }
+            config.blocks.swapAt(index, destination)
+        }
+    }
+
+    private func removeMenuBarComposerBlock(at index: Int) {
+        updateMenuBarComposerConfiguration { config in
+            guard config.blocks.indices.contains(index) else { return }
+            config.blocks.remove(at: index)
+        }
+    }
+
+    private func updateMenuBarComposerConfiguration(_ mutation: (inout MenuBarComposerConfiguration) -> Void) {
+        var configuration = menuBarComposerDraftConfiguration
+        mutation(&configuration)
+        menuBarComposerDraftConfiguration = configuration.normalized()
+    }
+
+    private func menuBarComposerPreviewAttributedString(
+        configuration: MenuBarComposerConfiguration,
+        baseColor: Color
+    ) -> AttributedString {
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: viewModel.snapshot,
+            configuration: configuration
+        )
+        let renderedText = output.text.isEmpty ? "--" : output.text
+        var attributed = AttributedString(renderedText)
+        if !attributed.characters.isEmpty {
+            attributed[attributed.startIndex..<attributed.endIndex].foregroundColor = baseColor
+        }
+
+        guard !output.text.isEmpty else {
+            return attributed
+        }
+
+        for span in output.metricSpans {
+            guard let stringRange = Range(span.valueRange, in: output.text),
+                  let start = AttributedString.Index(stringRange.lowerBound, within: attributed),
+                  let end = AttributedString.Index(stringRange.upperBound, within: attributed) else {
+                continue
+            }
+            attributed[start..<end].foregroundColor = Color(hex: span.colorHex)
+        }
+
+        return attributed
+    }
+
     private var settingsDivider: some View {
         Rectangle()
             .fill(settingsCardBorder)
@@ -2376,6 +2751,28 @@ struct PopoverRootView: View {
         }
     }
 
+    private func summaryDisclosureButton(isExpanded: Bool, onToggle: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                onToggle()
+            }
+        } label: {
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(PopoverTheme.textMuted)
+                .frame(width: 20, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(PopoverTheme.bgElevated)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(PopoverTheme.borderSubtle, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func memorySegmentCard(_ segment: MemoryUsageSegment) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -2484,6 +2881,15 @@ struct PopoverRootView: View {
             viewModel.showTrends()
         case .settings:
             viewModel.showSettings()
+        }
+    }
+
+    private func updateRAMRefreshActivity(for screen: SystemSummaryViewModel.Screen) {
+        switch screen {
+        case .temperature, .ram:
+            ramDetailsViewModel.setRefreshActive(true)
+        case .battery, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
+            ramDetailsViewModel.setRefreshActive(false)
         }
     }
 

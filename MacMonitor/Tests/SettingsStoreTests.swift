@@ -52,6 +52,19 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.menuBarStorageFormat, .percentUsage)
     }
 
+    func testHydratesPersistedMenuBarUsageLeftFormats() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        defaults.set("both", forKey: "settings.menuBarDisplayMode")
+        defaults.set("percentUsageLeft", forKey: "settings.menuBarMemoryFormat")
+        defaults.set("numberUsageLeft", forKey: "settings.menuBarStorageFormat")
+        let manager = MutableLaunchManager()
+
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        XCTAssertEqual(store.menuBarMemoryFormat, .percentUsageLeft)
+        XCTAssertEqual(store.menuBarStorageFormat, .numberUsageLeft)
+    }
+
     func testDefaultsMenuBarDisplaySettingsToBothAndPercentUsage() {
         let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
         let manager = MutableLaunchManager()
@@ -98,6 +111,98 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(store.menuBarDisplayMode, .both)
         XCTAssertEqual(defaults.string(forKey: "settings.menuBarDisplayMode"), "both")
+    }
+
+    func testMigratesLegacyMenuBarSettingsIntoComposerConfiguration() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        defaults.set("both", forKey: "settings.menuBarDisplayMode")
+        defaults.set("numberUsage", forKey: "settings.menuBarMemoryFormat")
+        defaults.set("numberLeft", forKey: "settings.menuBarStorageFormat")
+        let manager = MutableLaunchManager()
+
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        let blocks = store.menuBarComposerConfiguration.blocks
+        XCTAssertEqual(blocks.map(\.kind), [.memory, .text, .storage])
+        XCTAssertEqual(blocks.first?.format, .numberUsage)
+        XCTAssertEqual(blocks.last?.format, .numberLeft)
+    }
+
+    func testComposerAllowsDuplicateMetricBlocks() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        store.menuBarComposerConfiguration = MenuBarComposerConfiguration(
+            separator: " | ",
+            blocks: [
+                .metric(.memory, format: .percentUsage),
+                .text(" | "),
+                .metric(.memory, format: .numberLeft)
+            ]
+        )
+
+        let metricKinds = store.menuBarComposerConfiguration.blocks.filter(\.kind.isMetric).map(\.kind)
+        XCTAssertEqual(metricKinds, [.memory, .memory])
+    }
+
+    func testPersistsMenuBarComposerConfiguration() throws {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        store.menuBarComposerConfiguration = MenuBarComposerConfiguration(
+            separator: "🔥",
+            blocks: [
+                .metric(.storage, format: .numberUsage),
+                .text("•"),
+                .metric(.memory, format: .percentUsage)
+            ]
+        )
+
+        let persistedData = try XCTUnwrap(defaults.data(forKey: "settings.menuBarComposerConfiguration"))
+        let persistedConfiguration = try JSONDecoder().decode(MenuBarComposerConfiguration.self, from: persistedData)
+
+        XCTAssertEqual(persistedConfiguration.separator, "🔥")
+        XCTAssertEqual(persistedConfiguration.blocks.map(\.kind), [.storage, .text, .memory])
+    }
+
+    func testHydratesPersistedComposerWithoutTextBlocksKeepsNoSeparator() throws {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+
+        let persistedConfiguration = MenuBarComposerConfiguration(
+            separator: " | ",
+            blocks: [
+                .metric(.memory, format: .percentUsage),
+                .metric(.storage, format: .percentUsage)
+            ]
+        )
+        defaults.set(
+            try JSONEncoder().encode(persistedConfiguration),
+            forKey: "settings.menuBarComposerConfiguration"
+        )
+
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+        let kinds = store.menuBarComposerConfiguration.blocks.map(\.kind)
+
+        XCTAssertEqual(kinds, [.memory, .storage])
+    }
+
+    func testComposerUpdatesLegacyDisplayModeForCompatibility() {
+        let defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID().uuidString)")!
+        let manager = MutableLaunchManager()
+        let store = SettingsStore(defaults: defaults, launchAtLoginManager: manager)
+
+        store.menuBarComposerConfiguration = MenuBarComposerConfiguration(
+            separator: " ",
+            blocks: [
+                .metric(.cpu, format: .percentUsage)
+            ]
+        )
+
+        XCTAssertEqual(store.menuBarDisplayMode, .cpu)
+        XCTAssertEqual(defaults.string(forKey: "settings.menuBarDisplayMode"), "cpu")
     }
 
     func testPersistsBatteryPolicyConfiguration() throws {

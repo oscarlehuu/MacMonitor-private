@@ -94,8 +94,10 @@ enum MenuBarDisplayMode: String, CaseIterable, Codable, Identifiable {
 
 enum MenuBarMetricDisplayFormat: String, CaseIterable, Codable, Identifiable {
     case percentUsage
+    case percentUsageLeft
     case numberUsage
     case numberLeft
+    case numberUsageLeft
 
     var id: String { rawValue }
 
@@ -103,11 +105,169 @@ enum MenuBarMetricDisplayFormat: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .percentUsage:
             return "% Usage"
+        case .percentUsageLeft:
+            return "% Usage / Left"
         case .numberUsage:
             return "Number (Usage)"
         case .numberLeft:
             return "Number (Left)"
+        case .numberUsageLeft:
+            return "# Usage / Left"
         }
+    }
+}
+
+enum MenuBarComposerBlockKind: String, CaseIterable, Codable, Identifiable {
+    case memory
+    case storage
+    case cpu
+    case network
+    case text
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .memory:
+            return "RAM"
+        case .storage:
+            return "SSD"
+        case .cpu:
+            return "CPU"
+        case .network:
+            return "Network"
+        case .text:
+            return "Text"
+        }
+    }
+
+    var defaultLabel: String {
+        switch self {
+        case .memory:
+            return "RAM"
+        case .storage:
+            return "SSD"
+        case .cpu:
+            return "CPU"
+        case .network:
+            return "NET"
+        case .text:
+            return ""
+        }
+    }
+
+    var defaultColorHex: UInt32 {
+        switch self {
+        case .memory:
+            return 0x0A84FF
+        case .storage:
+            return 0x32D74B
+        case .cpu:
+            return 0xFF9F0A
+        case .network:
+            return 0xBF5AF2
+        case .text:
+            return 0xFFFFFF
+        }
+    }
+
+    var supportedFormats: [MenuBarMetricDisplayFormat] {
+        switch self {
+        case .memory, .storage:
+            return MenuBarMetricDisplayFormat.allCases
+        case .cpu:
+            return [.percentUsage]
+        case .network:
+            return [.numberUsage]
+        case .text:
+            return []
+        }
+    }
+
+    func normalizedFormat(_ format: MenuBarMetricDisplayFormat) -> MenuBarMetricDisplayFormat {
+        supportedFormats.contains(format) ? format : supportedFormats.first ?? .percentUsage
+    }
+
+    var isMetric: Bool {
+        self != .text
+    }
+}
+
+struct MenuBarComposerBlock: Codable, Equatable, Identifiable {
+    var id: UUID
+    var kind: MenuBarComposerBlockKind
+    var isEnabled: Bool
+    var label: String
+    var format: MenuBarMetricDisplayFormat
+    var colorHex: UInt32
+    var text: String
+
+    static func metric(_ kind: MenuBarComposerBlockKind, format: MenuBarMetricDisplayFormat? = nil) -> MenuBarComposerBlock {
+        MenuBarComposerBlock(
+            id: UUID(),
+            kind: kind,
+            isEnabled: true,
+            label: kind.defaultLabel,
+            format: kind.normalizedFormat(format ?? .percentUsage),
+            colorHex: kind.defaultColorHex,
+            text: ""
+        )
+    }
+
+    static func text(_ value: String = "•") -> MenuBarComposerBlock {
+        MenuBarComposerBlock(
+            id: UUID(),
+            kind: .text,
+            isEnabled: true,
+            label: "",
+            format: .numberUsage,
+            colorHex: MenuBarComposerBlockKind.text.defaultColorHex,
+            text: value
+        )
+    }
+
+    func normalized() -> MenuBarComposerBlock {
+        var normalized = self
+        normalized.colorHex = colorHex & 0x00FF_FFFF
+        if kind.isMetric {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalized.label = trimmed.isEmpty ? kind.defaultLabel : trimmed
+            normalized.format = kind.normalizedFormat(format)
+            normalized.text = ""
+        } else {
+            normalized.label = ""
+            normalized.format = .numberUsage
+            if normalized.text.isEmpty {
+                normalized.text = "•"
+            }
+        }
+        return normalized
+    }
+}
+
+struct MenuBarComposerConfiguration: Codable, Equatable {
+    var separator: String
+    var blocks: [MenuBarComposerBlock]
+
+    static let `default` = MenuBarComposerConfiguration(
+        separator: " | ",
+        blocks: [
+            .metric(.memory, format: .percentUsage),
+            .text(" | "),
+            .metric(.storage, format: .percentUsage)
+        ]
+    )
+
+    func normalized() -> MenuBarComposerConfiguration {
+        let normalizedBlocks = blocks.map { $0.normalized() }
+
+        let normalizedSeparator = separator.count > 16 ? String(separator.prefix(16)) : separator
+        let fallbackSeparator = normalizedSeparator.isEmpty ? " " : normalizedSeparator
+
+        return MenuBarComposerConfiguration(
+            separator: fallbackSeparator,
+            blocks: normalizedBlocks.isEmpty ? Self.default.blocks : normalizedBlocks
+        )
     }
 }
 
@@ -353,6 +513,8 @@ final class SettingsStore: ObservableObject {
                 return
             }
             defaults.set(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode)
+            guard !isSyncingMenuBarLegacySettings else { return }
+            synchronizeComposerFromLegacySettings()
         }
     }
 
@@ -360,6 +522,8 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard !isHydrating else { return }
             defaults.set(menuBarMemoryFormat.rawValue, forKey: Keys.menuBarMemoryFormat)
+            guard !isSyncingMenuBarLegacySettings else { return }
+            synchronizeComposerFromLegacySettings()
         }
     }
 
@@ -367,6 +531,22 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard !isHydrating else { return }
             defaults.set(menuBarStorageFormat.rawValue, forKey: Keys.menuBarStorageFormat)
+            guard !isSyncingMenuBarLegacySettings else { return }
+            synchronizeComposerFromLegacySettings()
+        }
+    }
+
+    @Published var menuBarComposerConfiguration: MenuBarComposerConfiguration {
+        didSet {
+            guard !isHydrating else { return }
+            let normalized = menuBarComposerConfiguration.normalized()
+            if normalized != menuBarComposerConfiguration {
+                menuBarComposerConfiguration = normalized
+                return
+            }
+            persistMenuBarComposerConfiguration(normalized)
+            guard !isSyncingMenuBarLegacySettings else { return }
+            synchronizeLegacyMenuBarSettings(from: normalized)
         }
     }
 
@@ -434,6 +614,7 @@ final class SettingsStore: ObservableObject {
     private let launchAtLoginManager: LaunchAtLoginManaging
     private var isHydrating = true
     private var isSyncingLaunchToggle = false
+    private var isSyncingMenuBarLegacySettings = false
 
     private enum Keys {
         static let appTheme = "settings.appTheme"
@@ -441,6 +622,7 @@ final class SettingsStore: ObservableObject {
         static let menuBarDisplayMode = "settings.menuBarDisplayMode"
         static let menuBarMemoryFormat = "settings.menuBarMemoryFormat"
         static let menuBarStorageFormat = "settings.menuBarStorageFormat"
+        static let menuBarComposerConfiguration = "settings.menuBarComposerConfiguration"
 
         // Legacy keys kept for migration.
         static let legacyMenuBarDisplayMode = "settings.menuBarDisplayMode"
@@ -467,16 +649,25 @@ final class SettingsStore: ObservableObject {
         let persistedInterval = defaults.integer(forKey: Keys.refreshInterval)
         self.refreshInterval = RefreshInterval(rawValue: persistedInterval) ?? .threeMinutes
 
-        self.menuBarDisplayMode = Self.loadMenuBarDisplayMode(defaults: defaults)
-        self.menuBarMemoryFormat = Self.loadMenuBarMetricFormat(
+        let hydratedMenuBarDisplayMode = Self.loadMenuBarDisplayMode(defaults: defaults)
+        let hydratedMenuBarMemoryFormat = Self.loadMenuBarMetricFormat(
             defaults: defaults,
             key: Keys.menuBarMemoryFormat,
             defaultFormat: .percentUsage
         )
-        self.menuBarStorageFormat = Self.loadMenuBarMetricFormat(
+        let hydratedMenuBarStorageFormat = Self.loadMenuBarMetricFormat(
             defaults: defaults,
             key: Keys.menuBarStorageFormat,
             defaultFormat: .percentUsage
+        )
+        self.menuBarDisplayMode = hydratedMenuBarDisplayMode
+        self.menuBarMemoryFormat = hydratedMenuBarMemoryFormat
+        self.menuBarStorageFormat = hydratedMenuBarStorageFormat
+        self.menuBarComposerConfiguration = Self.loadMenuBarComposerConfiguration(
+            defaults: defaults,
+            mode: hydratedMenuBarDisplayMode,
+            memoryFormat: hydratedMenuBarMemoryFormat,
+            storageFormat: hydratedMenuBarStorageFormat
         )
         let hydratedMainPopoverDefaultWidth = Self.loadMainPopoverDefaultWidth(defaults: defaults)
         self.mainPopoverDefaultWidth = hydratedMainPopoverDefaultWidth
@@ -584,6 +775,89 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    private static func loadMenuBarComposerConfiguration(
+        defaults: UserDefaults,
+        mode: MenuBarDisplayMode,
+        memoryFormat: MenuBarMetricDisplayFormat,
+        storageFormat: MenuBarMetricDisplayFormat
+    ) -> MenuBarComposerConfiguration {
+        if let data = defaults.data(forKey: Keys.menuBarComposerConfiguration),
+           let decoded = try? JSONDecoder().decode(MenuBarComposerConfiguration.self, from: data) {
+            return decoded.normalized()
+        }
+
+        return withExplicitSeparatorsIfNeeded(
+            makeComposerConfigurationFromLegacySettings(
+                mode: mode,
+                memoryFormat: memoryFormat,
+                storageFormat: storageFormat
+            )
+        )
+    }
+
+    private static func withExplicitSeparatorsIfNeeded(
+        _ configuration: MenuBarComposerConfiguration
+    ) -> MenuBarComposerConfiguration {
+        let normalized = configuration.normalized()
+        guard normalized.blocks.count > 1 else {
+            return normalized
+        }
+        guard !normalized.blocks.contains(where: { $0.kind == .text }) else {
+            return normalized
+        }
+
+        var expandedBlocks: [MenuBarComposerBlock] = []
+        for (index, block) in normalized.blocks.enumerated() {
+            if index > 0 {
+                expandedBlocks.append(.text(normalized.separator))
+            }
+            expandedBlocks.append(block)
+        }
+
+        return MenuBarComposerConfiguration(
+            separator: normalized.separator,
+            blocks: expandedBlocks
+        ).normalized()
+    }
+
+    private static func makeComposerConfigurationFromLegacySettings(
+        mode: MenuBarDisplayMode,
+        memoryFormat: MenuBarMetricDisplayFormat,
+        storageFormat: MenuBarMetricDisplayFormat
+    ) -> MenuBarComposerConfiguration {
+        switch mode {
+        case .memory:
+            return MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [.metric(.memory, format: memoryFormat)]
+            )
+        case .storage:
+            return MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [.metric(.storage, format: storageFormat)]
+            )
+        case .cpu:
+            return MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [.metric(.cpu, format: .percentUsage)]
+            )
+        case .network:
+            return MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [.metric(.network, format: .numberUsage)]
+            )
+        case .both, .icon:
+            return MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [
+                    .metric(.memory, format: memoryFormat),
+                    .text(" | "),
+                    .metric(.storage, format: storageFormat)
+                ]
+            )
+        }
+    }
+
     static func normalizedMainPopoverWidth(_ width: CGFloat) -> CGFloat {
         guard width.isFinite else {
             return mainPopoverFallbackWidth
@@ -605,6 +879,64 @@ final class SettingsStore: ObservableObject {
 
     var hasUnsavedMainPopoverWidth: Bool {
         abs(mainPopoverCurrentWidth - mainPopoverDefaultWidth) > 0.5
+    }
+
+    private func synchronizeComposerFromLegacySettings() {
+        isSyncingMenuBarLegacySettings = true
+        menuBarComposerConfiguration = Self.makeComposerConfigurationFromLegacySettings(
+            mode: menuBarDisplayMode,
+            memoryFormat: menuBarMemoryFormat,
+            storageFormat: menuBarStorageFormat
+        )
+        isSyncingMenuBarLegacySettings = false
+    }
+
+    private func synchronizeLegacyMenuBarSettings(from configuration: MenuBarComposerConfiguration) {
+        isSyncingMenuBarLegacySettings = true
+        defer { isSyncingMenuBarLegacySettings = false }
+
+        let metricBlocks = configuration.blocks.filter { $0.isEnabled && $0.kind.isMetric }
+        let nextDisplayMode = Self.derivedLegacyDisplayMode(from: metricBlocks)
+        if menuBarDisplayMode != nextDisplayMode {
+            menuBarDisplayMode = nextDisplayMode
+        }
+
+        if let memoryBlock = metricBlocks.first(where: { $0.kind == .memory }),
+           menuBarMemoryFormat != memoryBlock.format {
+            menuBarMemoryFormat = memoryBlock.format
+        }
+
+        if let storageBlock = metricBlocks.first(where: { $0.kind == .storage }),
+           menuBarStorageFormat != storageBlock.format {
+            menuBarStorageFormat = storageBlock.format
+        }
+    }
+
+    private static func derivedLegacyDisplayMode(from metricBlocks: [MenuBarComposerBlock]) -> MenuBarDisplayMode {
+        let uniqueKinds = Array(Set(metricBlocks.map(\.kind)))
+        guard !uniqueKinds.isEmpty else { return .both }
+        if uniqueKinds.count == 1 {
+            switch uniqueKinds[0] {
+            case .memory:
+                return .memory
+            case .storage:
+                return .storage
+            case .cpu:
+                return .cpu
+            case .network:
+                return .network
+            case .text:
+                return .both
+            }
+        }
+        return .both
+    }
+
+    private func persistMenuBarComposerConfiguration(_ configuration: MenuBarComposerConfiguration) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+        defaults.set(data, forKey: Keys.menuBarComposerConfiguration)
     }
 
     private func persistBatteryPolicyConfiguration(_ configuration: BatteryPolicyConfiguration) {

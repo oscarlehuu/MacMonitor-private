@@ -19,6 +19,7 @@ final class MetricsEngine: ObservableObject {
     private var refreshIntervalCancellable: AnyCancellable?
     private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
+    private var networkBootstrapWorkItem: DispatchWorkItem?
 
     init(
         memoryCollector: MemoryCollecting,
@@ -48,6 +49,7 @@ final class MetricsEngine: ObservableObject {
         bindThermalChanges()
         scheduleTimer(using: settings.refreshInterval)
         refresh(reason: .startup)
+        scheduleNetworkBootstrapRefreshIfNeeded()
     }
 
     func stop() {
@@ -55,6 +57,8 @@ final class MetricsEngine: ObservableObject {
         refreshIntervalCancellable?.cancel()
         batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
+        networkBootstrapWorkItem?.cancel()
+        networkBootstrapWorkItem = nil
     }
 
     func refreshNow() {
@@ -114,5 +118,21 @@ final class MetricsEngine: ObservableObject {
             gpu: gpu,
             refreshReason: reason
         )
+    }
+
+    private func scheduleNetworkBootstrapRefreshIfNeeded() {
+        networkBootstrapWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard latestSnapshot?.network.downloadBytesPerSecond == nil ||
+                latestSnapshot?.network.uploadBytesPerSecond == nil else {
+                return
+            }
+            refresh(reason: .interval)
+        }
+
+        networkBootstrapWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
     }
 }

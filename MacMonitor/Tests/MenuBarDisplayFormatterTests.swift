@@ -24,6 +24,17 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         XCTAssertEqual(title, "RAM: 75%")
     }
 
+    func testMemoryPercentUsageLeftTitle() {
+        let title = MenuBarDisplayFormatter.valueText(
+            for: makeSnapshot(memoryUsed: 3, memoryTotal: 4, storageUsed: 0, storageTotal: 1),
+            mode: .memory,
+            memoryFormat: .percentUsageLeft,
+            storageFormat: .percentUsage
+        )
+
+        XCTAssertEqual(title, "RAM: 75% / 25% left")
+    }
+
     func testStorageNumberLeftTitle() {
         let snapshot = makeSnapshot(
             memoryUsed: 0,
@@ -40,6 +51,24 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(title, "SSD: \(MetricFormatter.bytes(20)) left")
+    }
+
+    func testStorageNumberUsageLeftTitle() {
+        let snapshot = makeSnapshot(
+            memoryUsed: 0,
+            memoryTotal: 1,
+            storageUsed: 80,
+            storageTotal: 100
+        )
+
+        let title = MenuBarDisplayFormatter.valueText(
+            for: snapshot,
+            mode: .storage,
+            memoryFormat: .percentUsage,
+            storageFormat: .numberUsageLeft
+        )
+
+        XCTAssertEqual(title, "SSD: \(MetricFormatter.bytes(80)) / \(MetricFormatter.bytes(20)) left")
     }
 
     func testBothMetricsTitle() {
@@ -62,6 +91,25 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(title, "RAM: --")
+    }
+
+    func testCPUAndNetworkFallbackWhenSnapshotMissing() {
+        let cpuTitle = MenuBarDisplayFormatter.valueText(
+            for: nil,
+            mode: .cpu,
+            memoryFormat: .percentUsage,
+            storageFormat: .percentUsage
+        )
+        let networkTitle = MenuBarDisplayFormatter.valueText(
+            for: nil,
+            mode: .network,
+            memoryFormat: .percentUsage,
+            storageFormat: .percentUsage
+        )
+
+        let expectedRate = MetricFormatter.bytesPerSecond(nil)
+        XCTAssertEqual(cpuTitle, "CPU: 0%")
+        XCTAssertEqual(networkTitle, "NET: D \(expectedRate) U \(expectedRate)")
     }
 
     func testMemoryNumberUsageTitleDoesNotUsePercentSymbol() {
@@ -143,6 +191,110 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
         )
 
         XCTAssertTrue(ranges.isEmpty)
+    }
+
+    func testComposedValueSupportsCustomOrderAndTextBlocks() {
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: makeSnapshot(memoryUsed: 3, memoryTotal: 4, storageUsed: 80, storageTotal: 100),
+            configuration: MenuBarComposerConfiguration(
+                separator: "🔥",
+                blocks: [
+                    .metric(.storage, format: .percentUsage),
+                    .text("🚀"),
+                    .metric(.memory, format: .percentUsage)
+                ]
+            )
+        )
+
+        XCTAssertEqual(output.text, "SSD: 80%🚀RAM: 75%")
+        XCTAssertEqual(output.metricSpans.map(\.kind), [.storage, .memory])
+    }
+
+    func testComposedHighlightRangesDoNotDependOnHardcodedSeparator() {
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: makeSnapshot(memoryUsed: 92, memoryTotal: 100, storageUsed: 93, storageTotal: 100),
+            configuration: MenuBarComposerConfiguration(
+                separator: "✨",
+                blocks: [
+                    .metric(.memory, format: .percentUsage),
+                    .text("🔥"),
+                    .metric(.storage, format: .percentUsage)
+                ]
+            )
+        )
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: output,
+            highlightRAM: true,
+            highlightStorage: true
+        )
+
+        XCTAssertEqual(ranges.count, 2)
+        let rendered = output.text as NSString
+        XCTAssertEqual(rendered.substring(with: ranges[0]), "92%")
+        XCTAssertEqual(rendered.substring(with: ranges[1]), "93%")
+    }
+
+    func testComposedHighlightRangeForNumberLeftExcludesLeftSuffix() {
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: makeSnapshot(memoryUsed: 50, memoryTotal: 100, storageUsed: 80, storageTotal: 100),
+            configuration: MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [
+                    .metric(.storage, format: .numberLeft)
+                ]
+            )
+        )
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: output,
+            highlightRAM: false,
+            highlightStorage: true
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(
+            (output.text as NSString).substring(with: ranges[0]),
+            MetricFormatter.bytes(20)
+        )
+    }
+
+    func testComposedHighlightRangeForNumberUsageLeftExcludesLeftSuffixWord() {
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: makeSnapshot(memoryUsed: 50, memoryTotal: 100, storageUsed: 80, storageTotal: 100),
+            configuration: MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [
+                    .metric(.storage, format: .numberUsageLeft)
+                ]
+            )
+        )
+        let ranges = MenuBarDisplayFormatter.highlightedRanges(
+            in: output,
+            highlightRAM: false,
+            highlightStorage: true
+        )
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(
+            (output.text as NSString).substring(with: ranges[0]),
+            "\(MetricFormatter.bytes(80)) / \(MetricFormatter.bytes(20))"
+        )
+    }
+
+    func testComposedValueRangeIgnoresColonInCustomLabel() {
+        var memoryBlock = MenuBarComposerBlock.metric(.memory, format: .percentUsage)
+        memoryBlock.label = "RAM: Avg"
+        let output = MenuBarDisplayFormatter.composedValue(
+            for: makeSnapshot(memoryUsed: 3, memoryTotal: 4, storageUsed: 0, storageTotal: 1),
+            configuration: MenuBarComposerConfiguration(
+                separator: " | ",
+                blocks: [memoryBlock]
+            )
+        )
+
+        let rendered = output.text as NSString
+        XCTAssertEqual(output.text, "RAM: Avg: 75%")
+        XCTAssertEqual(output.metricSpans.count, 1)
+        XCTAssertEqual(rendered.substring(with: output.metricSpans[0].valueRange), "75%")
     }
 
     private func makeSnapshot(

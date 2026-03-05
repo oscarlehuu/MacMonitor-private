@@ -1,6 +1,79 @@
 import Foundation
 
+struct MenuBarComposedMetricSpan {
+    let kind: MenuBarComposerBlockKind
+    let fullRange: NSRange
+    let valueRange: NSRange
+    let colorHex: UInt32
+}
+
+struct MenuBarComposedOutput {
+    let text: String
+    let metricSpans: [MenuBarComposedMetricSpan]
+}
+
 enum MenuBarDisplayFormatter {
+    static func composedValue(
+        for snapshot: SystemSnapshot?,
+        configuration: MenuBarComposerConfiguration
+    ) -> MenuBarComposedOutput {
+        let normalizedConfiguration = configuration.normalized()
+        let enabledBlocks = normalizedConfiguration.blocks.filter(\.isEnabled)
+
+        var text = ""
+        var metricSpans: [MenuBarComposedMetricSpan] = []
+
+        for block in enabledBlocks {
+            switch block.kind {
+            case .text:
+                text.append(block.text)
+            case .memory, .storage, .cpu, .network:
+                let label = block.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? block.kind.defaultLabel
+                    : block.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = metricText(for: snapshot, kind: block.kind, format: block.format)
+                let segment = "\(label): \(value)"
+                let segmentStart = text.endIndex
+                text.append(segment)
+                let segmentEnd = text.endIndex
+                let segmentRange = segmentStart..<segmentEnd
+                let valueStart = text.index(segmentStart, offsetBy: label.count + 2)
+                let valueEnd = text.index(valueStart, offsetBy: value.count)
+                metricSpans.append(
+                    MenuBarComposedMetricSpan(
+                        kind: block.kind,
+                        fullRange: NSRange(segmentRange, in: text),
+                        valueRange: valueRangeWithOptionalLeftSuffix(
+                            in: text,
+                            valueRange: valueStart..<valueEnd,
+                            segmentRange: segmentRange
+                        ),
+                        colorHex: block.colorHex & 0x00FF_FFFF
+                    )
+                )
+            }
+        }
+
+        return MenuBarComposedOutput(text: text, metricSpans: metricSpans)
+    }
+
+    static func highlightedRanges(
+        in composedOutput: MenuBarComposedOutput,
+        highlightRAM: Bool,
+        highlightStorage: Bool
+    ) -> [NSRange] {
+        composedOutput.metricSpans.compactMap { span in
+            switch span.kind {
+            case .memory where highlightRAM:
+                return span.valueRange
+            case .storage where highlightStorage:
+                return span.valueRange
+            case .cpu, .network, .text, .memory, .storage:
+                return nil
+            }
+        }
+    }
+
     static func valueText(
         for snapshot: SystemSnapshot?,
         mode: MenuBarDisplayMode,
@@ -17,7 +90,7 @@ enum MenuBarDisplayFormatter {
             totalBytes: snapshot?.storage.totalBytes,
             format: storageFormat
         )
-        let cpuText = MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent)
+        let cpuText = MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent ?? 0)
         let networkDownText = MetricFormatter.bytesPerSecond(snapshot?.network.downloadBytesPerSecond)
         let networkUpText = MetricFormatter.bytesPerSecond(snapshot?.network.uploadBytesPerSecond)
 
@@ -116,6 +189,19 @@ enum MenuBarDisplayFormatter {
         return NSRange(valueStart..<valueEnd, in: text)
     }
 
+    private static func valueRangeWithOptionalLeftSuffix(
+        in text: String,
+        valueRange: Range<String.Index>,
+        segmentRange: Range<String.Index>
+    ) -> NSRange {
+        var valueEnd = valueRange.upperBound
+        if let leftSuffix = text.range(of: " left", options: [.backwards], range: segmentRange),
+           leftSuffix.lowerBound > valueRange.lowerBound {
+            valueEnd = min(valueEnd, leftSuffix.lowerBound)
+        }
+        return NSRange(valueRange.lowerBound..<valueEnd, in: text)
+    }
+
     private static func metricText(
         usedBytes: UInt64?,
         totalBytes: UInt64?,
@@ -131,10 +217,45 @@ enum MenuBarDisplayFormatter {
         switch format {
         case .percentUsage:
             return MetricFormatter.percent(used: normalizedUsedBytes, total: totalBytes)
+        case .percentUsageLeft:
+            let usagePercent = MetricFormatter.percent(used: normalizedUsedBytes, total: totalBytes)
+            let leftPercent = MetricFormatter.percent(used: freeBytes, total: totalBytes)
+            return "\(usagePercent) / \(leftPercent) left"
         case .numberUsage:
             return MetricFormatter.bytes(normalizedUsedBytes)
         case .numberLeft:
             return "\(MetricFormatter.bytes(freeBytes)) left"
+        case .numberUsageLeft:
+            return "\(MetricFormatter.bytes(normalizedUsedBytes)) / \(MetricFormatter.bytes(freeBytes)) left"
+        }
+    }
+
+    private static func metricText(
+        for snapshot: SystemSnapshot?,
+        kind: MenuBarComposerBlockKind,
+        format: MenuBarMetricDisplayFormat
+    ) -> String {
+        switch kind {
+        case .memory:
+            return metricText(
+                usedBytes: snapshot?.memory.usedBytes,
+                totalBytes: snapshot?.memory.totalBytes,
+                format: format
+            )
+        case .storage:
+            return metricText(
+                usedBytes: snapshot?.storage.usedBytes,
+                totalBytes: snapshot?.storage.totalBytes,
+                format: format
+            )
+        case .cpu:
+            return MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent ?? 0)
+        case .network:
+            let networkDownText = MetricFormatter.bytesPerSecond(snapshot?.network.downloadBytesPerSecond)
+            let networkUpText = MetricFormatter.bytesPerSecond(snapshot?.network.uploadBytesPerSecond)
+            return "D \(networkDownText) U \(networkUpText)"
+        case .text:
+            return ""
         }
     }
 }

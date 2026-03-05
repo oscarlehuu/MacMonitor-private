@@ -98,14 +98,18 @@ final class SystemSummaryViewModel: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] newSnapshot in
                 guard let self else { return }
-                snapshot = newSnapshot
-                history.append(newSnapshot)
+                let mergedSnapshot = mergedSnapshotPreservingLatestNetwork(
+                    incoming: newSnapshot,
+                    previous: snapshot
+                )
+                snapshot = mergedSnapshot
+                history.append(mergedSnapshot)
                 if history.count > 3_500 {
                     history = Array(history.suffix(3_500))
                 }
-                snapshotStore.append(newSnapshot)
-                appGroupSnapshotStore?.write(snapshot: newSnapshot, history: history, referenceDate: now())
-                evaluateAndNotifyAlerts(for: newSnapshot)
+                snapshotStore.append(mergedSnapshot)
+                appGroupSnapshotStore?.write(snapshot: mergedSnapshot, history: history, referenceDate: now())
+                evaluateAndNotifyAlerts(for: mergedSnapshot)
             }
             .store(in: &cancellables)
 
@@ -298,5 +302,31 @@ final class SystemSummaryViewModel: ObservableObject {
             && lhs.batteryHealthDropAlertEnabled == rhs.batteryHealthDropAlertEnabled
             && lhs.batteryHealthDropPercentThreshold == rhs.batteryHealthDropPercentThreshold
             && lhs.cooldownMinutes == rhs.cooldownMinutes
+    }
+
+    private func mergedSnapshotPreservingLatestNetwork(
+        incoming: SystemSnapshot,
+        previous: SystemSnapshot?
+    ) -> SystemSnapshot {
+        guard incoming.network.downloadBytesPerSecond == nil,
+              incoming.network.uploadBytesPerSecond == nil,
+              let previous,
+              previous.network.downloadBytesPerSecond != nil || previous.network.uploadBytesPerSecond != nil else {
+            return incoming
+        }
+
+        return SystemSnapshot(
+            id: incoming.id,
+            schemaVersion: incoming.schemaVersion,
+            timestamp: incoming.timestamp,
+            memory: incoming.memory,
+            storage: incoming.storage,
+            battery: incoming.battery,
+            thermal: incoming.thermal,
+            cpu: incoming.cpu,
+            network: previous.network,
+            gpu: incoming.gpu,
+            refreshReason: incoming.refreshReason
+        )
     }
 }
