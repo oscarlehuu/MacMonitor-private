@@ -1,0 +1,13 @@
+MacMonitor v0.5.11
+
+## [0.5.11](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.10...v0.5.11) (2026-03-06)
+
+
+### Bug Fixes
+
+* restore updater and color picker behavior ([#50](https://github.com/oscarlehuu/MacMonitor-private/issues/50)) ([7de4eae](https://github.com/oscarlehuu/MacMonitor-private/commit/7de4eae365b2aa78f9139b0c0f853923adbc6659))
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).
+
+<!-- CURSOR_SUMMARY -->
