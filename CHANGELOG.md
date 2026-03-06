@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.11](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.10...v0.5.11) (2026-03-06)
+
+
+### Bug Fixes
+
+* restore updater and color picker behavior ([#50](https://github.com/oscarlehuu/MacMonitor-private/issues/50)) ([7de4eae](https://github.com/oscarlehuu/MacMonitor-private/commit/7de4eae365b2aa78f9139b0c0f853923adbc6659))
+
+## [0.5.10](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.9...v0.5.10) (2026-03-05)
+
+
+### Bug Fixes
+
+* restore view model API compatibility for release build ([#48](https://github.com/oscarlehuu/MacMonitor-private/issues/48)) ([780db7b](https://github.com/oscarlehuu/MacMonitor-private/commit/780db7bb6c88ce69f133f67dfb46217d5f3b0d9f))
+
+## [0.5.9](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.8...v0.5.9) (2026-03-05)
+
+
+### Bug Fixes
+
+* improve menu bar composer preview and network rate handling ([#46](https://github.com/oscarlehuu/MacMonitor-private/issues/46)) ([d47330a](https://github.com/oscarlehuu/MacMonitor-private/commit/d47330af5366ffcadaa2b1d9bca2dca85449c570))
+
+## [0.5.8](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.7...v0.5.8) (2026-03-04)
+
+
+### Bug Fixes
+
+* **release:** add notarized pkg distribution asset ([a91a6a8](https://github.com/oscarlehuu/MacMonitor-private/commit/a91a6a83d45a38b0b311bea051a53d99b99deecf))
+* **release:** auto-detect installer signing identity for pkg ([7cb8dd3](https://github.com/oscarlehuu/MacMonitor-private/commit/7cb8dd3e611233bdf792cbf1cca62824a75b8f45))
+* **release:** build DMG with HFS+ for stable Finder rendering ([b0a6839](https://github.com/oscarlehuu/MacMonitor-private/commit/b0a68394d93f523ad6cb2b8eb88a7e584ae7c40f))
+* **release:** remove brittle dmg spctl assessment ([6184d1c](https://github.com/oscarlehuu/MacMonitor-private/commit/6184d1cb3364ce89e41dc8d265f5fa5464312777))
+* **release:** require signed installer certificate for pkg ([fd69eeb](https://github.com/oscarlehuu/MacMonitor-private/commit/fd69eebfb5d60714c8ca2901944f1cd9f441be29))
+* **release:** simplify asset names and stabilize DMG Applications link ([d737ce7](https://github.com/oscarlehuu/MacMonitor-private/commit/d737ce7bf8d21c25b110212c01480630e23c8574))
+
 ## [0.5.7](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.6...v0.5.7) (2026-03-04)
 
 

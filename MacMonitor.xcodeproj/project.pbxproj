@@ -91,6 +91,7 @@
 		B161B23815C435AA6997AABF /* BatteryAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63A1B1D0954E744642FDCD0 /* BatteryAppIntents.swift */; };
 		B1BA0BF1589BCA5D56454942 /* AppRAMUsageCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B49917494DFAE13A9EB96 /* AppRAMUsageCollector.swift */; };
 		B2410AD63AB8039EF9B220FD /* DefaultStorageProtectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B23B75F8625AABB5D816AF5 /* DefaultStorageProtectionPolicyTests.swift */; };
+		B6BF6EF3F74BA3D831A85F86 /* AppUpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17C0733D6D5322D3D3E1982 /* AppUpdateControllerTests.swift */; };
 		B782ED622F72CEEB4ED302FA /* SystemAlertPolicyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E55CE3EAC33CAB3FEEA982 /* SystemAlertPolicyEngine.swift */; };
 		B9B2646B05E1B4F110BB12BA /* ProcessListCollecting.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADC871394D58EB83CF7D2840 /* ProcessListCollecting.swift */; };
 		BD0EBFDE38B6E99D3010BBC1 /* MetricFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E319329C90694AD37693FE /* MetricFormatter.swift */; };
@@ -244,6 +245,7 @@
 		BE2742FE280420C7D14A5653 /* RAMPolicySettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicySettingsViewModel.swift; sourceTree = "<group>"; };
 		BEBED1295E80A29B5C9FCC1E /* GPUCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUCollector.swift; sourceTree = "<group>"; };
 		C06E61074B633D6D13ED7296 /* RAMPolicyEvaluatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyEvaluatorTests.swift; sourceTree = "<group>"; };
+		C17C0733D6D5322D3D3E1982 /* AppUpdateControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateControllerTests.swift; sourceTree = "<group>"; };
 		C375B2194AF206B2ACBA35C4 /* RunningAppPreflightCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningAppPreflightCoordinatorTests.swift; sourceTree = "<group>"; };
 		C63A1B1D0954E744642FDCD0 /* BatteryAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryAppIntents.swift; sourceTree = "<group>"; };
 		C6C9249AFA4856B23CD19CC6 /* RAMPolicyNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMPolicyNotifier.swift; sourceTree = "<group>"; };
@@ -547,6 +549,7 @@
 		C9A24E2CE4CBD45E8F5175DD /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				C17C0733D6D5322D3D3E1982 /* AppUpdateControllerTests.swift */,
 				10B5E418FFE61138B6E623B1 /* BatteryEventStoreTests.swift */,
 				B86EB88563E32F61AA17A128 /* BatteryPolicyCoordinatorTests.swift */,
 				1AD1DB889AEE2E57D5C97E00 /* BatteryPolicyEngineTests.swift */,
@@ -803,6 +806,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B6BF6EF3F74BA3D831A85F86 /* AppUpdateControllerTests.swift in Sources */,
 				3705547B0BF1F356EE21A4A9 /* BatteryEventStoreTests.swift in Sources */,
 				6FBE58F708676E21E57075AF /* BatteryPolicyCoordinatorTests.swift in Sources */,
 				D4C5E57BCA6EBC0C985EA520 /* BatteryPolicyEngineTests.swift in Sources */,

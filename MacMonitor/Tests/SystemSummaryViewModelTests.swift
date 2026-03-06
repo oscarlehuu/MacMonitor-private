@@ -222,7 +222,6 @@ final class SystemSummaryViewModelTests: XCTestCase {
 
         wait(for: [expectation], timeout: 1.0)
     }
-
     private func makeViewModel() -> SystemSummaryViewModel {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
@@ -333,7 +332,6 @@ private final class SequencedNetworkCollector: NetworkCollecting {
         return samples.removeFirst()
     }
 }
-
 private struct DummyLaunchAtLoginManager: LaunchAtLoginManaging {
     func isEnabled() -> Bool { false }
     func setEnabled(_ enabled: Bool) throws {}
