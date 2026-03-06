@@ -16,6 +16,7 @@ final class MenuBarController: NSObject {
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
     private var appearanceObserver: NSObjectProtocol?
+    private var isAuxiliaryPanelPresented = false
 
     init(
         viewModel: SystemSummaryViewModel,
@@ -54,6 +55,9 @@ final class MenuBarController: NSObject {
                 popoverWindowProvider: { [weak self] in
                     self?.popover.contentViewController?.view.window
                 },
+                auxiliaryPanelPresentationHandler: { [weak self] isPresented in
+                    self?.setAuxiliaryPanelPresentation(isPresented)
+                },
                 diagnosticsExporter: diagnosticsExporter
             )
         )
@@ -71,6 +75,7 @@ final class MenuBarController: NSObject {
 
     func uninstall() {
         cancellables.removeAll()
+        setAuxiliaryPanelPresentation(false)
         if let appearanceObserver {
             DistributedNotificationCenter.default().removeObserver(appearanceObserver)
             self.appearanceObserver = nil
@@ -92,6 +97,13 @@ final class MenuBarController: NSObject {
         }
 
         renderStatusItem()
+    }
+
+    private func setAuxiliaryPanelPresentation(_ isPresented: Bool) {
+        guard isAuxiliaryPanelPresented != isPresented else { return }
+
+        isAuxiliaryPanelPresented = isPresented
+        popover.behavior = isPresented ? .applicationDefined : .transient
     }
 
     private func bindViewModel() {
@@ -332,6 +344,7 @@ extension MenuBarController: NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        setAuxiliaryPanelPresentation(false)
         renderStatusItem()
     }
 }
