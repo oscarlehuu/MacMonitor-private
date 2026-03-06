@@ -103,6 +103,10 @@ final class SystemSummaryViewModel: ObservableObject {
                     previous: snapshot
                 )
                 snapshot = mergedSnapshot
+                if mergedSnapshot.refreshReason == .networkSample {
+                    appGroupSnapshotStore?.write(snapshot: mergedSnapshot, history: history, referenceDate: now())
+                    return
+                }
                 history.append(mergedSnapshot)
                 if history.count > 3_500 {
                     history = Array(history.suffix(3_500))

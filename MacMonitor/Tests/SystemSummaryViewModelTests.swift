@@ -180,6 +180,49 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
     }
 
+    func testNetworkSampleUpdatesSnapshotWithoutAppendingHistory() {
+        let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
+        let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
+        let historyDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SystemSummaryViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        let viewModel = SystemSummaryViewModel(
+            engine: MetricsEngine(
+                memoryCollector: DummyMemoryCollector(),
+                storageCollector: DummyStorageCollector(),
+                batteryCollector: DummyBatteryCollector(),
+                thermalCollector: DummyThermalCollector(),
+                cpuCollector: DummyCPUCollector(),
+                networkCollector: SequencedNetworkCollector(samples: [
+                    .unavailable,
+                    NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+                ]),
+                settings: settings,
+                networkSamplingInterval: 0.05
+            ),
+            snapshotStore: SnapshotStore(baseDirectoryURL: historyDirectory),
+            settings: settings
+        )
+
+        viewModel.start()
+        defer { viewModel.stop() }
+
+        let expectation = expectation(description: "network sample updates current snapshot")
+        var cancellables = Set<AnyCancellable>()
+
+        viewModel.$snapshot
+            .compactMap { $0 }
+            .filter { $0.refreshReason == .networkSample }
+            .sink { snapshot in
+                XCTAssertEqual(snapshot.network.downloadBytesPerSecond, 9_000)
+                XCTAssertEqual(snapshot.network.uploadBytesPerSecond, 5_000)
+                XCTAssertEqual(viewModel.history.count, 1)
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        wait(for: [expectation], timeout: 1.0)
+    }
+
     private func makeViewModel() -> SystemSummaryViewModel {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
@@ -267,6 +310,27 @@ private struct DummyNetworkCollector: NetworkCollecting {
 private struct UnavailableNetworkCollector: NetworkCollecting {
     func collect() -> NetworkSnapshot {
         .unavailable
+    }
+}
+
+private final class SequencedNetworkCollector: NetworkCollecting {
+    private var samples: [NetworkSnapshot]
+    private let lock = NSLock()
+
+    init(samples: [NetworkSnapshot]) {
+        self.samples = samples
+    }
+
+    func collect() -> NetworkSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !samples.isEmpty else { return .unavailable }
+        if samples.count == 1 {
+            return samples[0]
+        }
+
+        return samples.removeFirst()
     }
 }
 

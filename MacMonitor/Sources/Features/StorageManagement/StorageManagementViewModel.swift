@@ -40,6 +40,17 @@ final class StorageManagementViewModel: ObservableObject {
         let stillRunningItems: [StorageManagedItem]
     }
 
+    private struct SelectionDerivationCache {
+        let normalizedItems: [StorageManagedItem]
+        let totalBytes: UInt64
+        let scopeItemIDs: Set<String>
+    }
+
+    private enum DrillDownContext {
+        case primary
+        case deletionPreview
+    }
+
     @Published private(set) var diskUsage: StorageDiskUsage?
     @Published private(set) var summaryDiskUsage: StorageDiskUsage?
     @Published private(set) var appGroups: [StorageAppGroup] = []
@@ -53,9 +64,19 @@ final class StorageManagementViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var trackedFolders: [URL] = []
     @Published private(set) var activePreset: StorageCleanupPreset?
-    @Published var selectedItemIDs: Set<String> = []
+    @Published private(set) var deletingItemIDs: Set<String> = []
+    @Published private(set) var deletingGroupIDs: Set<String> = []
+    @Published var selectedItemIDs: Set<String> = [] {
+        didSet {
+            invalidateSelectionDerivationCache()
+        }
+    }
     @Published var expandedGroupIDs: Set<String> = []
     @Published var expandedItemIDs: Set<String> = []
+    @Published var deletionPreviewExpandedGroupIDs: Set<String> = []
+    @Published var deletionPreviewExpandedItemIDs: Set<String> = []
+    @Published private(set) var deletionPreviewDrilledItemsByParentID: [String: [StorageManagedItem]] = [:]
+    @Published private(set) var deletionPreviewLoadingParentItemIDs: Set<String> = []
     @Published var searchQuery: String = ""
     @Published var showingDeleteConfirmation = false
     @Published var showingForceQuitConfirmation = false
@@ -67,12 +88,15 @@ final class StorageManagementViewModel: ObservableObject {
     private var hasLoaded = false
     private var scanGeneration = 0
     private var itemIndex: [String: StorageManagedItem] = [:]
+    private var selectableIDsByGroupID: [String: Set<String>] = [:]
     private var childLoadTasks: [String: Task<Void, Never>] = [:]
+    private var deletionPreviewChildLoadTasks: [String: Task<Void, Never>] = [:]
     private var trackedFolderAccesses: [TrackedFolderAccess] = []
     private var primaryAccessBookmarkData: Data?
     private var initialAccessPromptShown = false
     private var pendingDeletionContext: PendingDeletionContext?
     private(set) var pendingTask: Task<Void, Never>?
+    private var selectionDerivationCache: SelectionDerivationCache?
 
     private let trackedFolderAccessesKey = "storage.trackedFolderAccesses"
     private let primaryAccessBookmarkKey = "storage.primaryAccessBookmark"
@@ -97,7 +121,9 @@ final class StorageManagementViewModel: ObservableObject {
         }
         childLoadTasks.removeAll()
         loadingParentItemIDs.removeAll()
+        resetDeletionPreviewState()
         resetPendingForceQuitContext()
+        clearDeletingScope()
     }
 
     func loadIfNeeded() {
@@ -173,6 +199,7 @@ final class StorageManagementViewModel: ObservableObject {
         loadingParentItemIDs.removeAll()
         drilledItemsByParentID = [:]
         expandedItemIDs.removeAll()
+        resetDeletionPreviewState()
 
         diskUsage = scanResult.diskUsage
         appGroups = scanResult.appGroups
@@ -275,10 +302,28 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func toggleGroupExpansion(_ groupID: String) {
+        guard !isDeleteFlowInteractionLocked else { return }
         if expandedGroupIDs.contains(groupID) {
             expandedGroupIDs.remove(groupID)
         } else {
             expandedGroupIDs.insert(groupID)
+        }
+    }
+
+    func beginDeletionPreview(rootItemIDs: Set<String>) {
+        deletionPreviewExpandedItemIDs.removeAll()
+        deletionPreviewExpandedGroupIDs = Set(groupIDsContainingDeletionPreviewRoots(rootItemIDs))
+    }
+
+    func endDeletionPreview() {
+        resetDeletionPreviewState()
+    }
+
+    func toggleDeletionPreviewGroupExpansion(_ groupID: String) {
+        if deletionPreviewExpandedGroupIDs.contains(groupID) {
+            deletionPreviewExpandedGroupIDs.remove(groupID)
+        } else {
+            deletionPreviewExpandedGroupIDs.insert(groupID)
         }
     }
 
@@ -297,6 +342,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func toggleGroupSelection(_ groupID: String) {
+        guard !isDeleteFlowInteractionLocked else { return }
         guard let group = appGroups.first(where: { $0.id == groupID }) else { return }
         let groupSelectableIDs = selectableIDs(for: groupID)
         guard !groupSelectableIDs.isEmpty else { return }
@@ -313,6 +359,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func toggleItemExpansion(_ itemID: String) {
+        guard !isDeleteFlowInteractionLocked else { return }
         guard let item = itemIndex[itemID], item.isExpandable else { return }
 
         if expandedItemIDs.contains(itemID) {
@@ -336,6 +383,29 @@ final class StorageManagementViewModel: ObservableObject {
         drilledItemsByParentID[parentID] ?? []
     }
 
+    func toggleDeletionPreviewItemExpansion(_ itemID: String) {
+        guard let item = itemIndex[itemID], item.isExpandable else { return }
+
+        if deletionPreviewExpandedItemIDs.contains(itemID) {
+            collapseExpandedItemAndDescendants(
+                itemID,
+                expandedItemIDs: &deletionPreviewExpandedItemIDs
+            )
+            return
+        }
+
+        deletionPreviewExpandedItemIDs.insert(itemID)
+        loadChildrenIfNeeded(for: item, context: .deletionPreview)
+    }
+
+    func isDeletionPreviewItemExpanded(_ itemID: String) -> Bool {
+        deletionPreviewExpandedItemIDs.contains(itemID)
+    }
+
+    func isDeletionPreviewLoadingChildren(for parentID: String) -> Bool {
+        deletionPreviewLoadingParentItemIDs.contains(parentID)
+    }
+
     func rows(for group: StorageAppGroup) -> [StorageListRow] {
         flattenRows(items: group.items)
     }
@@ -349,6 +419,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func toggleSelection(for itemID: String) {
+        guard !isDeleteFlowInteractionLocked else { return }
         guard let item = itemIndex[itemID], !item.isProtected else {
             return
         }
@@ -416,15 +487,23 @@ final class StorageManagementViewModel: ObservableObject {
 
         guard !normalizedIDs.isEmpty else {
             showingDeleteConfirmation = false
+            clearDeletingScope()
             return
         }
 
         showingDeleteConfirmation = false
+        beginDeletingScope(rootItemIDs: normalizedIDs)
         isDeleting = true
         errorMessage = nil
+        await Task.yield()
         let snapshotItems = Array(itemIndex.values)
         let preflightSummary = await runningAppPreflightCoordinator.gracefulQuitPreflight(for: normalizedItems)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            isDeleting = false
+            resetPendingForceQuitContext()
+            clearDeletingScope()
+            return
+        }
 
         let stillRunningIDs = preflightSummary.itemIDs(matching: .stillRunning)
         if stillRunningIDs.isEmpty {
@@ -450,14 +529,21 @@ final class StorageManagementViewModel: ObservableObject {
     func confirmForceQuitAndDelete() async {
         guard let context = pendingDeletionContext else {
             showingForceQuitConfirmation = false
+            clearDeletingScope()
             return
         }
 
         showingForceQuitConfirmation = false
         isDeleting = true
+        await Task.yield()
 
         let forceSummary = await runningAppPreflightCoordinator.forceQuit(for: context.stillRunningItems)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            isDeleting = false
+            resetPendingForceQuitContext()
+            clearDeletingScope()
+            return
+        }
 
         let stillRunningAfterForceIDs = forceSummary.itemIDs(matching: .stillRunning)
         let forceSucceededIDs = forceSummary.results.compactMap { result -> String? in
@@ -488,11 +574,13 @@ final class StorageManagementViewModel: ObservableObject {
     func skipForceQuitAndDelete() async {
         guard let context = pendingDeletionContext else {
             showingForceQuitConfirmation = false
+            clearDeletingScope()
             return
         }
 
         showingForceQuitConfirmation = false
         isDeleting = true
+        await Task.yield()
 
         let extraSkippedResults = context.stillRunningItems.map { item in
             StorageDeletionResult(
@@ -513,14 +601,37 @@ final class StorageManagementViewModel: ObservableObject {
         showingForceQuitConfirmation = false
         isDeleting = false
         resetPendingForceQuitContext()
+        clearDeletingScope()
+    }
+
+    func isGroupBeingDeleted(_ groupID: String) -> Bool {
+        deletingGroupIDs.contains(groupID)
+    }
+
+    func isItemBeingDeleted(_ itemID: String) -> Bool {
+        deletingItemIDs.contains(itemID)
+    }
+
+    var isDeleteFlowInteractionLocked: Bool {
+        isDeleting || pendingDeletionContext != nil || showingForceQuitConfirmation || !deletingItemIDs.isEmpty
+    }
+
+    var deleteFlowStatusMessage: String? {
+        if isDeleting {
+            return "Moving selected items to Trash..."
+        }
+        if pendingDeletionContext != nil || showingForceQuitConfirmation {
+            return "Waiting for running apps decision..."
+        }
+        return nil
     }
 
     var selectedAllowedCount: Int {
-        normalizedSelectedItems.count
+        derivedSelection.normalizedItems.count
     }
 
     var selectedAllowedBytes: UInt64 {
-        normalizedSelectedItems.reduce(0) { $0 + $1.sizeBytes }
+        derivedSelection.totalBytes
     }
 
     var deletionPreviewRows: [StorageDeletionPreviewRow] {
@@ -550,13 +661,43 @@ final class StorageManagementViewModel: ObservableObject {
             }
             return lhs.sizeBytes > rhs.sizeBytes
         }
-        return flattenRows(items: rootItems)
+        return flattenRows(
+            items: rootItems,
+            expandedItemIDs: deletionPreviewExpandedItemIDs,
+            drilledItemsByParentID: deletionPreviewDrilledItemsByParentID
+        )
+    }
+
+    func deletionPreviewRows(for group: StorageAppGroup, rootItemIDs: Set<String>) -> [StorageListRow] {
+        let filteredRoots = group.items.filter { item in
+            isDeletionPreviewRowVisible(itemID: item.id, previewRootIDs: rootItemIDs)
+        }
+        return flattenRows(
+            items: filteredRoots,
+            expandedItemIDs: deletionPreviewExpandedItemIDs,
+            drilledItemsByParentID: deletionPreviewDrilledItemsByParentID
+        )
+        .filter { row in
+            isDeletionPreviewRowVisible(itemID: row.item.id, previewRootIDs: rootItemIDs)
+        }
+    }
+
+    func deletionPreviewLooseRows(rootItemIDs: Set<String>) -> [StorageListRow] {
+        let filteredRoots = looseItems.filter { item in
+            isDeletionPreviewRowVisible(itemID: item.id, previewRootIDs: rootItemIDs)
+        }
+        return flattenRows(
+            items: filteredRoots,
+            expandedItemIDs: deletionPreviewExpandedItemIDs,
+            drilledItemsByParentID: deletionPreviewDrilledItemsByParentID
+        )
+        .filter { row in
+            isDeletionPreviewRowVisible(itemID: row.item.id, previewRootIDs: rootItemIDs)
+        }
     }
 
     func isItemInDeletionScope(_ itemID: String) -> Bool {
-        normalizedSelectedItems.contains { selectedItem in
-            isAncestorPath(ancestor: selectedItem.id, descendant: itemID)
-        }
+        derivedSelection.scopeItemIDs.contains(itemID)
     }
 
     var forceQuitPromptMessage: String {
@@ -638,6 +779,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     func selectRingBucketForDeletion(_ bucketID: String) {
+        guard !isDeleteFlowInteractionLocked else { return }
         guard ringBuckets.contains(where: { $0.id == bucketID }) else { return }
 
         let targetItemIDs = selectableItemIDsForRingBucket(bucketID)
@@ -695,7 +837,12 @@ final class StorageManagementViewModel: ObservableObject {
             manager.delete(items: snapshotItems, selectedItemIDs: selectedIDs)
         }.value
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            isDeleting = false
+            resetPendingForceQuitContext()
+            clearDeletingScope()
+            return
+        }
 
         var mergedResultsByID: [String: StorageDeletionResult] = [:]
         for result in summary.results {
@@ -714,14 +861,55 @@ final class StorageManagementViewModel: ObservableObject {
 
         resultMessage = mergedSummary.message
         selectedItemIDs.removeAll()
-        isDeleting = false
         resetPendingForceQuitContext()
-        refresh()
+        await completeDeletionRefresh()
     }
 
     private func resetPendingForceQuitContext() {
         pendingDeletionContext = nil
         forceQuitCandidateNames = []
+    }
+
+    private func resetDeletionPreviewState() {
+        for task in deletionPreviewChildLoadTasks.values {
+            task.cancel()
+        }
+        deletionPreviewChildLoadTasks.removeAll()
+        deletionPreviewLoadingParentItemIDs.removeAll()
+        deletionPreviewDrilledItemsByParentID = [:]
+        deletionPreviewExpandedItemIDs.removeAll()
+        deletionPreviewExpandedGroupIDs.removeAll()
+    }
+
+    private func completeDeletionRefresh() async {
+        defer {
+            isDeleting = false
+            clearDeletingScope()
+        }
+        await performRefresh()
+    }
+
+    private func beginDeletingScope(rootItemIDs: Set<String>) {
+        guard !rootItemIDs.isEmpty else {
+            clearDeletingScope()
+            return
+        }
+
+        let scopeItemIDs = Set(
+            itemIndex.keys.filter { candidateID in
+                rootItemIDs.contains { rootID in
+                    isAncestorPath(ancestor: rootID, descendant: candidateID)
+                }
+            }
+        )
+
+        deletingItemIDs = scopeItemIDs
+        deletingGroupIDs = Set(scopeItemIDs.compactMap { itemIndex[$0]?.appGroupID })
+    }
+
+    private func clearDeletingScope() {
+        deletingItemIDs.removeAll()
+        deletingGroupIDs.removeAll()
     }
 
     private func selectableItemIDsForRingBucket(_ bucketID: String) -> Set<String> {
@@ -1006,15 +1194,29 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     private func loadChildrenIfNeeded(for item: StorageManagedItem) {
+        loadChildrenIfNeeded(for: item, context: .primary)
+    }
+
+    private func loadChildrenIfNeeded(
+        for item: StorageManagedItem,
+        context: DrillDownContext
+    ) {
         guard item.isExpandable else { return }
-        guard drilledItemsByParentID[item.id] == nil else { return }
-        guard !loadingParentItemIDs.contains(item.id) else { return }
+
+        switch context {
+        case .primary:
+            guard drilledItemsByParentID[item.id] == nil else { return }
+            guard !loadingParentItemIDs.contains(item.id) else { return }
+            loadingParentItemIDs.insert(item.id)
+        case .deletionPreview:
+            guard deletionPreviewDrilledItemsByParentID[item.id] == nil else { return }
+            guard !deletionPreviewLoadingParentItemIDs.contains(item.id) else { return }
+            deletionPreviewLoadingParentItemIDs.insert(item.id)
+        }
 
         let parentID = item.id
         let generation = scanGeneration
         let manager = storageManager
-
-        loadingParentItemIDs.insert(parentID)
 
         let task = Task { [weak self] in
             let children = await Task.detached(priority: .userInitiated) {
@@ -1024,8 +1226,16 @@ final class StorageManagementViewModel: ObservableObject {
             guard let self, !Task.isCancelled, generation == scanGeneration else { return }
 
             let selectedIDsBeforeChildLoad = selectedItemIDs
-            loadingParentItemIDs.remove(parentID)
-            drilledItemsByParentID[parentID] = children
+
+            switch context {
+            case .primary:
+                loadingParentItemIDs.remove(parentID)
+                drilledItemsByParentID[parentID] = children
+            case .deletionPreview:
+                deletionPreviewLoadingParentItemIDs.remove(parentID)
+                deletionPreviewDrilledItemsByParentID[parentID] = children
+            }
+
             rebuildItemIndex()
             selectedItemIDs = selectedItemIDs.intersection(selectableItemIDs)
 
@@ -1047,13 +1257,30 @@ final class StorageManagementViewModel: ObservableObject {
                 normalizeSelection()
             }
 
-            childLoadTasks[parentID] = nil
+            switch context {
+            case .primary:
+                childLoadTasks[parentID] = nil
+            case .deletionPreview:
+                deletionPreviewChildLoadTasks[parentID] = nil
+            }
         }
 
-        childLoadTasks[parentID] = task
+        switch context {
+        case .primary:
+            childLoadTasks[parentID] = task
+        case .deletionPreview:
+            deletionPreviewChildLoadTasks[parentID] = task
+        }
     }
 
     private func collapseItemAndDescendants(_ itemID: String) {
+        collapseExpandedItemAndDescendants(itemID, expandedItemIDs: &expandedItemIDs)
+    }
+
+    private func collapseExpandedItemAndDescendants(
+        _ itemID: String,
+        expandedItemIDs: inout Set<String>
+    ) {
         expandedItemIDs.remove(itemID)
         expandedItemIDs = Set(
             expandedItemIDs.filter { !isAncestorPath(ancestor: itemID, descendant: $0) }
@@ -1062,10 +1289,14 @@ final class StorageManagementViewModel: ObservableObject {
 
     private func rebuildItemIndex() {
         var index: [String: StorageManagedItem] = [:]
+        var selectableByGroup: [String: Set<String>] = [:]
 
         for group in appGroups {
             for item in group.items {
                 index[item.id] = item
+                if !item.isProtected {
+                    selectableByGroup[group.id, default: []].insert(item.id)
+                }
             }
         }
 
@@ -1076,10 +1307,24 @@ final class StorageManagementViewModel: ObservableObject {
         for childItems in drilledItemsByParentID.values {
             for item in childItems {
                 index[item.id] = item
+                if let appGroupID = item.appGroupID, !item.isProtected {
+                    selectableByGroup[appGroupID, default: []].insert(item.id)
+                }
+            }
+        }
+
+        for childItems in deletionPreviewDrilledItemsByParentID.values {
+            for item in childItems {
+                index[item.id] = item
+                if let appGroupID = item.appGroupID, !item.isProtected {
+                    selectableByGroup[appGroupID, default: []].insert(item.id)
+                }
             }
         }
 
         itemIndex = index
+        selectableIDsByGroupID = selectableByGroup
+        invalidateSelectionDerivationCache()
     }
 
     private var selectableItemIDs: Set<String> {
@@ -1087,11 +1332,7 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     private func selectableIDs(for groupID: String) -> Set<String> {
-        Set(
-            itemIndex.values
-                .filter { $0.appGroupID == groupID && !$0.isProtected }
-                .map(\.id)
-        )
+        selectableIDsByGroupID[groupID] ?? []
     }
 
     private func normalizeSelection() {
@@ -1099,6 +1340,14 @@ final class StorageManagementViewModel: ObservableObject {
     }
 
     private var normalizedSelectedItems: [StorageManagedItem] {
+        derivedSelection.normalizedItems
+    }
+
+    private var derivedSelection: SelectionDerivationCache {
+        if let cached = selectionDerivationCache {
+            return cached
+        }
+
         let selected = selectedItemIDs.compactMap { itemIndex[$0] }.filter { !$0.isProtected }
         let ordered = selected.sorted { lhs, rhs in
             if lhs.id.count == rhs.id.count {
@@ -1109,6 +1358,7 @@ final class StorageManagementViewModel: ObservableObject {
 
         var normalized: [StorageManagedItem] = []
         normalized.reserveCapacity(ordered.count)
+        var totalBytes: UInt64 = 0
 
         for item in ordered {
             let hasAncestor = normalized.contains { selectedItem in
@@ -1116,10 +1366,30 @@ final class StorageManagementViewModel: ObservableObject {
             }
             if !hasAncestor {
                 normalized.append(item)
+                totalBytes &+= item.sizeBytes
             }
         }
 
-        return normalized
+        let normalizedRootIDs = Set(normalized.map(\.id))
+        let scopeItemIDs = Set(
+            itemIndex.keys.filter { candidateID in
+                normalizedRootIDs.contains { rootID in
+                    isAncestorPath(ancestor: rootID, descendant: candidateID)
+                }
+            }
+        )
+
+        let derived = SelectionDerivationCache(
+            normalizedItems: normalized,
+            totalBytes: totalBytes,
+            scopeItemIDs: scopeItemIDs
+        )
+        selectionDerivationCache = derived
+        return derived
+    }
+
+    private func invalidateSelectionDerivationCache() {
+        selectionDerivationCache = nil
     }
 
     private var sortedDeletionPreviewItems: [StorageManagedItem] {
@@ -1394,18 +1664,68 @@ final class StorageManagementViewModel: ObservableObject {
         .pnpmStore
     ]
 
+    private func groupIDsContainingDeletionPreviewRoots(_ rootItemIDs: Set<String>) -> [String] {
+        rootItemIDs.compactMap { itemIndex[$0]?.appGroupID }
+    }
+
+    private func isDeletionPreviewRowVisible(itemID: String, previewRootIDs: Set<String>) -> Bool {
+        guard !previewRootIDs.isEmpty else { return false }
+
+        if previewRootIDs.contains(itemID) {
+            return true
+        }
+        if previewRootIDs.contains(where: { rootID in
+            isAncestorPath(ancestor: rootID, descendant: itemID)
+        }) {
+            return true
+        }
+        return previewRootIDs.contains(where: { rootID in
+            isAncestorPath(ancestor: itemID, descendant: rootID)
+        })
+    }
+
     private func flattenRows(items: [StorageManagedItem]) -> [StorageListRow] {
+        flattenRows(
+            items: items,
+            expandedItemIDs: expandedItemIDs,
+            drilledItemsByParentID: drilledItemsByParentID
+        )
+    }
+
+    private func flattenRows(
+        items: [StorageManagedItem],
+        expandedItemIDs: Set<String>,
+        drilledItemsByParentID: [String: [StorageManagedItem]]
+    ) -> [StorageListRow] {
         var rows: [StorageListRow] = []
-        appendRows(items: items, depth: 0, into: &rows)
+        appendRows(
+            items: items,
+            depth: 0,
+            into: &rows,
+            expandedItemIDs: expandedItemIDs,
+            drilledItemsByParentID: drilledItemsByParentID
+        )
         return rows
     }
 
-    private func appendRows(items: [StorageManagedItem], depth: Int, into rows: inout [StorageListRow]) {
+    private func appendRows(
+        items: [StorageManagedItem],
+        depth: Int,
+        into rows: inout [StorageListRow],
+        expandedItemIDs: Set<String>,
+        drilledItemsByParentID: [String: [StorageManagedItem]]
+    ) {
         for item in items {
             rows.append(StorageListRow(item: item, depth: depth))
             guard expandedItemIDs.contains(item.id) else { continue }
             if let children = drilledItemsByParentID[item.id], !children.isEmpty {
-                appendRows(items: children, depth: depth + 1, into: &rows)
+                appendRows(
+                    items: children,
+                    depth: depth + 1,
+                    into: &rows,
+                    expandedItemIDs: expandedItemIDs,
+                    drilledItemsByParentID: drilledItemsByParentID
+                )
             }
         }
     }

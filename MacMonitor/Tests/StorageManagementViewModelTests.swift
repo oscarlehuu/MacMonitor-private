@@ -251,6 +251,71 @@ final class StorageManagementViewModelTests: XCTestCase {
         )
     }
 
+    func testSelectionDerivationCacheInvalidatesWhenSelectionChanges() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/Parent",
+            name: "Parent",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 500,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/Parent/Child",
+            name: "Child",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent, child])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+
+        viewModel.selectedItemIDs = [parent.id]
+        XCTAssertEqual(viewModel.selectedAllowedCount, 1)
+        XCTAssertEqual(viewModel.selectedAllowedBytes, 500)
+
+        viewModel.selectedItemIDs = [child.id]
+        XCTAssertEqual(viewModel.selectedAllowedCount, 1)
+        XCTAssertEqual(viewModel.selectedAllowedBytes, 120)
+    }
+
+    func testSelectionDerivationCacheInvalidatesAfterRefreshRebuildsItemIndex() async {
+        let manager = FakeStorageManager()
+        let itemV1 = makeItem(
+            path: "/tmp/RefreshTarget",
+            name: "RefreshTarget",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 100,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [itemV1])
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [itemV1.id]
+        XCTAssertEqual(viewModel.selectedAllowedBytes, 100)
+
+        let itemV2 = makeItem(
+            path: "/tmp/RefreshTarget",
+            name: "RefreshTarget",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 260,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [itemV2])
+        await viewModel.performRefresh()
+
+        XCTAssertEqual(viewModel.selectedItemIDs, [itemV2.id])
+        XCTAssertEqual(viewModel.selectedAllowedBytes, 260)
+    }
+
     func testIsItemInDeletionScopeMarksDescendantsOfSelectedParent() async {
         let manager = FakeStorageManager()
         let parent = makeItem(
@@ -391,6 +456,95 @@ final class StorageManagementViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.itemSelectionState(child.id), .all)
     }
 
+    func testDeletionPreviewExpansionDoesNotMutateMainExpansionState() async {
+        let manager = FakeStorageManager()
+        let parent = makeItem(
+            path: "/tmp/DeletePreviewRoot",
+            name: "DeletePreviewRoot",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 240,
+            protected: false
+        )
+        let child = makeItem(
+            path: "/tmp/DeletePreviewRoot/Child",
+            name: "Child",
+            category: .folder,
+            kind: .drillDown,
+            sizeBytes: 120,
+            protected: false,
+            parentID: parent.id
+        )
+        manager.scanResult = makeScanResult(looseItems: [parent])
+        manager.drilledItemsByParentID[parent.id] = [child]
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+
+        viewModel.beginDeletionPreview(rootItemIDs: [parent.id])
+        viewModel.toggleDeletionPreviewItemExpansion(parent.id)
+
+        for _ in 0..<40 where viewModel.isDeletionPreviewLoadingChildren(for: parent.id) {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertTrue(viewModel.deletionPreviewExpandedItemIDs.contains(parent.id))
+        XCTAssertTrue(viewModel.deletionPreviewDrilledItemsByParentID[parent.id]?.contains(child) == true)
+        XCTAssertFalse(viewModel.expandedItemIDs.contains(parent.id))
+        XCTAssertNil(viewModel.drilledItemsByParentID[parent.id])
+
+        viewModel.endDeletionPreview()
+
+        XCTAssertTrue(viewModel.deletionPreviewExpandedItemIDs.isEmpty)
+        XCTAssertTrue(viewModel.deletionPreviewDrilledItemsByParentID.isEmpty)
+    }
+
+    func testDeletionPreviewGroupExpansionIsIsolatedFromMainList() async {
+        let manager = FakeStorageManager()
+        let groupID = "app:preview"
+        let app = makeItem(
+            path: "/Applications/Preview.app",
+            name: "Preview.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 300,
+            protected: false,
+            appGroupID: groupID,
+            bundleIdentifier: "com.apple.Preview"
+        )
+        let cache = makeItem(
+            path: "/Users/test/Library/Caches/com.apple.Preview",
+            name: "Preview Cache",
+            category: .cache,
+            kind: .appCache,
+            sizeBytes: 120,
+            protected: false,
+            appGroupID: groupID,
+            bundleIdentifier: "com.apple.Preview"
+        )
+        manager.scanResult = makeScanResult(
+            appGroups: [
+                StorageAppGroup(
+                    id: groupID,
+                    displayName: "Preview",
+                    bundleIdentifier: "com.apple.Preview",
+                    items: [app, cache]
+                )
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager)
+        await viewModel.performRefresh()
+
+        viewModel.beginDeletionPreview(rootItemIDs: [app.id])
+        XCTAssertTrue(viewModel.deletionPreviewExpandedGroupIDs.contains(groupID))
+        XCTAssertFalse(viewModel.expandedGroupIDs.contains(groupID))
+
+        viewModel.toggleDeletionPreviewGroupExpansion(groupID)
+        XCTAssertFalse(viewModel.deletionPreviewExpandedGroupIDs.contains(groupID))
+        XCTAssertFalse(viewModel.expandedGroupIDs.contains(groupID))
+    }
+
     func testToggleSelectionClearsDeepChildWhenMultipleAncestorsSelected() async {
         let manager = FakeStorageManager()
         let root = makeItem(
@@ -467,6 +621,49 @@ final class StorageManagementViewModelTests: XCTestCase {
 
         XCTAssertEqual(manager.lastDeletedIDs, [allowed.id])
         XCTAssertEqual(viewModel.resultMessage, "Deleted 1, skipped 0, failed 0.")
+        XCTAssertTrue(viewModel.selectedItemIDs.isEmpty)
+    }
+
+    func testDeleteFlowLockBlocksSelectionDuringDeleteAndUnlocksAfterRefresh() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let allowed = makeItem(
+            path: "/tmp/Allowed-Locked",
+            name: "Allowed-Locked",
+            category: .folder,
+            kind: .looseFolder,
+            sizeBytes: 2,
+            protected: false
+        )
+        manager.scanResult = makeScanResult(looseItems: [allowed])
+        manager.deleteSummary = StorageDeletionSummary(
+            results: [
+                StorageDeletionResult(id: allowed.id, displayName: allowed.displayName, outcome: .deleted)
+            ]
+        )
+        manager.deleteDelaySeconds = 0.25
+        manager.scanDelaySeconds = 0.2
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [allowed.id]
+
+        let deletionTask = Task {
+            await viewModel.deleteSelected()
+        }
+
+        for _ in 0..<40 where !viewModel.isDeleteFlowInteractionLocked {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertTrue(viewModel.isDeleteFlowInteractionLocked)
+        viewModel.toggleSelection(for: allowed.id)
+        XCTAssertEqual(viewModel.selectedItemIDs, [allowed.id])
+
+        await deletionTask.value
+
+        XCTAssertFalse(viewModel.isDeleteFlowInteractionLocked)
+        XCTAssertNil(viewModel.deleteFlowStatusMessage)
         XCTAssertTrue(viewModel.selectedItemIDs.isEmpty)
     }
 
@@ -547,6 +744,7 @@ final class StorageManagementViewModelTests: XCTestCase {
     func testDeleteSelectedShowsForcePromptWhenAppStillRunning() async {
         let manager = FakeStorageManager()
         let coordinator = FakeRunningAppPreflightCoordinator()
+        let groupID = "group.editor"
         let app = makeItem(
             path: "/Applications/Editor.app",
             name: "Editor.app",
@@ -554,6 +752,7 @@ final class StorageManagementViewModelTests: XCTestCase {
             kind: .appBundle,
             sizeBytes: 200,
             protected: false,
+            appGroupID: groupID,
             bundleIdentifier: "com.test.editor"
         )
         let cache = makeItem(
@@ -564,7 +763,13 @@ final class StorageManagementViewModelTests: XCTestCase {
             sizeBytes: 20,
             protected: false
         )
-        manager.scanResult = makeScanResult(looseItems: [app, cache])
+        let group = StorageAppGroup(
+            id: groupID,
+            displayName: "Editor",
+            bundleIdentifier: "com.test.editor",
+            items: [app]
+        )
+        manager.scanResult = makeScanResult(appGroups: [group], looseItems: [cache])
         coordinator.gracefulSummary = RunningAppPreflightSummary(
             results: [
                 RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
@@ -580,6 +785,56 @@ final class StorageManagementViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showingForceQuitConfirmation)
         XCTAssertEqual(viewModel.forceQuitCandidateNames, [app.displayName])
         XCTAssertEqual(manager.lastDeletedIDs, [])
+        XCTAssertTrue(viewModel.isGroupBeingDeleted(groupID))
+        XCTAssertTrue(viewModel.isItemBeingDeleted(app.id))
+        XCTAssertTrue(viewModel.isItemBeingDeleted(cache.id))
+        XCTAssertTrue(viewModel.isDeleteFlowInteractionLocked)
+        XCTAssertEqual(viewModel.deleteFlowStatusMessage, "Waiting for running apps decision...")
+
+        let selectedBeforeToggle = viewModel.selectedItemIDs
+        viewModel.toggleSelection(for: app.id)
+        XCTAssertEqual(viewModel.selectedItemIDs, selectedBeforeToggle)
+    }
+
+    func testCancelForceQuitPromptClearsDeletingScope() async {
+        let manager = FakeStorageManager()
+        let coordinator = FakeRunningAppPreflightCoordinator()
+        let groupID = "group.warp"
+        let app = makeItem(
+            path: "/Applications/Warp.app",
+            name: "Warp.app",
+            category: .application,
+            kind: .appBundle,
+            sizeBytes: 300,
+            protected: false,
+            appGroupID: groupID,
+            bundleIdentifier: "dev.warp.stable"
+        )
+        let group = StorageAppGroup(
+            id: groupID,
+            displayName: "Warp",
+            bundleIdentifier: "dev.warp.stable",
+            items: [app]
+        )
+        manager.scanResult = makeScanResult(appGroups: [group], looseItems: [])
+        coordinator.gracefulSummary = RunningAppPreflightSummary(
+            results: [
+                RunningAppPreflightResult(itemID: app.id, displayName: app.displayName, outcome: .stillRunning)
+            ]
+        )
+
+        let viewModel = makeViewModel(manager: manager, preflightCoordinator: coordinator)
+        await viewModel.performRefresh()
+        viewModel.selectedItemIDs = [app.id]
+
+        await viewModel.deleteSelected()
+        XCTAssertTrue(viewModel.isGroupBeingDeleted(groupID))
+        XCTAssertTrue(viewModel.isItemBeingDeleted(app.id))
+
+        viewModel.cancelForceQuitPrompt()
+
+        XCTAssertFalse(viewModel.isGroupBeingDeleted(groupID))
+        XCTAssertFalse(viewModel.isItemBeingDeleted(app.id))
     }
 
     func testSkipForceQuitDeletesOtherItemsAndReportsDeclined() async {
@@ -957,10 +1212,15 @@ private final class FakeStorageManager: StorageManaging, @unchecked Sendable {
     var scanResult = StorageScanResult(diskUsage: nil, appGroups: [], looseItems: [])
     var drilledItemsByParentID: [String: [StorageManagedItem]] = [:]
     var deleteSummary = StorageDeletionSummary(results: [])
+    var scanDelaySeconds: TimeInterval = 0
+    var deleteDelaySeconds: TimeInterval = 0
     private(set) var scanCallCount = 0
     private(set) var lastDeletedIDs: Set<String> = []
 
     func scan(customFolders: [URL]) -> StorageScanResult {
+        if scanDelaySeconds > 0 {
+            Thread.sleep(forTimeInterval: scanDelaySeconds)
+        }
         lock.lock()
         defer { lock.unlock() }
         scanCallCount += 1
@@ -975,6 +1235,9 @@ private final class FakeStorageManager: StorageManaging, @unchecked Sendable {
     }
 
     func delete(items: [StorageManagedItem], selectedItemIDs: Set<String>) -> StorageDeletionSummary {
+        if deleteDelaySeconds > 0 {
+            Thread.sleep(forTimeInterval: deleteDelaySeconds)
+        }
         lock.lock()
         defer { lock.unlock() }
         lastDeletedIDs = selectedItemIDs

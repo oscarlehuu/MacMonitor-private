@@ -14,12 +14,13 @@ final class MetricsEngine: ObservableObject {
     private let gpuCollector: GPUCollecting
     private let settings: SettingsStore
     private let now: () -> Date
+    private let networkSamplingInterval: TimeInterval
 
     private var timerCancellable: AnyCancellable?
     private var refreshIntervalCancellable: AnyCancellable?
     private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
-    private var networkBootstrapWorkItem: DispatchWorkItem?
+    private var networkSamplingCancellable: AnyCancellable?
 
     init(
         memoryCollector: MemoryCollecting,
@@ -30,7 +31,8 @@ final class MetricsEngine: ObservableObject {
         networkCollector: NetworkCollecting,
         gpuCollector: GPUCollecting = DefaultGPUCollector(),
         settings: SettingsStore,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        networkSamplingInterval: TimeInterval = 1.0
     ) {
         self.memoryCollector = memoryCollector
         self.storageCollector = storageCollector
@@ -41,6 +43,7 @@ final class MetricsEngine: ObservableObject {
         self.gpuCollector = gpuCollector
         self.settings = settings
         self.now = now
+        self.networkSamplingInterval = networkSamplingInterval
     }
 
     func start() {
@@ -48,8 +51,8 @@ final class MetricsEngine: ObservableObject {
         bindBatteryChanges()
         bindThermalChanges()
         scheduleTimer(using: settings.refreshInterval)
+        scheduleNetworkSampling()
         refresh(reason: .startup)
-        scheduleNetworkBootstrapRefreshIfNeeded()
     }
 
     func stop() {
@@ -57,8 +60,8 @@ final class MetricsEngine: ObservableObject {
         refreshIntervalCancellable?.cancel()
         batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
-        networkBootstrapWorkItem?.cancel()
-        networkBootstrapWorkItem = nil
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = nil
     }
 
     func refreshNow() {
@@ -98,6 +101,15 @@ final class MetricsEngine: ObservableObject {
             }
     }
 
+    private func scheduleNetworkSampling() {
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = Timer.publish(every: networkSamplingInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refreshNetworkSample()
+            }
+    }
+
     private func refresh(reason: RefreshReason) {
         let memory = memoryCollector.collect() ?? .empty(totalBytes: ProcessInfo.processInfo.physicalMemory)
         let storage = storageCollector.collect() ?? .empty()
@@ -120,19 +132,24 @@ final class MetricsEngine: ObservableObject {
         )
     }
 
-    private func scheduleNetworkBootstrapRefreshIfNeeded() {
-        networkBootstrapWorkItem?.cancel()
+    private func refreshNetworkSample() {
+        guard let latestSnapshot else { return }
 
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard latestSnapshot?.network.downloadBytesPerSecond == nil ||
-                latestSnapshot?.network.uploadBytesPerSecond == nil else {
-                return
-            }
-            refresh(reason: .interval)
-        }
+        let network = networkCollector.collect()
+        guard network != latestSnapshot.network else { return }
 
-        networkBootstrapWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+        self.latestSnapshot = SystemSnapshot(
+            id: latestSnapshot.id,
+            schemaVersion: latestSnapshot.schemaVersion,
+            timestamp: now(),
+            memory: latestSnapshot.memory,
+            storage: latestSnapshot.storage,
+            battery: latestSnapshot.battery,
+            thermal: latestSnapshot.thermal,
+            cpu: latestSnapshot.cpu,
+            network: network,
+            gpu: latestSnapshot.gpu,
+            refreshReason: .networkSample
+        )
     }
 }

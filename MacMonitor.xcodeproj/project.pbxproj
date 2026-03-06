@@ -967,7 +967,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
@@ -1142,7 +1142,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor.widget;
 				PRODUCT_NAME = MacMonitorWidget;
 				SDKROOT = macosx;
@@ -1164,7 +1164,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor;
 				PRODUCT_NAME = MacMonitor;
 				SDKROOT = macosx;
@@ -1186,7 +1186,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				OTHER_CODE_SIGN_FLAGS = "--identifier com.oscar.macmonitor.battery-helper";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.oscar.macmonitor.battery-helper";
 				PRODUCT_NAME = "com.oscar.macmonitor.battery-helper";
@@ -1207,7 +1207,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.oscar.macmonitor.widget;
 				PRODUCT_NAME = MacMonitorWidget;
 				SDKROOT = macosx;
@@ -1227,7 +1227,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.5.8;
 				OTHER_CODE_SIGN_FLAGS = "--identifier com.oscar.macmonitor.battery-helper";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.oscar.macmonitor.battery-helper";
 				PRODUCT_NAME = "com.oscar.macmonitor.battery-helper";
