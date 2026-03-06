@@ -19,16 +19,6 @@ enum MetricFormatter {
         return formatter
     }
 
-    private static func makeDataRateFormatter() -> ByteCountFormatter {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
-        formatter.countStyle = .binary
-        formatter.includesUnit = true
-        formatter.includesCount = true
-        formatter.isAdaptive = true
-        return formatter
-    }
-
     private static func makeRelativeFormatter() -> RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
@@ -60,8 +50,18 @@ enum MetricFormatter {
 
     static func bytesPerSecond(_ value: Double?) -> String {
         guard let value else { return "--/s" }
-        let sanitized = Int64(max(0, value).rounded())
-        return "\(makeDataRateFormatter().string(fromByteCount: sanitized))/s"
+        let bitsPerSecond = max(0, value) * 8
+
+        switch bitsPerSecond {
+        case 1_000_000_000...:
+            return String(format: "%.1f Gbps", bitsPerSecond / 1_000_000_000)
+        case 1_000_000...:
+            return String(format: "%.1f Mbps", bitsPerSecond / 1_000_000)
+        case 1_000...:
+            return String(format: "%.0f Kbps", bitsPerSecond / 1_000)
+        default:
+            return String(format: "%.0f bps", bitsPerSecond)
+        }
     }
 
     static func percentValue(_ value: Double?) -> String {

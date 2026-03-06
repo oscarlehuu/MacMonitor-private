@@ -272,6 +272,7 @@ struct GPUSnapshot: Codable, Equatable {
 enum RefreshReason: String, Codable {
     case startup
     case interval
+    case networkSample
     case batteryNotification
     case thermalNotification
     case manual

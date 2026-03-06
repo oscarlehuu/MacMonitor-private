@@ -4,14 +4,24 @@ import SwiftUI
 struct StorageManagementView: View {
     private static let appIconCache = NSCache<NSString, NSImage>()
 
+    private struct AppIconLoadRequest {
+        let groupID: String
+        let bundleIdentifier: String?
+        let appBundlePath: String?
+    }
+
     @ObservedObject var viewModel: StorageManagementViewModel
     let onBack: () -> Void
     var showBackButton: Bool = true
     var showHeader: Bool = true
 
-    @State private var isLooseExpanded = true
+    @State private var isLooseExpanded = false
     @State private var didHandleInitialAccess = false
     @State private var isSearchExpanded = false
+    @State private var appIconsByGroupID: [String: NSImage] = [:]
+    @State private var queuedAppIconGroupIDs: Set<String> = []
+    @State private var appIconLoadQueue: [AppIconLoadRequest] = []
+    @State private var isProcessingAppIconQueue = false
     @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
@@ -22,6 +32,10 @@ struct StorageManagementView: View {
 
             if viewModel.isScanning {
                 scanningCard
+            }
+
+            if let deleteStatusMessage = viewModel.deleteFlowStatusMessage {
+                deleteStatusCard(message: deleteStatusMessage)
             }
 
             selectionSummaryCard
@@ -59,7 +73,11 @@ struct StorageManagementView: View {
                 didHandleInitialAccess = true
                 requestInitialAccessIfNeeded()
             }
+            pruneAppIconState(using: viewModel.appGroups)
             viewModel.loadIfNeeded()
+        }
+        .onChange(of: viewModel.appGroups.map(\.id)) { _, _ in
+            pruneAppIconState(using: viewModel.appGroups)
         }
         .confirmationDialog(
             "Force quit still-running apps?",
@@ -123,7 +141,7 @@ struct StorageManagementView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(PopoverTheme.textSecondary)
-                .disabled(viewModel.isScanning || viewModel.isDeleting)
+                .disabled(viewModel.isScanning || viewModel.isDeleteFlowInteractionLocked)
 
                 Button {
                     addFoldersFromPanel()
@@ -142,18 +160,32 @@ struct StorageManagementView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(viewModel.isDeleting)
+                .disabled(viewModel.isDeleteFlowInteractionLocked)
             }
         }
     }
 
     private var scanningCard: some View {
+        statusCard(
+            message: "Scanning applications, caches, and folders...",
+            foreground: PopoverTheme.textSecondary
+        )
+    }
+
+    private func deleteStatusCard(message: String) -> some View {
+        statusCard(
+            message: message,
+            foreground: PopoverTheme.orange
+        )
+    }
+
+    private func statusCard(message: String, foreground: Color) -> some View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-            Text("Scanning applications, caches, and folders...")
+            Text(message)
                 .font(.system(size: 11))
-                .foregroundStyle(PopoverTheme.textSecondary)
+                .foregroundStyle(foreground)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -402,7 +434,7 @@ struct StorageManagementView: View {
     private var groupsCard: some View {
         let groups = viewModel.visibleAppGroups
 
-        return VStack(spacing: 0) {
+        return LazyVStack(spacing: 0) {
             if groups.isEmpty && !viewModel.hasLooseItems && !viewModel.isScanning {
                 Text(
                     viewModel.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -437,7 +469,11 @@ struct StorageManagementView: View {
     }
 
     private func appGroupSection(_ group: StorageAppGroup) -> some View {
-        VStack(spacing: 0) {
+        let groupSelectionState = viewModel.groupSelectionState(group)
+        let isGroupBeingDeleted = viewModel.isGroupBeingDeleted(group.id)
+        let disableGroupControls = viewModel.isDeleteFlowInteractionLocked || isGroupBeingDeleted
+
+        return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Button {
                     viewModel.toggleGroupExpansion(group.id)
@@ -448,17 +484,19 @@ struct StorageManagementView: View {
                         .frame(width: 12)
                 }
                 .buttonStyle(.plain)
+                .disabled(disableGroupControls)
 
                 Button {
                     viewModel.toggleGroupSelection(group.id)
                 } label: {
-                    Image(systemName: selectionStateSymbol(viewModel.groupSelectionState(group)))
+                    Image(systemName: selectionStateSymbol(groupSelectionState))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(selectionStateColor(viewModel.groupSelectionState(group)))
+                        .foregroundStyle(selectionStateColor(groupSelectionState))
                 }
                 .buttonStyle(.plain)
+                .disabled(disableGroupControls)
 
-                if let appIcon = appIconImage(for: group) {
+                if let appIcon = appIconsByGroupID[group.id] {
                     Image(nsImage: appIcon)
                         .resizable()
                         .interpolation(.high)
@@ -470,6 +508,9 @@ struct StorageManagementView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(PopoverTheme.blue)
                         .frame(width: 14)
+                        .onAppear {
+                            enqueueAppIconLoad(for: group)
+                        }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -488,12 +529,18 @@ struct StorageManagementView: View {
 
                 Spacer(minLength: 4)
 
+                if isGroupBeingDeleted && viewModel.isDeleteFlowInteractionLocked {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
                 Text(MetricFormatter.bytes(group.totalBytes))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(PopoverTheme.textSecondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .opacity(isGroupBeingDeleted ? 0.56 : 1)
 
             if viewModel.expandedGroupIDs.contains(group.id) {
                 ForEach(viewModel.rows(for: group)) { row in
@@ -516,6 +563,7 @@ struct StorageManagementView: View {
                         .frame(width: 12)
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isDeleteFlowInteractionLocked)
 
                 Image(systemName: "tray.full")
                     .font(.system(size: 11, weight: .medium))
@@ -549,6 +597,7 @@ struct StorageManagementView: View {
         let selectionState = viewModel.itemSelectionState(item.id)
         let isExpanded = viewModel.isItemExpanded(item.id)
         let isLoading = viewModel.isLoadingChildren(for: item.id)
+        let isItemBeingDeleted = viewModel.isItemBeingDeleted(item.id)
 
         return HStack(spacing: 8) {
             Spacer()
@@ -564,6 +613,7 @@ struct StorageManagementView: View {
                         .frame(width: 10)
                 }
                 .buttonStyle(.plain)
+                .disabled(isItemBeingDeleted || viewModel.isDeleteFlowInteractionLocked)
             } else {
                 Spacer().frame(width: 10)
             }
@@ -576,7 +626,7 @@ struct StorageManagementView: View {
                     .foregroundStyle(selectionColor(state: selectionState, item: item))
             }
             .buttonStyle(.plain)
-            .disabled(item.isProtected || viewModel.isDeleting)
+            .disabled(item.isProtected || viewModel.isDeleteFlowInteractionLocked || isItemBeingDeleted)
 
             Image(systemName: icon(for: item))
                 .font(.system(size: 11, weight: .medium))
@@ -612,6 +662,16 @@ struct StorageManagementView: View {
                     Text("Protected: \(protectionReason.description)")
                         .font(.system(size: 8))
                         .foregroundStyle(PopoverTheme.orange)
+                } else if isItemBeingDeleted {
+                    HStack(spacing: 4) {
+                        if viewModel.isDeleting {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isDeleting ? "Deleting..." : "Pending deletion")
+                            .font(.system(size: 8))
+                            .foregroundStyle(PopoverTheme.textMuted)
+                    }
                 } else if isExpanded && isLoading {
                     HStack(spacing: 4) {
                         ProgressView()
@@ -638,11 +698,13 @@ struct StorageManagementView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(PopoverTheme.textMuted)
+                .disabled(viewModel.isDeleting || isItemBeingDeleted)
                 .help("Reveal in Finder")
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+        .opacity(isItemBeingDeleted ? 0.56 : 1)
     }
 
     private var divider: some View {
@@ -722,28 +784,79 @@ struct StorageManagementView: View {
         }
     }
 
-    private func appIconImage(for group: StorageAppGroup) -> NSImage? {
+    private func makeAppIconLoadRequest(for group: StorageAppGroup) -> AppIconLoadRequest {
+        let appBundlePath = group.items.first(where: { item in
+            item.kind == .appBundle && item.url.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame
+        })?.url.path
+
+        return AppIconLoadRequest(
+            groupID: group.id,
+            bundleIdentifier: group.bundleIdentifier,
+            appBundlePath: appBundlePath
+        )
+    }
+
+    private func enqueueAppIconLoad(for group: StorageAppGroup) {
         let cacheKey = group.id as NSString
         if let cachedIcon = Self.appIconCache.object(forKey: cacheKey) {
-            return cachedIcon
+            appIconsByGroupID[group.id] = cachedIcon
+            return
         }
 
-        if let appBundle = group.items.first(where: { $0.kind == .appBundle }),
-           appBundle.url.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame,
-           FileManager.default.fileExists(atPath: appBundle.url.path) {
-            let icon = NSWorkspace.shared.icon(forFile: appBundle.url.path)
-            Self.appIconCache.setObject(icon, forKey: cacheKey)
-            return icon
+        guard appIconsByGroupID[group.id] == nil else { return }
+        guard !queuedAppIconGroupIDs.contains(group.id) else { return }
+
+        queuedAppIconGroupIDs.insert(group.id)
+        appIconLoadQueue.append(makeAppIconLoadRequest(for: group))
+
+        Task {
+            await processAppIconLoadQueueIfNeeded()
+        }
+    }
+
+    @MainActor
+    private func processAppIconLoadQueueIfNeeded() async {
+        guard !isProcessingAppIconQueue else { return }
+        isProcessingAppIconQueue = true
+        defer { isProcessingAppIconQueue = false }
+
+        while !appIconLoadQueue.isEmpty {
+            let request = appIconLoadQueue.removeFirst()
+            queuedAppIconGroupIDs.remove(request.groupID)
+
+            if appIconsByGroupID[request.groupID] != nil {
+                continue
+            }
+
+            await Task.yield()
+
+            guard let icon = resolveAppIcon(for: request) else { continue }
+            Self.appIconCache.setObject(icon, forKey: request.groupID as NSString)
+            appIconsByGroupID[request.groupID] = icon
+        }
+    }
+
+    private func resolveAppIcon(for request: AppIconLoadRequest) -> NSImage? {
+        if let appBundlePath = request.appBundlePath,
+           FileManager.default.fileExists(atPath: appBundlePath) {
+            return NSWorkspace.shared.icon(forFile: appBundlePath)
         }
 
-        if let bundleIdentifier = group.bundleIdentifier,
+        if let bundleIdentifier = request.bundleIdentifier,
            let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
-            let icon = NSWorkspace.shared.icon(forFile: appURL.path)
-            Self.appIconCache.setObject(icon, forKey: cacheKey)
-            return icon
+            return NSWorkspace.shared.icon(forFile: appURL.path)
         }
 
         return nil
+    }
+
+    private func pruneAppIconState(using groups: [StorageAppGroup]) {
+        let activeGroupIDs = Set(groups.map(\.id))
+        appIconsByGroupID = appIconsByGroupID.filter { activeGroupIDs.contains($0.key) }
+        queuedAppIconGroupIDs = queuedAppIconGroupIDs.intersection(activeGroupIDs)
+        appIconLoadQueue.removeAll { request in
+            !activeGroupIDs.contains(request.groupID)
+        }
     }
 
     private func addFoldersFromPanel() {

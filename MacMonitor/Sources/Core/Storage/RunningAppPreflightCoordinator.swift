@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 enum RunningAppPreflightOutcome: Equatable, Sendable {
@@ -33,13 +34,11 @@ protocol RunningAppPreflightCoordinating {
     func forceQuit(for items: [StorageManagedItem]) async -> RunningAppPreflightSummary
 }
 
-@MainActor
 protocol RunningApplicationListing {
     func runningApplications(withBundleIdentifier bundleIdentifier: String) -> [RunningApplication]
     func allRunningApplications() -> [RunningApplication]
 }
 
-@MainActor
 protocol RunningApplication: AnyObject {
     var processIdentifier: pid_t { get }
     var bundleURL: URL? { get }
@@ -50,7 +49,6 @@ protocol RunningApplication: AnyObject {
 
 extension NSRunningApplication: RunningApplication {}
 
-@MainActor
 struct WorkspaceRunningApplicationListing: RunningApplicationListing {
     func runningApplications(withBundleIdentifier bundleIdentifier: String) -> [RunningApplication] {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
@@ -75,6 +73,20 @@ struct TaskRunningAppPollSleeper: RunningAppPollSleeping {
     }
 }
 
+protocol ProcessLivenessChecking {
+    func isAlive(processID: pid_t) -> Bool
+}
+
+struct POSIXProcessLivenessChecker: ProcessLivenessChecking {
+    func isAlive(processID: pid_t) -> Bool {
+        guard processID > 0 else { return false }
+        if kill(processID, 0) == 0 {
+            return true
+        }
+        return errno == EPERM
+    }
+}
+
 @MainActor
 final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
     private enum Action {
@@ -84,17 +96,20 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
 
     private let listing: RunningApplicationListing
     private let sleeper: RunningAppPollSleeping
+    private let livenessChecker: ProcessLivenessChecking
     private let gracefulTimeoutSeconds: TimeInterval
     private let pollIntervalSeconds: TimeInterval
 
     init(
         listing: RunningApplicationListing = WorkspaceRunningApplicationListing(),
         sleeper: RunningAppPollSleeping = TaskRunningAppPollSleeper(),
+        livenessChecker: ProcessLivenessChecking = POSIXProcessLivenessChecker(),
         gracefulTimeoutSeconds: TimeInterval = 10,
         pollIntervalSeconds: TimeInterval = 0.25
     ) {
         self.listing = listing
         self.sleeper = sleeper
+        self.livenessChecker = livenessChecker
         self.gracefulTimeoutSeconds = gracefulTimeoutSeconds
         self.pollIntervalSeconds = pollIntervalSeconds
     }
@@ -123,8 +138,8 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
                 continue
             }
 
-            let runningApplications = resolveRunningApplications(for: item)
-            guard !runningApplications.isEmpty else {
+            let processIDs = processIDsAfterApplyingAction(for: item, action: action)
+            guard !processIDs.isEmpty else {
                 results.append(
                     RunningAppPreflightResult(
                         itemID: item.id,
@@ -135,18 +150,7 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
                 continue
             }
 
-            switch action {
-            case .graceful:
-                for application in runningApplications {
-                    _ = application.terminate()
-                }
-            case .force:
-                for application in runningApplications {
-                    _ = application.forceTerminate()
-                }
-            }
-
-            let terminated = await waitUntilTerminated(runningApplications)
+            let terminated = await waitUntilTerminated(processIDs: processIDs)
             let outcome: RunningAppPreflightOutcome
             if terminated {
                 outcome = action == .graceful ? .terminatedGracefully : .forceTerminated
@@ -164,6 +168,24 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
         }
 
         return RunningAppPreflightSummary(results: results)
+    }
+
+    private func processIDsAfterApplyingAction(for item: StorageManagedItem, action: Action) -> [pid_t] {
+        let runningApplications = resolveRunningApplications(for: item)
+        guard !runningApplications.isEmpty else { return [] }
+
+        switch action {
+        case .graceful:
+            for application in runningApplications {
+                _ = application.terminate()
+            }
+        case .force:
+            for application in runningApplications {
+                _ = application.forceTerminate()
+            }
+        }
+
+        return runningApplications.map(\.processIdentifier)
     }
 
     private func resolveRunningApplications(for item: StorageManagedItem) -> [RunningApplication] {
@@ -190,9 +212,10 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
         }
     }
 
-    private func waitUntilTerminated(_ applications: [RunningApplication]) async -> Bool {
-        guard !applications.isEmpty else { return true }
-        if applications.allSatisfy(\.isTerminated) {
+    private func waitUntilTerminated(processIDs: [pid_t]) async -> Bool {
+        let trackedProcessIDs = Set(processIDs.filter { $0 > 0 })
+        guard !trackedProcessIDs.isEmpty else { return true }
+        if allProcessesTerminated(trackedProcessIDs) {
             return true
         }
 
@@ -202,11 +225,15 @@ final class RunningAppPreflightCoordinator: RunningAppPreflightCoordinating {
 
         for _ in 0..<pollCount {
             await sleeper.sleep(seconds: interval)
-            if applications.allSatisfy(\.isTerminated) {
+            if allProcessesTerminated(trackedProcessIDs) {
                 return true
             }
         }
 
-        return applications.allSatisfy(\.isTerminated)
+        return allProcessesTerminated(trackedProcessIDs)
+    }
+
+    private func allProcessesTerminated(_ processIDs: Set<pid_t>) -> Bool {
+        processIDs.allSatisfy { !livenessChecker.isAlive(processID: $0) }
     }
 }

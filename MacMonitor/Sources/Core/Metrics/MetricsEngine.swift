@@ -14,11 +14,13 @@ final class MetricsEngine: ObservableObject {
     private let gpuCollector: GPUCollecting
     private let settings: SettingsStore
     private let now: () -> Date
+    private let networkSamplingInterval: TimeInterval
 
     private var timerCancellable: AnyCancellable?
     private var refreshIntervalCancellable: AnyCancellable?
     private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
+    private var networkSamplingCancellable: AnyCancellable?
     private var networkBootstrapWorkItem: DispatchWorkItem?
 
     init(
@@ -30,7 +32,8 @@ final class MetricsEngine: ObservableObject {
         networkCollector: NetworkCollecting,
         gpuCollector: GPUCollecting = DefaultGPUCollector(),
         settings: SettingsStore,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        networkSamplingInterval: TimeInterval = 1.0
     ) {
         self.memoryCollector = memoryCollector
         self.storageCollector = storageCollector
@@ -41,6 +44,7 @@ final class MetricsEngine: ObservableObject {
         self.gpuCollector = gpuCollector
         self.settings = settings
         self.now = now
+        self.networkSamplingInterval = networkSamplingInterval
     }
 
     func start() {
@@ -48,6 +52,7 @@ final class MetricsEngine: ObservableObject {
         bindBatteryChanges()
         bindThermalChanges()
         scheduleTimer(using: settings.refreshInterval)
+        scheduleNetworkSampling()
         refresh(reason: .startup)
         scheduleNetworkBootstrapRefreshIfNeeded()
     }
@@ -57,6 +62,8 @@ final class MetricsEngine: ObservableObject {
         refreshIntervalCancellable?.cancel()
         batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = nil
         networkBootstrapWorkItem?.cancel()
         networkBootstrapWorkItem = nil
     }
@@ -98,6 +105,15 @@ final class MetricsEngine: ObservableObject {
             }
     }
 
+    private func scheduleNetworkSampling() {
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = Timer.publish(every: networkSamplingInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refreshNetworkSample()
+            }
+    }
+
     private func refresh(reason: RefreshReason) {
         let memory = memoryCollector.collect() ?? .empty(totalBytes: ProcessInfo.processInfo.physicalMemory)
         let storage = storageCollector.collect() ?? .empty()
@@ -117,6 +133,27 @@ final class MetricsEngine: ObservableObject {
             network: network,
             gpu: gpu,
             refreshReason: reason
+        )
+    }
+
+    private func refreshNetworkSample() {
+        guard let latestSnapshot else { return }
+
+        let network = networkCollector.collect()
+        guard network != latestSnapshot.network else { return }
+
+        self.latestSnapshot = SystemSnapshot(
+            id: latestSnapshot.id,
+            schemaVersion: latestSnapshot.schemaVersion,
+            timestamp: now(),
+            memory: latestSnapshot.memory,
+            storage: latestSnapshot.storage,
+            battery: latestSnapshot.battery,
+            thermal: latestSnapshot.thermal,
+            cpu: latestSnapshot.cpu,
+            network: network,
+            gpu: latestSnapshot.gpu,
+            refreshReason: .networkSample
         )
     }
 

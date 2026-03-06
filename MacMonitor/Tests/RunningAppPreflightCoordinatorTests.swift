@@ -5,9 +5,11 @@ import XCTest
 final class RunningAppPreflightCoordinatorTests: XCTestCase {
     func testGracefulPreflightReturnsNotRunningWhenAppAlreadyClosed() async {
         let listing = FakeRunningAppListing()
+        let livenessChecker = FakeProcessLivenessChecker()
         let coordinator = RunningAppPreflightCoordinator(
             listing: listing,
             sleeper: NoopRunningAppSleeper(),
+            livenessChecker: livenessChecker,
             gracefulTimeoutSeconds: 0.01,
             pollIntervalSeconds: 0.01
         )
@@ -27,10 +29,13 @@ final class RunningAppPreflightCoordinatorTests: XCTestCase {
         )
         let listing = FakeRunningAppListing()
         listing.bundleApplications["com.test.editor"] = [app]
+        let livenessChecker = FakeProcessLivenessChecker()
+        livenessChecker.appsByPID[app.processIdentifier] = app
 
         let coordinator = RunningAppPreflightCoordinator(
             listing: listing,
             sleeper: NoopRunningAppSleeper(),
+            livenessChecker: livenessChecker,
             gracefulTimeoutSeconds: 0.01,
             pollIntervalSeconds: 0.01
         )
@@ -49,10 +54,13 @@ final class RunningAppPreflightCoordinatorTests: XCTestCase {
         )
         let listing = FakeRunningAppListing()
         listing.bundleApplications["com.test.editor"] = [app]
+        let livenessChecker = FakeProcessLivenessChecker()
+        livenessChecker.appsByPID[app.processIdentifier] = app
 
         let coordinator = RunningAppPreflightCoordinator(
             listing: listing,
             sleeper: NoopRunningAppSleeper(),
+            livenessChecker: livenessChecker,
             gracefulTimeoutSeconds: 0.01,
             pollIntervalSeconds: 0.01
         )
@@ -72,10 +80,13 @@ final class RunningAppPreflightCoordinatorTests: XCTestCase {
         )
         let listing = FakeRunningAppListing()
         listing.runningApps = [app]
+        let livenessChecker = FakeProcessLivenessChecker()
+        livenessChecker.appsByPID[app.processIdentifier] = app
 
         let coordinator = RunningAppPreflightCoordinator(
             listing: listing,
             sleeper: NoopRunningAppSleeper(),
+            livenessChecker: livenessChecker,
             gracefulTimeoutSeconds: 0.01,
             pollIntervalSeconds: 0.01
         )
@@ -102,7 +113,6 @@ final class RunningAppPreflightCoordinatorTests: XCTestCase {
     }
 }
 
-@MainActor
 private final class FakeRunningAppListing: RunningApplicationListing {
     var bundleApplications: [String: [RunningApplication]] = [:]
     var runningApps: [RunningApplication] = []
@@ -116,7 +126,6 @@ private final class FakeRunningAppListing: RunningApplicationListing {
     }
 }
 
-@MainActor
 private final class FakeRunningApplication: RunningApplication {
     let processIdentifier: pid_t
     let bundleURL: URL?
@@ -158,4 +167,13 @@ private final class FakeRunningApplication: RunningApplication {
 @MainActor
 private struct NoopRunningAppSleeper: RunningAppPollSleeping {
     func sleep(seconds: TimeInterval) async {}
+}
+
+private final class FakeProcessLivenessChecker: ProcessLivenessChecking {
+    var appsByPID: [pid_t: FakeRunningApplication] = [:]
+
+    func isAlive(processID: pid_t) -> Bool {
+        guard let app = appsByPID[processID] else { return false }
+        return !app.isTerminated
+    }
 }

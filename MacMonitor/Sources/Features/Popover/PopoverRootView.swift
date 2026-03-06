@@ -368,6 +368,7 @@ struct PopoverRootView: View {
                 deleteConfirmationAcknowledged = false
                 deleteConfirmationSnapshot = storageManagementViewModel.makeSelectionSnapshot()
                 deleteConfirmationRootItemIDs = storageManagementViewModel.deletionPreviewRootItemIDs
+                storageManagementViewModel.beginDeletionPreview(rootItemIDs: deleteConfirmationRootItemIDs)
                 refreshDeletePreviewCache()
                 return
             }
@@ -375,6 +376,7 @@ struct PopoverRootView: View {
             if !didConfirmStorageDeletion, let snapshot = deleteConfirmationSnapshot {
                 storageManagementViewModel.restoreSelectionSnapshot(snapshot)
             }
+            storageManagementViewModel.endDeletionPreview()
             didConfirmStorageDeletion = false
             deleteConfirmationAcknowledged = false
             deleteConfirmationRootItemIDs = []
@@ -745,7 +747,7 @@ struct PopoverRootView: View {
                             ForEach(Array(previewGroupSections.enumerated()), id: \.element.id) { index, section in
                                 storageDeletePreviewGroupRow(section)
 
-                                if storageManagementViewModel.expandedGroupIDs.contains(section.group.id) {
+                                if storageManagementViewModel.deletionPreviewExpandedGroupIDs.contains(section.group.id) {
                                     ForEach(section.rows) { row in
                                         storageDeletePreviewRow(row, depthOffset: 1)
                                     }
@@ -912,11 +914,11 @@ struct PopoverRootView: View {
     private func storageDeletePreviewGroupRow(_ section: StorageDeletePreviewGroupSection) -> some View {
         let group = section.group
         let selectionState = storageManagementViewModel.groupSelectionState(group)
-        let isExpanded = storageManagementViewModel.expandedGroupIDs.contains(group.id)
+        let isExpanded = storageManagementViewModel.deletionPreviewExpandedGroupIDs.contains(group.id)
 
         return HStack(spacing: 8) {
             Button {
-                storageManagementViewModel.toggleGroupExpansion(group.id)
+                storageManagementViewModel.toggleDeletionPreviewGroupExpansion(group.id)
             } label: {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
@@ -989,8 +991,8 @@ struct PopoverRootView: View {
         let isDirectlySelected = storageManagementViewModel.selectedItemIDs.contains(item.id)
         let isInDeletionScope = storageManagementViewModel.isItemInDeletionScope(item.id)
         let isIncludedByAncestor = isInDeletionScope && !isDirectlySelected
-        let isExpanded = storageManagementViewModel.isItemExpanded(item.id)
-        let isLoading = storageManagementViewModel.isLoadingChildren(for: item.id)
+        let isExpanded = storageManagementViewModel.isDeletionPreviewItemExpanded(item.id)
+        let isLoading = storageManagementViewModel.isDeletionPreviewLoadingChildren(for: item.id)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -999,7 +1001,7 @@ struct PopoverRootView: View {
 
                 if item.isExpandable {
                     Button {
-                        storageManagementViewModel.toggleItemExpansion(item.id)
+                        storageManagementViewModel.toggleDeletionPreviewItemExpansion(item.id)
                     } label: {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
@@ -1107,23 +1109,18 @@ struct PopoverRootView: View {
         }
 
         cachedDeletePreviewGroupSections = storageManagementViewModel.appGroups.compactMap { group in
-            let filteredRows = storageManagementViewModel.rows(for: group).filter { row in
-                isPreviewRowVisible(itemID: row.item.id, previewRootIDs: previewRootIDs)
-            }
+            let filteredRows = storageManagementViewModel.deletionPreviewRows(for: group, rootItemIDs: previewRootIDs)
             guard !filteredRows.isEmpty else { return nil }
             return StorageDeletePreviewGroupSection(group: group, rows: filteredRows)
         }
 
-        cachedDeletePreviewLooseRows = storageManagementViewModel.allLooseRows().filter { row in
-            isPreviewRowVisible(itemID: row.item.id, previewRootIDs: previewRootIDs)
-        }
+        cachedDeletePreviewLooseRows = storageManagementViewModel.deletionPreviewLooseRows(rootItemIDs: previewRootIDs)
     }
 
     private func clearDeletePreviewCache() {
         cachedDeletePreviewGroupSections = []
         cachedDeletePreviewLooseRows = []
     }
-
     private func isPreviewRowVisible(itemID: String, previewRootIDs: Set<String>) -> Bool {
         guard !previewRootIDs.isEmpty else { return false }
 

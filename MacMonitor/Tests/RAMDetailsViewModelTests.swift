@@ -23,6 +23,56 @@ final class RAMDetailsViewModelTests: XCTestCase {
         XCTAssertEqual(collector.callCount, 2)
     }
 
+    func testStartDoesNotRefreshWhenInactive() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        collector.mineItems = [makeProcess(pid: 111, name: "Safari", userID: 501, protected: false)]
+        collector.allItems = collector.mineItems
+
+        viewModel.setRefreshActive(false)
+        viewModel.start()
+        await Task.yield()
+
+        XCTAssertEqual(collector.callCount, 0)
+        XCTAssertTrue(viewModel.processes.isEmpty)
+        viewModel.stop()
+    }
+
+    func testReactivatingRefreshAfterStartTriggersImmediateRefresh() async {
+        let collector = FakeProcessCollector()
+        let terminator = FakeProcessTerminator()
+        let viewModel = RAMDetailsViewModel(
+            processCollector: collector,
+            processTerminator: terminator,
+            maxRows: 20,
+            refreshInterval: 3600,
+            currentUserID: 501
+        )
+
+        collector.mineItems = [makeProcess(pid: 112, name: "Xcode", userID: 501, protected: false)]
+        collector.allItems = collector.mineItems
+
+        viewModel.setRefreshActive(false)
+        viewModel.start()
+        await Task.yield()
+        XCTAssertEqual(collector.callCount, 0)
+
+        viewModel.setRefreshActive(true)
+        await viewModel.pendingRefreshTask?.value
+
+        XCTAssertEqual(collector.callCount, 2)
+        XCTAssertEqual(viewModel.processes.map(\.pid), [112])
+        viewModel.stop()
+    }
+
     func testChangingScopeClearsSelectionAndRefreshes() async {
         let collector = FakeProcessCollector()
         let terminator = FakeProcessTerminator()

@@ -14,4 +14,16 @@ final class MetricFormatterTests: XCTestCase {
     func testThermalText() {
         XCTAssertEqual(MetricFormatter.thermalText(for: .serious), "Serious")
     }
+
+    func testBytesPerSecondFormatsMegabitsPerSecond() {
+        XCTAssertEqual(MetricFormatter.bytesPerSecond(125_000), "1.0 Mbps")
+    }
+
+    func testBytesPerSecondFormatsGigabitsPerSecond() {
+        XCTAssertEqual(MetricFormatter.bytesPerSecond(125_000_000), "1.0 Gbps")
+    }
+
+    func testBytesPerSecondFormatsKilobitsPerSecond() {
+        XCTAssertEqual(MetricFormatter.bytesPerSecond(500), "4 Kbps")
+    }
 }

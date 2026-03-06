@@ -90,9 +90,41 @@ final class MetricsEngineTests: XCTestCase {
         XCTAssertEqual(refreshReasons, [.startup, .batteryNotification])
     }
 
+    func testNetworkSamplingPublishesNetworkSampleSnapshot() {
+        let networkCollector = SequencedNetworkCollector(samples: [
+            .unavailable,
+            NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+        ])
+        let engine = makeEngine(networkCollector: networkCollector, networkSamplingInterval: 0.05)
+        var cancellables = Set<AnyCancellable>()
+
+        var snapshots: [SystemSnapshot] = []
+        let expectation = expectation(description: "collect startup and network sample snapshots")
+
+        engine.$latestSnapshot
+            .compactMap { $0 }
+            .sink { snapshot in
+                snapshots.append(snapshot)
+                if snapshots.count == 2 {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        engine.start()
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(snapshots.map(\.refreshReason), [.startup, .networkSample])
+        XCTAssertNil(snapshots.first?.network.downloadBytesPerSecond)
+        XCTAssertEqual(snapshots.last?.network.downloadBytesPerSecond, 9_000)
+        XCTAssertEqual(snapshots.last?.network.uploadBytesPerSecond, 5_000)
+    }
+
     private func makeEngine(
         batteryCollector: FakeBatteryCollector = FakeBatteryCollector(initial: .unavailable),
-        thermalCollector: FakeThermalCollector = FakeThermalCollector(initial: .nominal)
+        thermalCollector: FakeThermalCollector = FakeThermalCollector(initial: .nominal),
+        networkCollector: NetworkCollecting = FakeNetworkCollector(),
+        networkSamplingInterval: TimeInterval = 1.0
     ) -> MetricsEngine {
         let defaults = UserDefaults(suiteName: "MetricsEngineTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: FakeLaunchAtLoginManager())
@@ -103,9 +135,10 @@ final class MetricsEngineTests: XCTestCase {
             batteryCollector: batteryCollector,
             thermalCollector: thermalCollector,
             cpuCollector: FakeCPUCollector(),
-            networkCollector: FakeNetworkCollector(),
+            networkCollector: networkCollector,
             settings: settings,
-            now: { Date(timeIntervalSince1970: 1_234_567) }
+            now: { Date(timeIntervalSince1970: 1_234_567) },
+            networkSamplingInterval: networkSamplingInterval
         )
     }
 }
@@ -145,6 +178,27 @@ private struct FakeCPUCollector: CPUCollecting {
 private struct FakeNetworkCollector: NetworkCollecting {
     func collect() -> NetworkSnapshot {
         NetworkSnapshot(downloadBytesPerSecond: 120_000, uploadBytesPerSecond: 80_000)
+    }
+}
+
+private final class SequencedNetworkCollector: NetworkCollecting {
+    private var samples: [NetworkSnapshot]
+    private let lock = NSLock()
+
+    init(samples: [NetworkSnapshot]) {
+        self.samples = samples
+    }
+
+    func collect() -> NetworkSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !samples.isEmpty else { return .unavailable }
+        if samples.count == 1 {
+            return samples[0]
+        }
+
+        return samples.removeFirst()
     }
 }
 

@@ -9,6 +9,7 @@ RELAUNCH=false
 SKIP_SIGNATURE_CHECK=false
 SKIP_GATEKEEPER_CHECK=false
 KEEP_QUARANTINE=false
+SOURCE_IS_URL=false
 
 MOUNT_POINT=""
 TMP_DIR=""
@@ -62,6 +63,10 @@ is_url() {
   [[ "$1" =~ ^https?:// ]]
 }
 
+allow_local_gatekeeper_bypass() {
+  [[ "${SOURCE_IS_URL}" == false ]]
+}
+
 sha256_file() {
   shasum -a 256 "$1" | awk '{print $1}'
 }
@@ -94,6 +99,10 @@ parse_args() {
 
   [[ -n "${SOURCE}" ]] || fail "--source is required"
   [[ "${APP_NAME}" == *.app ]] || fail "--app-name must end with .app"
+
+  if is_url "${SOURCE}"; then
+    SOURCE_IS_URL=true
+  fi
 }
 
 prepare_source() {
@@ -177,8 +186,13 @@ verify_app() {
 
   if [[ "${SKIP_GATEKEEPER_CHECK}" == false ]]; then
     require_cmd spctl
-    spctl --assess --type execute --verbose=2 "${app_path}" || fail "Gatekeeper assessment failed"
-    log "Gatekeeper assessment passed"
+    if spctl --assess --type execute --verbose=2 "${app_path}"; then
+      log "Gatekeeper assessment passed"
+    elif allow_local_gatekeeper_bypass; then
+      warn "Gatekeeper rejected the local artifact; continuing because local test builds may use ad hoc signing"
+    else
+      fail "Gatekeeper assessment failed"
+    fi
   else
     warn "Skipping Gatekeeper assessment"
   fi
