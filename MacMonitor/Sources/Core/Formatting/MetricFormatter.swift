@@ -1,6 +1,15 @@
 import Foundation
 
 enum MetricFormatter {
+    private static func compactMenuBarRate(_ value: Double, unit: String) -> String {
+        if value < 10 {
+            let truncatedTenths = floor(value * 10) / 10
+            return String(format: "%3.1f%@", truncatedTenths, unit)
+        }
+
+        return String(format: "%3.0f%@", min(value, 999), unit)
+    }
+
     private static func makeByteFormatter() -> ByteCountFormatter {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useGB, .useMB]
@@ -70,23 +79,11 @@ enum MetricFormatter {
         let bitsPerSecond = max(0, value) * 8
         switch bitsPerSecond {
         case 1_000_000_000...:
-            let gigabitsPerSecond = bitsPerSecond / 1_000_000_000
-            if gigabitsPerSecond < 10 {
-                return String(format: "%3.1fG", gigabitsPerSecond)
-            }
-            return String(format: "%3.0fG", min(gigabitsPerSecond, 999))
+            return compactMenuBarRate(bitsPerSecond / 1_000_000_000, unit: "G")
         case 1_000_000...:
-            let megabitsPerSecond = bitsPerSecond / 1_000_000
-            if megabitsPerSecond < 10 {
-                return String(format: "%3.1fM", megabitsPerSecond)
-            }
-            return String(format: "%3.0fM", min(megabitsPerSecond, 999))
+            return compactMenuBarRate(bitsPerSecond / 1_000_000, unit: "M")
         case 1_000...:
-            let kilobitsPerSecond = bitsPerSecond / 1_000
-            if kilobitsPerSecond < 10 {
-                return String(format: "%3.1fK", kilobitsPerSecond)
-            }
-            return String(format: "%3.0fK", min(kilobitsPerSecond, 999))
+            return compactMenuBarRate(bitsPerSecond / 1_000, unit: "K")
         default:
             return String(format: "%3.0fb", min(bitsPerSecond, 999))
         }

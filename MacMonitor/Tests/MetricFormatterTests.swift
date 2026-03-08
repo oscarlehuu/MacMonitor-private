@@ -26,4 +26,12 @@ final class MetricFormatterTests: XCTestCase {
     func testBytesPerSecondFormatsKilobitsPerSecond() {
         XCTAssertEqual(MetricFormatter.bytesPerSecond(500), "4 Kbps")
     }
+
+    func testMenuBarBitsPerSecondTruncatesTenthsBelowTenToAvoidWidthJitter() {
+        XCTAssertEqual(MetricFormatter.menuBarBitsPerSecond(1_243.75), "9.9K")
+    }
+
+    func testMenuBarBitsPerSecondUsesWholeNumberAtTenAndAbove() {
+        XCTAssertEqual(MetricFormatter.menuBarBitsPerSecond(1_250), " 10K")
+    }
 }

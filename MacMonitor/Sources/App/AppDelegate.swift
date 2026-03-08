@@ -37,11 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container?.stop()
     }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        container?.revealMenuBarPopover()
-        return false
-    }
-
     @objc private func handleReopenAppleEvent(
         _ event: NSAppleEventDescriptor,
         withReplyEvent replyEvent: NSAppleEventDescriptor
