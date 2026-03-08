@@ -15,16 +15,12 @@ final class MetricsEngine: ObservableObject {
     private let settings: SettingsStore
     private let now: () -> Date
     private let networkSamplingInterval: TimeInterval
-    private let networkSamplingQueue = DispatchQueue(
-        label: "com.oscar.macmonitor.network-sampling",
-        qos: .utility
-    )
 
     private var timerCancellable: AnyCancellable?
     private var refreshIntervalCancellable: AnyCancellable?
     private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
-    private var networkSamplingTimer: DispatchSourceTimer?
+    private var networkSamplingCancellable: AnyCancellable?
     private var networkBootstrapWorkItem: DispatchWorkItem?
 
     init(
@@ -66,9 +62,8 @@ final class MetricsEngine: ObservableObject {
         refreshIntervalCancellable?.cancel()
         batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
-        networkSamplingTimer?.setEventHandler {}
-        networkSamplingTimer?.cancel()
-        networkSamplingTimer = nil
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = nil
         networkBootstrapWorkItem?.cancel()
         networkBootstrapWorkItem = nil
     }
@@ -111,21 +106,12 @@ final class MetricsEngine: ObservableObject {
     }
 
     private func scheduleNetworkSampling() {
-        networkSamplingTimer?.setEventHandler {}
-        networkSamplingTimer?.cancel()
-
-        let timer = DispatchSource.makeTimerSource(queue: networkSamplingQueue)
-        timer.schedule(
-            deadline: .now() + networkSamplingInterval,
-            repeating: networkSamplingInterval
-        )
-        timer.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
+        networkSamplingCancellable?.cancel()
+        networkSamplingCancellable = Timer.publish(every: networkSamplingInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
                 self?.refreshNetworkSample()
             }
-        }
-        networkSamplingTimer = timer
-        timer.resume()
     }
 
     private func refresh(reason: RefreshReason) {
@@ -175,18 +161,16 @@ final class MetricsEngine: ObservableObject {
         networkBootstrapWorkItem?.cancel()
 
         let workItem = DispatchWorkItem { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard latestSnapshot?.network.downloadBytesPerSecond == nil ||
-                    latestSnapshot?.network.uploadBytesPerSecond == nil else {
-                    return
-                }
-                refreshNetworkSample()
+            guard let self else { return }
+            guard self.latestSnapshot?.network.downloadBytesPerSecond == nil ||
+                self.latestSnapshot?.network.uploadBytesPerSecond == nil else {
+                return
             }
+            self.refreshNetworkSample()
         }
 
         networkBootstrapWorkItem = workItem
         let bootstrapDelay = min(max(networkSamplingInterval, 0.05), 0.25)
-        networkSamplingQueue.asyncAfter(deadline: .now() + bootstrapDelay, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + bootstrapDelay, execute: workItem)
     }
 }
