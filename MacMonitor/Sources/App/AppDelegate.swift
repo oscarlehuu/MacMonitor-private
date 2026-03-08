@@ -1,10 +1,10 @@
 import AppKit
 import Carbon.HIToolbox
-import Darwin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var container: AppContainer?
+    private let livenessChecker = POSIXProcessLivenessChecker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let application = NSApplication.shared
@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .filter { app in
                 app.processIdentifier != currentPID &&
                 !app.isTerminated &&
-                processExists(app.processIdentifier)
+                livenessChecker.isAlive(processID: app.processIdentifier)
             }
 
         if !runningWithSameBundle.isEmpty,
@@ -88,15 +88,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             deliverImmediately: true
         )
         return true
-    }
-
-    private func processExists(_ pid: pid_t) -> Bool {
-        guard pid > 0 else { return false }
-
-        if kill(pid, 0) == 0 {
-            return true
-        }
-
-        return errno == EPERM
     }
 }

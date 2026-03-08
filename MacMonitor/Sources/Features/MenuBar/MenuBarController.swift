@@ -376,7 +376,7 @@ final class MenuBarController: NSObject {
         applyMainPopoverDefaultSize()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         if activateApp {
-            bringPopoverWindowToFront()
+            bringPopoverWindowToFront(retriesRemaining: 3)
         }
     }
 
@@ -408,15 +408,18 @@ final class MenuBarController: NSObject {
         showPopover(activateApp: activateApp)
     }
 
-    private func bringPopoverWindowToFront() {
+    private func bringPopoverWindowToFront(retriesRemaining: Int = 0) {
         guard let window = popover.contentViewController?.view.window else {
-            popover.performClose(nil)
-            showPopover(activateApp: true)
+            guard retriesRemaining > 0 else { return }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.bringPopoverWindowToFront(retriesRemaining: retriesRemaining - 1)
+            }
             return
         }
 
         window.orderFrontRegardless()
-        window.makeKey()
+        window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
