@@ -209,6 +209,10 @@ final class AppContainer {
         batteryLifecycleCoordinator.start()
     }
 
+    func revealMenuBarPopover() {
+        menuBarController.revealPopover()
+    }
+
     func stop() {
         batteryLifecycleCoordinator.stop()
         storageSnapshotCancellable?.cancel()

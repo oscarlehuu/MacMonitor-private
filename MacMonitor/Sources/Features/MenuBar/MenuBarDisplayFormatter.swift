@@ -91,8 +91,8 @@ enum MenuBarDisplayFormatter {
             format: storageFormat
         )
         let cpuText = MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent ?? 0)
-        let networkDownText = MetricFormatter.bytesPerSecond(snapshot?.network.downloadBytesPerSecond)
-        let networkUpText = MetricFormatter.bytesPerSecond(snapshot?.network.uploadBytesPerSecond)
+        let networkDownText = MetricFormatter.menuBarBitsPerSecond(snapshot?.network.downloadBytesPerSecond)
+        let networkUpText = MetricFormatter.menuBarBitsPerSecond(snapshot?.network.uploadBytesPerSecond)
 
         switch mode {
         case .memory:
@@ -251,8 +251,8 @@ enum MenuBarDisplayFormatter {
         case .cpu:
             return MetricFormatter.percentValue(snapshot?.cpu.normalizedPercent ?? 0)
         case .network:
-            let networkDownText = MetricFormatter.bytesPerSecond(snapshot?.network.downloadBytesPerSecond)
-            let networkUpText = MetricFormatter.bytesPerSecond(snapshot?.network.uploadBytesPerSecond)
+            let networkDownText = MetricFormatter.menuBarBitsPerSecond(snapshot?.network.downloadBytesPerSecond)
+            let networkUpText = MetricFormatter.menuBarBitsPerSecond(snapshot?.network.uploadBytesPerSecond)
             return "D \(networkDownText) U \(networkUpText)"
         case .text:
             return ""

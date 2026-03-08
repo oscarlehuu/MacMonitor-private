@@ -1,27 +1,55 @@
 import AppKit
+import Carbon.HIToolbox
+import Darwin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var container: AppContainer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard !isDuplicateLaunch else {
-            NSApp.terminate(nil)
+        let application = NSApplication.shared
+
+        guard !handleDuplicateLaunchIfNeeded() else {
+            application.terminate(nil)
             return
         }
 
-        NSApplication.shared.setActivationPolicy(.accessory)
+        application.setActivationPolicy(.accessory)
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleReopenAppleEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEReopenApplication)
+        )
 
         let container = AppContainer()
         self.container = container
-        container.start()
+        DispatchQueue.main.async { [weak self] in
+            self?.container?.start()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        NSAppleEventManager.shared().removeEventHandler(
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEReopenApplication)
+        )
         container?.stop()
     }
 
-    private var isDuplicateLaunch: Bool {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        container?.revealMenuBarPopover()
+        return false
+    }
+
+    @objc private func handleReopenAppleEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+        container?.revealMenuBarPopover()
+    }
+
+    private func handleDuplicateLaunchIfNeeded() -> Bool {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return false
         }
@@ -34,35 +62,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentBundleVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
         let runningWithSameBundle = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
-            .filter { $0.processIdentifier != currentPID && !$0.isTerminated }
+            .filter { app in
+                app.processIdentifier != currentPID &&
+                !app.isTerminated &&
+                processExists(app.processIdentifier)
+            }
 
         if !runningWithSameBundle.isEmpty,
            AppUpdateController.consumePendingRelaunchVersion(matching: currentBundleVersion) {
             return false
         }
 
-        // Allow a grace period for relaunch handoff where the old instance
-        // may still be alive briefly while the new one starts.
-        let maxAttempts = 10
-        let delayBetweenAttempts: TimeInterval = 0.5
-
         if runningWithSameBundle.isEmpty {
             _ = AppUpdateController.consumePendingRelaunchVersion(matching: nil)
             return false
         }
 
-        for _ in 0..<maxAttempts {
-            let runningWithSameBundle = NSRunningApplication
-                .runningApplications(withBundleIdentifier: bundleIdentifier)
-                .filter { $0.processIdentifier != currentPID && !$0.isTerminated }
+        runningWithSameBundle.forEach { app in
+            _ = app.activate(options: [])
+        }
+        DistributedNotificationCenter.default().postNotificationName(
+            .macMonitorRevealPopover,
+            object: bundleIdentifier,
+            userInfo: nil,
+            deliverImmediately: true
+        )
+        return true
+    }
 
-            if runningWithSameBundle.isEmpty {
-                return false
-            }
+    private func processExists(_ pid: pid_t) -> Bool {
+        guard pid > 0 else { return false }
 
-            Thread.sleep(forTimeInterval: delayBetweenAttempts)
+        if kill(pid, 0) == 0 {
+            return true
         }
 
-        return true
+        return errno == EPERM
     }
 }

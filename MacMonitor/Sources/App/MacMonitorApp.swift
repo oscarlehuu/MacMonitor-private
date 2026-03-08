@@ -1,12 +1,15 @@
-import SwiftUI
+import AppKit
 
 @main
-struct MacMonitorApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+enum MacMonitorApp {
+    @MainActor
+    private static var retainedDelegate: AppDelegate?
 
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        retainedDelegate = delegate
+        application.delegate = delegate
+        application.run()
     }
 }

@@ -2,6 +2,10 @@ import AppKit
 import Combine
 import SwiftUI
 
+extension Notification.Name {
+    static let macMonitorRevealPopover = Notification.Name("com.oscar.macmonitor.reveal-popover")
+}
+
 @MainActor
 final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
@@ -16,7 +20,10 @@ final class MenuBarController: NSObject {
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
     private var appearanceObserver: NSObjectProtocol?
+    private var revealPopoverObserver: NSObjectProtocol?
     private var isAuxiliaryPanelPresented = false
+    private var hasInstalledStatusButton = false
+    private var retainedStatusItemLength: CGFloat = 0
 
     init(
         viewModel: SystemSummaryViewModel,
@@ -40,7 +47,7 @@ final class MenuBarController: NSObject {
     }
 
     func install() {
-        popover.behavior = .transient
+        popover.behavior = .applicationDefined
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
@@ -63,14 +70,10 @@ final class MenuBarController: NSObject {
         )
         applyMainPopoverDefaultSize()
 
-        guard let button = statusItem.button else { return }
-        button.action = #selector(togglePopover(_:))
-        button.target = self
-        button.sendAction(on: [.leftMouseDown])
-
         installAppearanceObserver()
+        installRevealPopoverObserver()
         bindViewModel()
-        renderStatusItem()
+        installStatusButtonWhenReady()
     }
 
     func uninstall() {
@@ -80,20 +83,26 @@ final class MenuBarController: NSObject {
             DistributedNotificationCenter.default().removeObserver(appearanceObserver)
             self.appearanceObserver = nil
         }
+        if let revealPopoverObserver {
+            DistributedNotificationCenter.default().removeObserver(revealPopoverObserver)
+            self.revealPopoverObserver = nil
+        }
         if popover.isShown {
             popover.performClose(nil)
         }
     }
 
-    @objc private func togglePopover(_ sender: AnyObject?) {
-        guard let button = statusItem.button else { return }
+    func revealPopover() {
+        installStatusButtonWhenReady()
+        showPopoverWhenReady(activateApp: true)
+        renderStatusItem()
+    }
 
+    @objc private func togglePopover(_ sender: AnyObject?) {
         if popover.isShown {
             popover.performClose(sender)
         } else {
-            applyMainPopoverDefaultSize()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            showPopover(activateApp: true)
         }
 
         renderStatusItem()
@@ -103,7 +112,7 @@ final class MenuBarController: NSObject {
         guard isAuxiliaryPanelPresented != isPresented else { return }
 
         isAuxiliaryPanelPresented = isPresented
-        popover.behavior = isPresented ? .applicationDefined : .transient
+        popover.behavior = .applicationDefined
     }
 
     private func bindViewModel() {
@@ -123,6 +132,7 @@ final class MenuBarController: NSObject {
         )
         .receive(on: RunLoop.main)
         .sink { [weak self] _, _, _ in
+            self?.resetRetainedStatusItemLength()
             self?.renderStatusItem()
         }
         .store(in: &cancellables)
@@ -137,6 +147,7 @@ final class MenuBarController: NSObject {
         viewModel.settings.$menuBarComposerConfiguration
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
+                self?.resetRetainedStatusItemLength()
                 self?.renderStatusItem()
             }
             .store(in: &cancellables)
@@ -146,7 +157,6 @@ final class MenuBarController: NSObject {
         guard let button = statusItem.button else { return }
         let settings = viewModel.settings
 
-        statusItem.length = NSStatusItem.variableLength
         button.imagePosition = .noImage
         button.imageScaling = .scaleProportionallyDown
         button.image = nil
@@ -177,8 +187,21 @@ final class MenuBarController: NSObject {
             )
         }
 
+        retainStatusItemLength(for: button)
         applyBackgroundStyle(to: button, mode: .both)
         button.contentTintColor = nil
+    }
+
+    private func resetRetainedStatusItemLength() {
+        retainedStatusItemLength = 0
+        statusItem.length = NSStatusItem.variableLength
+    }
+
+    private func retainStatusItemLength(for button: NSStatusBarButton) {
+        let textWidth = ceil(button.attributedTitle.size().width)
+        let targetLength = max(NSStatusItem.squareLength, textWidth + 10)
+        retainedStatusItemLength = max(retainedStatusItemLength, targetLength)
+        statusItem.length = retainedStatusItemLength
     }
 
     private func attributedMenuBarTitle(
@@ -301,6 +324,100 @@ final class MenuBarController: NSObject {
                 self.renderStatusItem()
             }
         }
+    }
+
+    private func installRevealPopoverObserver() {
+        if let revealPopoverObserver {
+            DistributedNotificationCenter.default().removeObserver(revealPopoverObserver)
+            self.revealPopoverObserver = nil
+        }
+
+        revealPopoverObserver = DistributedNotificationCenter.default().addObserver(
+            forName: .macMonitorRevealPopover,
+            object: Bundle.main.bundleIdentifier,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.showPopoverWhenReady(activateApp: true)
+            }
+        }
+    }
+
+    private func installStatusButtonWhenReady(retriesRemaining: Int = 10) {
+        guard !hasInstalledStatusButton else { return }
+
+        guard let button = statusItem.button else {
+            guard retriesRemaining > 0 else { return }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.installStatusButtonWhenReady(retriesRemaining: retriesRemaining - 1)
+            }
+            return
+        }
+
+        button.action = #selector(togglePopover(_:))
+        button.target = self
+        button.sendAction(on: [.leftMouseUp])
+        hasInstalledStatusButton = true
+        renderStatusItem()
+    }
+
+    private func showPopover(activateApp: Bool) {
+        guard let button = statusItem.button else { return }
+
+        if activateApp {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        if popover.isShown {
+            bringPopoverWindowToFront()
+            return
+        }
+
+        applyMainPopoverDefaultSize()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        if activateApp {
+            bringPopoverWindowToFront()
+        }
+    }
+
+    private func showPopoverWhenReady(activateApp: Bool, retriesRemaining: Int = 20) {
+        guard let button = statusItem.button else {
+            guard retriesRemaining > 0 else { return }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.showPopoverWhenReady(
+                    activateApp: activateApp,
+                    retriesRemaining: retriesRemaining - 1
+                )
+            }
+            return
+        }
+
+        guard button.window != nil, !button.bounds.isEmpty else {
+            guard retriesRemaining > 0 else { return }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.showPopoverWhenReady(
+                    activateApp: activateApp,
+                    retriesRemaining: retriesRemaining - 1
+                )
+            }
+            return
+        }
+
+        showPopover(activateApp: activateApp)
+    }
+
+    private func bringPopoverWindowToFront() {
+        guard let window = popover.contentViewController?.view.window else {
+            popover.performClose(nil)
+            showPopover(activateApp: true)
+            return
+        }
+
+        window.orderFrontRegardless()
+        window.makeKey()
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     private func applyMainPopoverDefaultSize() {
