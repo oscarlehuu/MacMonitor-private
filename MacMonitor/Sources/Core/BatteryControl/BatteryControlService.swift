@@ -20,9 +20,13 @@ final class BatteryControlService: ObservableObject {
         self.backend = backend
         self.eventStore = eventStore
         self.now = now
-        self.availability = backend.availability
+        self.availability = .unavailable(reason: "Checking battery helper status.")
         refreshRecentEvents()
         eventStore.pruneExpiredEvents(referenceDate: now())
+
+        Task { [weak self] in
+            await self?.refreshAvailability()
+        }
     }
 
     func execute(
@@ -32,7 +36,7 @@ final class BatteryControlService: ObservableObject {
         reason: String,
         batteryPercent: Int?
     ) async -> BatteryControlCommandResult {
-        availability = backend.availability
+        await refreshAvailability()
         let result: BatteryControlCommandResult
 
         switch availability {
@@ -88,7 +92,7 @@ final class BatteryControlService: ObservableObject {
             }
         }
 
-        availability = self.backend.availability
+        await refreshAvailability()
         recordEvent(
             source: .system,
             state: effectiveState,
@@ -146,5 +150,17 @@ final class BatteryControlService: ObservableObject {
             // Keep control path resilient even when diagnostics persistence fails.
         }
         refreshRecentEvents()
+    }
+
+    private func refreshAvailability() async {
+        let backend = self.backend
+        let refreshedAvailability = await withCheckedContinuation {
+            (continuation: CheckedContinuation<BatteryControlAvailability, Never>) in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: backend.availability)
+            }
+        }
+
+        availability = refreshedAvailability
     }
 }

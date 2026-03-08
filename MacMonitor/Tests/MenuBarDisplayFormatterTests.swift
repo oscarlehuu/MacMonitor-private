@@ -107,7 +107,7 @@ final class MenuBarDisplayFormatterTests: XCTestCase {
             storageFormat: .percentUsage
         )
 
-        let expectedRate = MetricFormatter.bytesPerSecond(nil)
+        let expectedRate = MetricFormatter.menuBarBitsPerSecond(nil)
         XCTAssertEqual(cpuTitle, "CPU: 0%")
         XCTAssertEqual(networkTitle, "NET: D \(expectedRate) U \(expectedRate)")
     }

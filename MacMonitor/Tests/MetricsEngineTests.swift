@@ -90,7 +90,7 @@ final class MetricsEngineTests: XCTestCase {
         XCTAssertEqual(refreshReasons, [.startup, .batteryNotification])
     }
 
-    func testNetworkSamplingPublishesNetworkSampleSnapshot() {
+    func testNetworkSamplingPublishesNetworkSampleSnapshot() async {
         let networkCollector = SequencedNetworkCollector(samples: [
             .unavailable,
             NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
@@ -112,7 +112,7 @@ final class MetricsEngineTests: XCTestCase {
             .store(in: &cancellables)
 
         engine.start()
-        wait(for: [expectation], timeout: 1.0)
+        await fulfillment(of: [expectation], timeout: 1.0)
 
         XCTAssertEqual(snapshots.map(\.refreshReason), [.startup, .networkSample])
         XCTAssertNil(snapshots.first?.network.downloadBytesPerSecond)

@@ -1,6 +1,15 @@
 import Foundation
 
 enum MetricFormatter {
+    private static func compactMenuBarRate(_ value: Double, unit: String) -> String {
+        if value < 10 {
+            let truncatedTenths = floor(value * 10) / 10
+            return String(format: "%3.1f%@", truncatedTenths, unit)
+        }
+
+        return String(format: "%3.0f%@", min(value, 999), unit)
+    }
+
     private static func makeByteFormatter() -> ByteCountFormatter {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useGB, .useMB]
@@ -61,6 +70,22 @@ enum MetricFormatter {
             return String(format: "%.0f Kbps", bitsPerSecond / 1_000)
         default:
             return String(format: "%.0f bps", bitsPerSecond)
+        }
+    }
+
+    static func menuBarBitsPerSecond(_ value: Double?) -> String {
+        guard let value else { return "--.-" }
+
+        let bitsPerSecond = max(0, value) * 8
+        switch bitsPerSecond {
+        case 1_000_000_000...:
+            return compactMenuBarRate(bitsPerSecond / 1_000_000_000, unit: "G")
+        case 1_000_000...:
+            return compactMenuBarRate(bitsPerSecond / 1_000_000, unit: "M")
+        case 1_000...:
+            return compactMenuBarRate(bitsPerSecond / 1_000, unit: "K")
+        default:
+            return String(format: "%3.0fb", min(bitsPerSecond, 999))
         }
     }
 
