@@ -166,10 +166,11 @@ final class MetricsEngine: ObservableObject {
                 latestSnapshot?.network.uploadBytesPerSecond == nil else {
                 return
             }
-            refresh(reason: .interval)
+            refreshNetworkSample()
         }
 
         networkBootstrapWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+        let bootstrapDelay = min(max(networkSamplingInterval, 0.05), 0.25)
+        DispatchQueue.main.asyncAfter(deadline: .now() + bootstrapDelay, execute: workItem)
     }
 }
