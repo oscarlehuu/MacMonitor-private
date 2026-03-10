@@ -9,7 +9,6 @@ extension Notification.Name {
 @MainActor
 final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
-    private let metricsEngine: MetricsEngine
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
     private let storageManagementViewModel: StorageManagementViewModel
@@ -29,7 +28,6 @@ final class MenuBarController: NSObject {
 
     init(
         viewModel: SystemSummaryViewModel,
-        metricsEngine: MetricsEngine,
         ramDetailsViewModel: RAMDetailsViewModel,
         ramPolicyViewModel: RAMPolicySettingsViewModel,
         storageManagementViewModel: StorageManagementViewModel,
@@ -39,7 +37,6 @@ final class MenuBarController: NSObject {
         diagnosticsExporter: DiagnosticsExporter
     ) {
         self.viewModel = viewModel
-        self.metricsEngine = metricsEngine
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
         self.storageManagementViewModel = storageManagementViewModel
@@ -130,21 +127,6 @@ final class MenuBarController: NSObject {
             }
             .store(in: &cancellables)
 
-        metricsEngine.$latestSnapshot
-            .compactMap { $0 }
-            .filter { $0.refreshReason == .networkSample }
-            .receive(on: RunLoop.main)
-            .sink { [weak self] snapshot in
-                guard let self else { return }
-                latestMenuBarSnapshot = mergedMenuBarSnapshot(
-                    incoming: snapshot,
-                    previous: latestMenuBarSnapshot
-                )
-                statusItem.button?.toolTip = viewModel.statusTooltip(for: latestMenuBarSnapshot)
-                renderStatusItem()
-            }
-            .store(in: &cancellables)
-
         Publishers.CombineLatest3(
             viewModel.settings.$menuBarDisplayMode,
             viewModel.settings.$menuBarMemoryFormat,
@@ -212,29 +194,6 @@ final class MenuBarController: NSObject {
         applyBackgroundStyle(to: button, mode: .both)
         button.contentTintColor = nil
     }
-
-    private func mergedMenuBarSnapshot(
-        incoming: SystemSnapshot,
-        previous: SystemSnapshot?
-    ) -> SystemSnapshot {
-        guard let previous else { return incoming }
-        guard incoming.refreshReason == .networkSample else { return incoming }
-
-        return SystemSnapshot(
-            id: previous.id,
-            schemaVersion: previous.schemaVersion,
-            timestamp: incoming.timestamp,
-            memory: previous.memory,
-            storage: previous.storage,
-            battery: previous.battery,
-            thermal: previous.thermal,
-            cpu: previous.cpu,
-            network: incoming.network,
-            gpu: previous.gpu,
-            refreshReason: previous.refreshReason
-        )
-    }
-
     private func resetRetainedStatusItemLength() {
         retainedStatusItemLength = 0
         statusItem.length = NSStatusItem.variableLength

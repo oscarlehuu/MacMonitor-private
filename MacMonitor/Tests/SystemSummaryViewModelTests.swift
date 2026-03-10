@@ -180,7 +180,7 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
     }
 
-    func testNetworkSampleDoesNotReplaceSummarySnapshotOrAppendHistory() {
+    func testNetworkSampleUpdatesCurrentSnapshotWithoutAppendingHistory() {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
         let historyDirectory = FileManager.default.temporaryDirectory
@@ -204,16 +204,15 @@ final class SystemSummaryViewModelTests: XCTestCase {
             settings: settings
         )
 
-        let expectation = expectation(description: "network sample emitted without replacing summary snapshot")
+        let expectation = expectation(description: "network sample updates current snapshot")
         var cancellables = Set<AnyCancellable>()
 
-        engine.$latestSnapshot
+        viewModel.$snapshot
             .compactMap { $0 }
             .filter { $0.refreshReason == .networkSample }
             .sink { snapshot in
                 XCTAssertEqual(snapshot.network.downloadBytesPerSecond, 9_000)
                 XCTAssertEqual(snapshot.network.uploadBytesPerSecond, 5_000)
-                XCTAssertEqual(viewModel.snapshot?.refreshReason, .startup)
                 XCTAssertEqual(viewModel.history.count, 1)
                 expectation.fulfill()
             }

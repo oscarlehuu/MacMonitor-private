@@ -44,7 +44,12 @@ final class BatteryControlService: ObservableObject {
         self.availability = .unavailable(reason: "Checking battery helper status.")
         refreshRecentEvents()
         let referenceDate = now()
-        schedulePruneIfNeeded(referenceDate: referenceDate, force: true)
+        if reservePruneIfNeeded(referenceDate: referenceDate, force: true) {
+            let eventStoreBox = SendableEventStoreBox(eventStore: eventStore)
+            Task.detached(priority: .utility) {
+                eventStoreBox.eventStore.pruneExpiredEvents(referenceDate: referenceDate)
+            }
+        }
 
         Task { [weak self] in
             await self?.refreshAvailability()
@@ -179,14 +184,25 @@ final class BatteryControlService: ObservableObject {
             message: message,
             batteryPercent: batteryPercent
         )
+        let shouldPrune = reservePruneIfNeeded(referenceDate: event.timestamp)
+        let eventStoreBox = SendableEventStoreBox(eventStore: eventStore)
+        let serviceBox = WeakServiceBox(self)
 
-        do {
-            try eventStore.append(event)
-        } catch {
-            // Keep control path resilient even when diagnostics persistence fails.
+        Task.detached(priority: .utility) {
+            do {
+                try eventStoreBox.eventStore.append(event)
+            } catch {
+                // Keep control path resilient even when diagnostics persistence fails.
+            }
+
+            if shouldPrune {
+                eventStoreBox.eventStore.pruneExpiredEvents(referenceDate: event.timestamp)
+            }
+
+            await MainActor.run {
+                serviceBox.service?.refreshRecentEvents()
+            }
         }
-        schedulePruneIfNeeded(referenceDate: event.timestamp)
-        refreshRecentEvents()
     }
 
     private func refreshAvailability() async {
@@ -201,17 +217,13 @@ final class BatteryControlService: ObservableObject {
         availability = refreshedAvailability
     }
 
-    private func schedulePruneIfNeeded(referenceDate: Date, force: Bool = false) {
+    private func reservePruneIfNeeded(referenceDate: Date, force: Bool = false) -> Bool {
         guard force || shouldPrune(referenceDate: referenceDate) else {
-            return
+            return false
         }
 
         lastPruneDate = referenceDate
-        let eventStoreBox = SendableEventStoreBox(eventStore: eventStore)
-
-        Task.detached(priority: .utility) {
-            eventStoreBox.eventStore.pruneExpiredEvents(referenceDate: referenceDate)
-        }
+        return true
     }
 
     private func shouldPrune(referenceDate: Date) -> Bool {
