@@ -82,7 +82,7 @@ final class NetworkSamplingCoordinator {
         }
 
         bootstrapWorkItem = workItem
-        let bootstrapDelay = min(max(interval, 0.05), 0.25)
+        let bootstrapDelay = interval * 0.5
         samplingQueue.asyncAfter(deadline: .now() + bootstrapDelay, execute: workItem)
     }
 

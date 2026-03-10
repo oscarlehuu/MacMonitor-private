@@ -95,22 +95,6 @@ final class BatteryControlService: ObservableObject {
         return result
     }
 
-    func installHelperIfNeeded() -> BatteryControlCommandResult {
-        let result = backend.installHelperIfNeeded()
-        availability = backend.availability
-
-        recordEvent(
-            source: .system,
-            state: effectiveState,
-            command: nil,
-            accepted: result.accepted,
-            message: result.message ?? "Helper install request completed.",
-            batteryPercent: nil
-        )
-
-        return result
-    }
-
     func installHelperIfNeededAsync() async -> BatteryControlCommandResult {
         let backendBox = SendableBackendBox(backend: backend)
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<BatteryControlCommandResult, Never>) in
