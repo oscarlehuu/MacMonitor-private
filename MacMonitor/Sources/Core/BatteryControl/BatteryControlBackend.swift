@@ -1,11 +1,11 @@
 import Foundation
 
-enum BatteryControlAvailability: Equatable {
+enum BatteryControlAvailability: Equatable, Sendable {
     case available
     case unavailable(reason: String)
 }
 
-enum BatteryControlCommand: Equatable, Hashable, Codable {
+enum BatteryControlCommand: Equatable, Hashable, Codable, Sendable {
     case setChargeLimit(Int)
     case startDischarge(targetPercent: Int)
     case stopDischarge
@@ -74,7 +74,7 @@ enum BatteryControlCommand: Equatable, Hashable, Codable {
     }
 }
 
-struct BatteryControlCommandResult: Equatable {
+struct BatteryControlCommandResult: Equatable, Sendable {
     let accepted: Bool
     let message: String?
 

@@ -11,18 +11,40 @@ final class BatteryControlService: ObservableObject {
     private let backend: BatteryControlBackend
     private let eventStore: BatteryEventStoring
     private let now: () -> Date
+    private let pruneInterval: TimeInterval
+    private var recentEventsRefreshSequence: UInt64 = 0
+    private var lastPruneDate: Date?
+
+    private struct SendableBackendBox: @unchecked Sendable {
+        let backend: BatteryControlBackend
+    }
+
+    private struct SendableEventStoreBox: @unchecked Sendable {
+        let eventStore: BatteryEventStoring
+    }
+
+    private final class WeakServiceBox: @unchecked Sendable {
+        weak var service: BatteryControlService?
+
+        init(_ service: BatteryControlService) {
+            self.service = service
+        }
+    }
 
     init(
         backend: BatteryControlBackend,
         eventStore: BatteryEventStoring,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        pruneInterval: TimeInterval = 6 * 60 * 60
     ) {
         self.backend = backend
         self.eventStore = eventStore
         self.now = now
+        self.pruneInterval = pruneInterval
         self.availability = .unavailable(reason: "Checking battery helper status.")
         refreshRecentEvents()
-        eventStore.pruneExpiredEvents(referenceDate: now())
+        let referenceDate = now()
+        schedulePruneIfNeeded(referenceDate: referenceDate, force: true)
 
         Task { [weak self] in
             await self?.refreshAvailability()
@@ -41,10 +63,10 @@ final class BatteryControlService: ObservableObject {
 
         switch availability {
         case .available:
-            let backend = self.backend
+            let backendBox = SendableBackendBox(backend: backend)
             result = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    continuation.resume(returning: backend.execute(command))
+                    continuation.resume(returning: backendBox.backend.execute(command))
                 }
             }
         case .unavailable(let unavailableReason):
@@ -85,10 +107,10 @@ final class BatteryControlService: ObservableObject {
     }
 
     func installHelperIfNeededAsync() async -> BatteryControlCommandResult {
-        let backend = self.backend
+        let backendBox = SendableBackendBox(backend: backend)
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<BatteryControlCommandResult, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: backend.installHelperIfNeeded())
+                continuation.resume(returning: backendBox.backend.installHelperIfNeeded())
             }
         }
 
@@ -123,7 +145,21 @@ final class BatteryControlService: ObservableObject {
     }
 
     func refreshRecentEvents(limit: Int = 20) {
-        recentEvents = eventStore.recentEvents(limit: limit)
+        let eventStoreBox = SendableEventStoreBox(eventStore: eventStore)
+        let serviceBox = WeakServiceBox(self)
+        recentEventsRefreshSequence &+= 1
+        let refreshSequence = recentEventsRefreshSequence
+
+        Task.detached(priority: .utility) {
+            let events = eventStoreBox.eventStore.recentEvents(limit: limit)
+            await MainActor.run {
+                guard let service = serviceBox.service,
+                      service.recentEventsRefreshSequence == refreshSequence else {
+                    return
+                }
+                service.recentEvents = events
+            }
+        }
     }
 
     private func recordEvent(
@@ -149,18 +185,39 @@ final class BatteryControlService: ObservableObject {
         } catch {
             // Keep control path resilient even when diagnostics persistence fails.
         }
+        schedulePruneIfNeeded(referenceDate: event.timestamp)
         refreshRecentEvents()
     }
 
     private func refreshAvailability() async {
-        let backend = self.backend
+        let backendBox = SendableBackendBox(backend: backend)
         let refreshedAvailability = await withCheckedContinuation {
             (continuation: CheckedContinuation<BatteryControlAvailability, Never>) in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: backend.availability)
+                continuation.resume(returning: backendBox.backend.availability)
             }
         }
 
         availability = refreshedAvailability
+    }
+
+    private func schedulePruneIfNeeded(referenceDate: Date, force: Bool = false) {
+        guard force || shouldPrune(referenceDate: referenceDate) else {
+            return
+        }
+
+        lastPruneDate = referenceDate
+        let eventStoreBox = SendableEventStoreBox(eventStore: eventStore)
+
+        Task.detached(priority: .utility) {
+            eventStoreBox.eventStore.pruneExpiredEvents(referenceDate: referenceDate)
+        }
+    }
+
+    private func shouldPrune(referenceDate: Date) -> Bool {
+        guard let lastPruneDate else {
+            return true
+        }
+        return referenceDate.timeIntervalSince(lastPruneDate) >= pruneInterval
     }
 }

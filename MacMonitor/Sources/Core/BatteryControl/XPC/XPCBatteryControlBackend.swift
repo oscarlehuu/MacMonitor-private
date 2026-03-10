@@ -1,6 +1,6 @@
 import Foundation
 
-final class XPCBatteryControlBackend: BatteryControlBackend {
+final class XPCBatteryControlBackend: BatteryControlBackend, @unchecked Sendable {
     private let serviceName: String
     private let helperInstaller: BatteryHelperInstalling
     private let timeout: TimeInterval

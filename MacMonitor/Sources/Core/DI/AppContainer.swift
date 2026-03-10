@@ -151,6 +151,7 @@ final class AppContainer {
 
         let menuBar = MenuBarController(
             viewModel: viewModel,
+            metricsEngine: engine,
             ramDetailsViewModel: ramDetails,
             ramPolicyViewModel: policyViewModel,
             storageManagementViewModel: storageManagementViewModel,

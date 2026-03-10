@@ -102,11 +102,10 @@ final class SystemSummaryViewModel: ObservableObject {
                     incoming: newSnapshot,
                     previous: snapshot
                 )
-                snapshot = mergedSnapshot
                 if mergedSnapshot.refreshReason == .networkSample {
-                    appGroupSnapshotStore?.write(snapshot: mergedSnapshot, history: history, referenceDate: now())
                     return
                 }
+                snapshot = mergedSnapshot
                 history.append(mergedSnapshot)
                 if history.count > 3_500 {
                     history = Array(history.suffix(3_500))
@@ -198,6 +197,10 @@ final class SystemSummaryViewModel: ObservableObject {
     }
 
     var statusTooltip: String {
+        statusTooltip(for: snapshot)
+    }
+
+    func statusTooltip(for snapshot: SystemSnapshot?) -> String {
         guard let snapshot else {
             return "MacMonitor: waiting for data"
         }

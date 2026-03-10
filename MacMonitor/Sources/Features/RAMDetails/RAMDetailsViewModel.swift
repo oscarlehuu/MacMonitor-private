@@ -392,26 +392,27 @@ final class RAMDetailsViewModel: ObservableObject {
         let scope = scopeMode
 
         do {
-            let (allMineRows, allRows) = try await Task.detached(priority: .userInitiated) {
-                let mine = try collector.collectTopProcesses(limit: 10_000, scope: .sameUserOnly)
-                let all = try collector.collectTopProcesses(limit: 10_000, scope: .allDiscoverable)
-                return (mine, all)
-            }.value
-
-            guard !Task.isCancelled else { return }
-
-            myProcessBytes = allMineRows.reduce(0) { $0 + $1.rankingBytes }
-            allProcessBytes = allRows.reduce(0) { $0 + $1.rankingBytes }
-            myProcessCount = allMineRows.count
-            allProcessCount = allRows.count
-
-            let mineRows = showAll ? allMineRows : Array(allMineRows.prefix(rows))
-
             let refreshed: [ProcessMemoryItem]
             switch scope {
             case .sameUserOnly:
-                refreshed = mineRows
+                let mineRows = try await Task.detached(priority: .userInitiated) {
+                    try collector.collectTopProcesses(limit: 10_000, scope: .sameUserOnly)
+                }.value
+
+                guard !Task.isCancelled else { return }
+
+                myProcessBytes = mineRows.reduce(0) { $0 + $1.rankingBytes }
+                myProcessCount = mineRows.count
+                refreshed = showAll ? mineRows : Array(mineRows.prefix(rows))
             case .allDiscoverable:
+                let allRows = try await Task.detached(priority: .userInitiated) {
+                    try collector.collectTopProcesses(limit: 10_000, scope: .allDiscoverable)
+                }.value
+
+                guard !Task.isCancelled else { return }
+
+                allProcessBytes = allRows.reduce(0) { $0 + $1.rankingBytes }
+                allProcessCount = allRows.count
                 refreshed = Array(allRows.prefix(rows))
             }
 

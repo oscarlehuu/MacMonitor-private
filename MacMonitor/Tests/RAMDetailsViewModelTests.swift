@@ -20,7 +20,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         await viewModel.performRefresh()
 
         XCTAssertEqual(viewModel.processes.count, 1)
-        XCTAssertEqual(collector.callCount, 2)
+        XCTAssertEqual(collector.callCount, 1)
     }
 
     func testStartDoesNotRefreshWhenInactive() async {
@@ -68,7 +68,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         viewModel.setRefreshActive(true)
         await viewModel.pendingRefreshTask?.value
 
-        XCTAssertEqual(collector.callCount, 2)
+        XCTAssertEqual(collector.callCount, 1)
         XCTAssertEqual(viewModel.processes.map(\.pid), [112])
         viewModel.stop()
     }
@@ -98,7 +98,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.selectedProcessIDs.isEmpty)
         XCTAssertEqual(viewModel.scopeMode, .allDiscoverable)
-        XCTAssertEqual(collector.callCount, 4)
+        XCTAssertEqual(collector.callCount, 2)
         viewModel.stop()
     }
 
@@ -157,7 +157,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showingTerminateConfirmation)
     }
 
-    func testComputesMineAndAllProcessBytesFromAllScopeData() async {
+    func testComputesCurrentScopeProcessBytesOnDemand() async {
         let collector = FakeProcessCollector()
         collector.mineItems = [makeProcess(pid: 401, name: "Mine", userID: 501, protected: false, rankingBytes: 120)]
         collector.allItems = [
@@ -176,7 +176,13 @@ final class RAMDetailsViewModelTests: XCTestCase {
         await viewModel.performRefresh()
 
         XCTAssertEqual(viewModel.myProcessBytes, 120)
+        XCTAssertEqual(viewModel.allProcessBytes, 0)
+
+        viewModel.setScopeMode(.allDiscoverable)
+        await viewModel.pendingRefreshTask?.value
+
         XCTAssertEqual(viewModel.allProcessBytes, 420)
+        XCTAssertEqual(viewModel.allProcessCount, 2)
     }
 
     func testSetShowAllMineLoadsAllMineRows() async {
@@ -205,7 +211,7 @@ final class RAMDetailsViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.showAllMine)
         XCTAssertEqual(viewModel.processes.count, 3)
-        XCTAssertEqual(collector.callCount, 4)
+        XCTAssertEqual(collector.callCount, 2)
     }
 
     func testSetModeToPortsLoadsListeningRows() async {

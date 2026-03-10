@@ -9,6 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let application = NSApplication.shared
 
+        // Keep the XCTest host app as inert as possible so unit tests do not boot
+        // background services, Sparkle, or menu bar UI.
+        if isRunningTests {
+            return
+        }
+
         guard !handleDuplicateLaunchIfNeeded() else {
             application.terminate(nil)
             return
@@ -45,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDuplicateLaunchIfNeeded() -> Bool {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        if isRunningTests {
             return false
         }
 
@@ -83,5 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             deliverImmediately: true
         )
         return true
+    }
+
+    private var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

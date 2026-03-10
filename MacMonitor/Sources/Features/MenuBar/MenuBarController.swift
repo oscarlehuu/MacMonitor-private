@@ -9,6 +9,7 @@ extension Notification.Name {
 @MainActor
 final class MenuBarController: NSObject {
     private let viewModel: SystemSummaryViewModel
+    private let metricsEngine: MetricsEngine
     private let ramDetailsViewModel: RAMDetailsViewModel
     private let ramPolicyViewModel: RAMPolicySettingsViewModel
     private let storageManagementViewModel: StorageManagementViewModel
@@ -24,9 +25,11 @@ final class MenuBarController: NSObject {
     private var isAuxiliaryPanelPresented = false
     private var hasInstalledStatusButton = false
     private var retainedStatusItemLength: CGFloat = 0
+    private var latestMenuBarSnapshot: SystemSnapshot?
 
     init(
         viewModel: SystemSummaryViewModel,
+        metricsEngine: MetricsEngine,
         ramDetailsViewModel: RAMDetailsViewModel,
         ramPolicyViewModel: RAMPolicySettingsViewModel,
         storageManagementViewModel: StorageManagementViewModel,
@@ -36,6 +39,7 @@ final class MenuBarController: NSObject {
         diagnosticsExporter: DiagnosticsExporter
     ) {
         self.viewModel = viewModel
+        self.metricsEngine = metricsEngine
         self.ramDetailsViewModel = ramDetailsViewModel
         self.ramPolicyViewModel = ramPolicyViewModel
         self.storageManagementViewModel = storageManagementViewModel
@@ -118,9 +122,25 @@ final class MenuBarController: NSObject {
     private func bindViewModel() {
         viewModel.$snapshot
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] snapshot in
                 guard let self else { return }
-                statusItem.button?.toolTip = viewModel.statusTooltip
+                latestMenuBarSnapshot = snapshot
+                statusItem.button?.toolTip = viewModel.statusTooltip(for: latestMenuBarSnapshot)
+                renderStatusItem()
+            }
+            .store(in: &cancellables)
+
+        metricsEngine.$latestSnapshot
+            .compactMap { $0 }
+            .filter { $0.refreshReason == .networkSample }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] snapshot in
+                guard let self else { return }
+                latestMenuBarSnapshot = mergedMenuBarSnapshot(
+                    incoming: snapshot,
+                    previous: latestMenuBarSnapshot
+                )
+                statusItem.button?.toolTip = viewModel.statusTooltip(for: latestMenuBarSnapshot)
                 renderStatusItem()
             }
             .store(in: &cancellables)
@@ -156,6 +176,7 @@ final class MenuBarController: NSObject {
     private func renderStatusItem() {
         guard let button = statusItem.button else { return }
         let settings = viewModel.settings
+        let snapshot = latestMenuBarSnapshot ?? viewModel.snapshot
 
         button.imagePosition = .noImage
         button.imageScaling = .scaleProportionallyDown
@@ -166,7 +187,7 @@ final class MenuBarController: NSObject {
         )
 
         let composedOutput = MenuBarDisplayFormatter.composedValue(
-            for: viewModel.snapshot,
+            for: snapshot,
             configuration: settings.menuBarComposerConfiguration
         )
         let titleFont = button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
@@ -190,6 +211,28 @@ final class MenuBarController: NSObject {
         retainStatusItemLength(for: button)
         applyBackgroundStyle(to: button, mode: .both)
         button.contentTintColor = nil
+    }
+
+    private func mergedMenuBarSnapshot(
+        incoming: SystemSnapshot,
+        previous: SystemSnapshot?
+    ) -> SystemSnapshot {
+        guard let previous else { return incoming }
+        guard incoming.refreshReason == .networkSample else { return incoming }
+
+        return SystemSnapshot(
+            id: previous.id,
+            schemaVersion: previous.schemaVersion,
+            timestamp: incoming.timestamp,
+            memory: previous.memory,
+            storage: previous.storage,
+            battery: previous.battery,
+            thermal: previous.thermal,
+            cpu: previous.cpu,
+            network: incoming.network,
+            gpu: previous.gpu,
+            refreshReason: previous.refreshReason
+        )
     }
 
     private func resetRetainedStatusItemLength() {
