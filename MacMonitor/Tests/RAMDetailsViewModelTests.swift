@@ -183,6 +183,8 @@ final class RAMDetailsViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.allProcessBytes, 420)
         XCTAssertEqual(viewModel.allProcessCount, 2)
+        XCTAssertEqual(viewModel.myProcessBytes, 0)
+        XCTAssertEqual(viewModel.myProcessCount, 0)
     }
 
     func testSetShowAllMineLoadsAllMineRows() async {

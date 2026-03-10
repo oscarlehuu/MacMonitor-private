@@ -44,7 +44,6 @@ final class MetricsEngine: ObservableObject {
         self.now = now
         self.networkSamplingCoordinator = NetworkSamplingCoordinator(
             collector: networkCollector,
-            now: now,
             interval: networkSamplingInterval
         )
     }
@@ -104,9 +103,10 @@ final class MetricsEngine: ObservableObject {
     }
 
     private func scheduleNetworkSampling() {
-        networkSamplingCoordinator.start { [weak self] timestamp, snapshot in
+        networkSamplingCoordinator.start { [weak self] snapshot in
             Task { @MainActor [weak self] in
-                self?.applyNetworkSample(snapshot, timestamp: timestamp)
+                guard let self else { return }
+                self.applyNetworkSample(snapshot, timestamp: self.now())
             }
         }
     }

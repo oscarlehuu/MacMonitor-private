@@ -149,12 +149,11 @@ final class NetworkSamplingCoordinatorTests: XCTestCase {
             collector: SequencedNetworkCollector(samples: [
                 NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
             ]),
-            now: Date.init,
             interval: 0.05
         )
         let expectation = expectation(description: "publish first network sample")
 
-        coordinator.start { _, _ in
+        coordinator.start { _ in
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
@@ -177,11 +176,10 @@ final class NetworkSamplingCoordinatorTests: XCTestCase {
 
         let coordinator = NetworkSamplingCoordinator(
             collector: collector,
-            now: Date.init,
             interval: 0.05
         )
 
-        coordinator.start { _, _ in
+        coordinator.start { _ in
             callbackExpectation.fulfill()
         }
 

@@ -25,6 +25,7 @@ final class MenuBarController: NSObject {
     private var hasInstalledStatusButton = false
     private var retainedStatusItemLength: CGFloat = 0
     private var latestMenuBarSnapshot: SystemSnapshot?
+    private let retainedStatusItemShrinkStep: CGFloat = 6
 
     init(
         viewModel: SystemSummaryViewModel,
@@ -203,7 +204,11 @@ final class MenuBarController: NSObject {
         let textWidth = ceil(button.attributedTitle.size().width)
         let minimumLength = max(18, ceil(button.bounds.height))
         let targetLength = max(minimumLength, textWidth + 10)
-        retainedStatusItemLength = max(retainedStatusItemLength, targetLength)
+        if retainedStatusItemLength == 0 || targetLength >= retainedStatusItemLength {
+            retainedStatusItemLength = targetLength
+        } else {
+            retainedStatusItemLength = max(targetLength, retainedStatusItemLength - retainedStatusItemShrinkStep)
+        }
         statusItem.length = retainedStatusItemLength
     }
 

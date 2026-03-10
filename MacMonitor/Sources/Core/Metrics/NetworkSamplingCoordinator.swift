@@ -1,10 +1,9 @@
 import Foundation
 
 final class NetworkSamplingCoordinator {
-    typealias SampleHandler = @Sendable (_ timestamp: Date, _ snapshot: NetworkSnapshot) -> Void
+    typealias SampleHandler = @Sendable (_ snapshot: NetworkSnapshot) -> Void
 
     private let collector: NetworkCollecting
-    private let now: () -> Date
     private let interval: TimeInterval
     private let samplingQueue = DispatchQueue(
         label: "com.oscar.macmonitor.network-sampling",
@@ -19,11 +18,9 @@ final class NetworkSamplingCoordinator {
 
     init(
         collector: NetworkCollecting,
-        now: @escaping () -> Date,
         interval: TimeInterval
     ) {
         self.collector = collector
-        self.now = now
         self.interval = interval
     }
 
@@ -95,7 +92,7 @@ final class NetworkSamplingCoordinator {
     ) {
         let snapshot = collector.collect()
         guard store(snapshot, expectedGeneration: expectedGeneration) else { return }
-        onSample(now(), snapshot)
+        onSample(snapshot)
     }
 
     private func store(_ snapshot: NetworkSnapshot, expectedGeneration: UInt64) -> Bool {

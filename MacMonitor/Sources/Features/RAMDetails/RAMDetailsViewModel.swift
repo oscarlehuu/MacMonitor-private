@@ -403,6 +403,8 @@ final class RAMDetailsViewModel: ObservableObject {
 
                 myProcessBytes = mineRows.reduce(0) { $0 + $1.rankingBytes }
                 myProcessCount = mineRows.count
+                allProcessBytes = 0
+                allProcessCount = 0
                 refreshed = showAll ? mineRows : Array(mineRows.prefix(rows))
             case .allDiscoverable:
                 let allRows = try await Task.detached(priority: .userInitiated) {
@@ -411,6 +413,8 @@ final class RAMDetailsViewModel: ObservableObject {
 
                 guard !Task.isCancelled else { return }
 
+                myProcessBytes = 0
+                myProcessCount = 0
                 allProcessBytes = allRows.reduce(0) { $0 + $1.rankingBytes }
                 allProcessCount = allRows.count
                 refreshed = Array(allRows.prefix(rows))
