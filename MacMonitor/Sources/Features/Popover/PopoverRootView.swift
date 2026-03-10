@@ -351,10 +351,15 @@ struct PopoverRootView: View {
             isStorageSummaryExpanded = false
             hoveredStorageSegmentID = nil
             normalizeLegacyScreenIfNeeded()
+            synchronizeRAMDetailsRefresh(for: viewModel.screen)
             storageManagementViewModel.loadIfNeeded()
         }
         .onDisappear {
+            ramDetailsViewModel.stop()
             resetPopoverResizeDragState()
+        }
+        .onChange(of: viewModel.screen) { _, screen in
+            synchronizeRAMDetailsRefresh(for: screen)
         }
         .onChange(of: storageManagementViewModel.showingDeleteConfirmation) { _, isPresented in
             if isPresented {
@@ -3033,6 +3038,18 @@ struct PopoverRootView: View {
         case .ram, .storage, .trends, .settings, .ramPolicyManager:
             break
         }
+    }
+
+    private func synchronizeRAMDetailsRefresh(for screen: SystemSummaryViewModel.Screen) {
+        let shouldRefresh = screen == .ram || screen == .temperature
+
+        if shouldRefresh {
+            ramDetailsViewModel.start()
+            ramDetailsViewModel.setRefreshActive(true)
+            return
+        }
+
+        ramDetailsViewModel.setRefreshActive(false)
     }
 
     private func exportDiagnostics() {

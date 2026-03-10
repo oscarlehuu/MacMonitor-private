@@ -48,7 +48,7 @@ final class MenuBarController: NSObject {
     }
 
     func install() {
-        popover.behavior = .applicationDefined
+        popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
@@ -113,7 +113,7 @@ final class MenuBarController: NSObject {
         guard isAuxiliaryPanelPresented != isPresented else { return }
 
         isAuxiliaryPanelPresented = isPresented
-        popover.behavior = .applicationDefined
+        popover.behavior = isPresented ? .applicationDefined : .transient
     }
 
     private func bindViewModel() {
@@ -201,7 +201,8 @@ final class MenuBarController: NSObject {
 
     private func retainStatusItemLength(for button: NSStatusBarButton) {
         let textWidth = ceil(button.attributedTitle.size().width)
-        let targetLength = max(NSStatusItem.squareLength, textWidth + 10)
+        let minimumLength = max(18, ceil(button.bounds.height))
+        let targetLength = max(minimumLength, textWidth + 10)
         retainedStatusItemLength = max(retainedStatusItemLength, targetLength)
         statusItem.length = retainedStatusItemLength
     }
