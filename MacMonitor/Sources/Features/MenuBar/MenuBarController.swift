@@ -365,7 +365,7 @@ final class MenuBarController: NSObject {
 
         button.action = #selector(togglePopover(_:))
         button.target = self
-        button.sendAction(on: [.leftMouseUp])
+        button.sendAction(on: [.leftMouseDown])
         hasInstalledStatusButton = true
         renderStatusItem()
     }

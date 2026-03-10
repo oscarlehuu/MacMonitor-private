@@ -27,7 +27,6 @@ final class AppGroupSnapshotStore {
     private let fileManager: FileManager
     private let directoryURL: URL
     private let fileURL: URL
-    private let decoder = JSONDecoder()
     private let stateQueue = DispatchQueue(label: "com.oscar.macmonitor.app-group-snapshot-state")
     private let writeQueue = DispatchQueue(label: "com.oscar.macmonitor.app-group-snapshot-write")
     private var cachedSummary: SharedSnapshotSummary?
@@ -51,8 +50,6 @@ final class AppGroupSnapshotStore {
         }
 
         fileURL = directoryURL.appendingPathComponent("shared-snapshot-v2.json")
-
-        decoder.dateDecodingStrategy = .iso8601
 
         ensureDirectoryExists()
     }
@@ -95,19 +92,17 @@ final class AppGroupSnapshotStore {
     }
 
     func loadSummary() -> SharedSnapshotSummary? {
-        if let cachedSummary = stateQueue.sync(execute: { cachedSummary }) {
-            return cachedSummary
-        }
-
-        guard let data = try? Data(contentsOf: fileURL),
-              let summary = try? decoder.decode(SharedSnapshotSummary.self, from: data) else {
-            return nil
-        }
-
         return stateQueue.sync {
             if let cachedSummary {
                 return cachedSummary
             }
+
+            let decoder = Self.makeDecoder()
+            guard let data = try? Data(contentsOf: fileURL),
+                  let summary = try? decoder.decode(SharedSnapshotSummary.self, from: data) else {
+                return nil
+            }
+
             cachedSummary = summary
             return summary
         }
@@ -171,5 +166,11 @@ final class AppGroupSnapshotStore {
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }
