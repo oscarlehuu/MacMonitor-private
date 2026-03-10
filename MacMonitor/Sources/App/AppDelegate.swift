@@ -51,10 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDuplicateLaunchIfNeeded() -> Bool {
-        if isRunningTests {
-            return false
-        }
-
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
             return false
         }

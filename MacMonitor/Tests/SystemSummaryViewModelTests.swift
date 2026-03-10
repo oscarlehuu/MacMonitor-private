@@ -275,6 +275,8 @@ final class SystemSummaryViewModelTests: XCTestCase {
 
         now = Date(timeIntervalSince1970: 200)
         wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(viewModel.snapshot?.network.downloadBytesPerSecond, 9_000)
+        XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
     }
 
     private func makeViewModel() -> SystemSummaryViewModel {

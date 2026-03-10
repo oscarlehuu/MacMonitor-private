@@ -104,10 +104,13 @@ final class AppGroupSnapshotStore {
             return nil
         }
 
-        stateQueue.sync {
+        return stateQueue.sync {
+            if let cachedSummary {
+                return cachedSummary
+            }
             cachedSummary = summary
+            return summary
         }
-        return summary
     }
 
     private func makePoint(from snapshot: SystemSnapshot) -> SharedSnapshotPoint {

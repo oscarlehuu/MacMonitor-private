@@ -103,6 +103,7 @@ final class SystemSummaryViewModel: ObservableObject {
                     previous: snapshot
                 )
                 if mergedSnapshot.refreshReason == .networkSample {
+                    snapshot = mergedSnapshot
                     return
                 }
                 snapshot = mergedSnapshot
