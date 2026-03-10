@@ -90,7 +90,7 @@ final class MetricsEngineTests: XCTestCase {
         XCTAssertEqual(refreshReasons, [.startup, .batteryNotification])
     }
 
-    func testNetworkSamplingPublishesNetworkSampleSnapshot() async {
+    func testNetworkSamplingPublishesNetworkSampleSnapshot() {
         let networkCollector = SequencedNetworkCollector(samples: [
             .unavailable,
             NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
@@ -112,7 +112,7 @@ final class MetricsEngineTests: XCTestCase {
             .store(in: &cancellables)
 
         engine.start()
-        await fulfillment(of: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 2.0)
 
         XCTAssertEqual(snapshots.map(\.refreshReason), [.startup, .networkSample])
         XCTAssertNil(snapshots.first?.network.downloadBytesPerSecond)
@@ -143,7 +143,57 @@ final class MetricsEngineTests: XCTestCase {
     }
 }
 
+final class NetworkSamplingCoordinatorTests: XCTestCase {
+    func testStopClearsCachedSnapshot() {
+        let coordinator = NetworkSamplingCoordinator(
+            collector: SequencedNetworkCollector(samples: [
+                NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+            ]),
+            interval: 0.05
+        )
+        let expectation = expectation(description: "publish first network sample")
+
+        coordinator.start { _ in
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+
+        coordinator.stop()
+
+        XCTAssertEqual(coordinator.cachedSnapshot(), .unavailable)
+    }
+
+    func testStopPreventsInFlightSampleFromPublishing() {
+        let collector = BlockingNetworkCollector(
+            snapshot: NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+        )
+        let callbackExpectation = expectation(description: "sample should not publish after stop")
+        callbackExpectation.isInverted = true
+        let startedExpectation = expectation(description: "collector started")
+        collector.onCollectStarted = {
+            startedExpectation.fulfill()
+        }
+
+        let coordinator = NetworkSamplingCoordinator(
+            collector: collector,
+            interval: 0.05
+        )
+
+        coordinator.start { _ in
+            callbackExpectation.fulfill()
+        }
+
+        wait(for: [startedExpectation], timeout: 1.0)
+        coordinator.stop()
+        collector.finishCollecting()
+
+        wait(for: [callbackExpectation], timeout: 0.2)
+        XCTAssertEqual(coordinator.cachedSnapshot(), .unavailable)
+    }
+}
+
 final class MemoryCollectorTests: XCTestCase {
+
     func testMemoryUsedBytesSubtractsCachedAndFree() {
         let used = MemoryCollector.memoryUsedBytes(totalBytes: 1_000, cachedFilesBytes: 300, freeBytes: 200)
 
@@ -202,7 +252,33 @@ private final class SequencedNetworkCollector: NetworkCollecting {
     }
 }
 
+private final class BlockingNetworkCollector: NetworkCollecting {
+    private let snapshot: NetworkSnapshot
+    private let startedLock = NSLock()
+    private let releaseSemaphore = DispatchSemaphore(value: 0)
+    var onCollectStarted: (() -> Void)?
+
+    init(snapshot: NetworkSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func collect() -> NetworkSnapshot {
+        startedLock.lock()
+        let onCollectStarted = self.onCollectStarted
+        startedLock.unlock()
+
+        onCollectStarted?()
+        releaseSemaphore.wait()
+        return snapshot
+    }
+
+    func finishCollecting() {
+        releaseSemaphore.signal()
+    }
+}
+
 private final class FakeBatteryCollector: BatteryCollecting {
+
     private let subject = PassthroughSubject<Void, Never>()
     private var current: BatterySnapshot
 

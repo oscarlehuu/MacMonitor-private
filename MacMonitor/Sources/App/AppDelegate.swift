@@ -3,11 +3,20 @@ import Carbon.HIToolbox
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let duplicateLaunchGracePeriod: TimeInterval = 1.0
+    private static let duplicateLaunchPollInterval: TimeInterval = 0.05
+
     private var container: AppContainer?
     private let livenessChecker = POSIXProcessLivenessChecker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let application = NSApplication.shared
+
+        // Keep the XCTest host app as inert as possible so unit tests do not boot
+        // background services, Sparkle, or menu bar UI.
+        if isRunningTests {
+            return
+        }
 
         guard !handleDuplicateLaunchIfNeeded() else {
             application.terminate(nil)
@@ -45,27 +54,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDuplicateLaunchIfNeeded() -> Bool {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            return false
-        }
-
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
             return false
         }
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
         let currentBundleVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
-        let runningWithSameBundle = NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleIdentifier)
-            .filter { app in
-                app.processIdentifier != currentPID &&
-                !app.isTerminated &&
-                livenessChecker.isAlive(processID: app.processIdentifier)
-            }
+        var runningWithSameBundle = runningSiblingApplications(
+            bundleIdentifier: bundleIdentifier,
+            currentPID: currentPID
+        )
 
         if !runningWithSameBundle.isEmpty,
            AppUpdateController.consumePendingRelaunchVersion(matching: currentBundleVersion) {
-            return false
+            let graceDeadline = Date().addingTimeInterval(Self.duplicateLaunchGracePeriod)
+            while Date() < graceDeadline {
+                if runningSiblingApplications(bundleIdentifier: bundleIdentifier, currentPID: currentPID).isEmpty {
+                    return false
+                }
+                RunLoop.current.run(
+                    mode: .default,
+                    before: Date().addingTimeInterval(Self.duplicateLaunchPollInterval)
+                )
+            }
+
+            runningWithSameBundle = runningSiblingApplications(
+                bundleIdentifier: bundleIdentifier,
+                currentPID: currentPID
+            )
         }
 
         if runningWithSameBundle.isEmpty {
@@ -83,5 +99,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             deliverImmediately: true
         )
         return true
+    }
+
+    private func runningSiblingApplications(
+        bundleIdentifier: String,
+        currentPID: pid_t
+    ) -> [NSRunningApplication] {
+        NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { app in
+                app.processIdentifier != currentPID &&
+                !app.isTerminated &&
+                livenessChecker.isAlive(processID: app.processIdentifier)
+            }
+    }
+
+    private var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

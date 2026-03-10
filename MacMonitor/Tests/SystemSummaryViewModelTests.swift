@@ -180,31 +180,29 @@ final class SystemSummaryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
     }
 
-    func testNetworkSampleUpdatesSnapshotWithoutAppendingHistory() {
+    func testNetworkSampleUpdatesCurrentSnapshotWithoutAppendingHistory() {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
         let historyDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SystemSummaryViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        let engine = MetricsEngine(
+            memoryCollector: DummyMemoryCollector(),
+            storageCollector: DummyStorageCollector(),
+            batteryCollector: DummyBatteryCollector(),
+            thermalCollector: DummyThermalCollector(),
+            cpuCollector: DummyCPUCollector(),
+            networkCollector: SequencedNetworkCollector(samples: [
+                .unavailable,
+                NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+            ]),
+            settings: settings,
+            networkSamplingInterval: 0.05
+        )
         let viewModel = SystemSummaryViewModel(
-            engine: MetricsEngine(
-                memoryCollector: DummyMemoryCollector(),
-                storageCollector: DummyStorageCollector(),
-                batteryCollector: DummyBatteryCollector(),
-                thermalCollector: DummyThermalCollector(),
-                cpuCollector: DummyCPUCollector(),
-                networkCollector: SequencedNetworkCollector(samples: [
-                    .unavailable,
-                    NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
-                ]),
-                settings: settings,
-                networkSamplingInterval: 0.05
-            ),
+            engine: engine,
             snapshotStore: SnapshotStore(baseDirectoryURL: historyDirectory),
             settings: settings
         )
-
-        viewModel.start()
-        defer { viewModel.stop() }
 
         let expectation = expectation(description: "network sample updates current snapshot")
         var cancellables = Set<AnyCancellable>()
@@ -220,8 +218,66 @@ final class SystemSummaryViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
 
-        wait(for: [expectation], timeout: 1.0)
+        viewModel.start()
+        defer { viewModel.stop() }
+
+        wait(for: [expectation], timeout: 2.0)
     }
+
+    func testNetworkSampleDoesNotRewriteSharedSnapshotSummary() {
+        let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
+        let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SystemSummaryViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        let snapshotStore = SnapshotStore(baseDirectoryURL: tempDirectory)
+        let sharedStore = AppGroupSnapshotStore(fallbackBaseDirectoryURL: tempDirectory)
+        var now = Date(timeIntervalSince1970: 100)
+
+        let engine = MetricsEngine(
+            memoryCollector: DummyMemoryCollector(),
+            storageCollector: DummyStorageCollector(),
+            batteryCollector: DummyBatteryCollector(),
+            thermalCollector: DummyThermalCollector(),
+            cpuCollector: DummyCPUCollector(),
+            networkCollector: SequencedNetworkCollector(samples: [
+                .unavailable,
+                NetworkSnapshot(downloadBytesPerSecond: 9_000, uploadBytesPerSecond: 5_000)
+            ]),
+            settings: settings,
+            now: { now },
+            networkSamplingInterval: 0.05
+        )
+        let viewModel = SystemSummaryViewModel(
+            engine: engine,
+            snapshotStore: snapshotStore,
+            settings: settings,
+            appGroupSnapshotStore: sharedStore,
+            now: { now }
+        )
+
+        let expectation = expectation(description: "network sample leaves shared summary untouched")
+        var cancellables = Set<AnyCancellable>()
+
+        engine.$latestSnapshot
+            .compactMap { $0 }
+            .filter { $0.refreshReason == .networkSample }
+            .sink { _ in
+                XCTAssertEqual(sharedStore.loadSummary()?.generatedAt, Date(timeIntervalSince1970: 100))
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        viewModel.start()
+        defer { viewModel.stop() }
+
+        XCTAssertEqual(sharedStore.loadSummary()?.generatedAt, now)
+
+        now = Date(timeIntervalSince1970: 200)
+        wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(viewModel.snapshot?.network.downloadBytesPerSecond, 9_000)
+        XCTAssertEqual(viewModel.snapshot?.network.uploadBytesPerSecond, 5_000)
+    }
+
     private func makeViewModel() -> SystemSummaryViewModel {
         let defaults = UserDefaults(suiteName: "SystemSummaryViewModelTests-\(UUID().uuidString)")!
         let settings = SettingsStore(defaults: defaults, launchAtLoginManager: DummyLaunchAtLoginManager())
@@ -250,6 +306,7 @@ final class SystemSummaryViewModelTests: XCTestCase {
             message: "\(kind.rawValue)-message"
         )
     }
+
 }
 
 private struct DummyMemoryCollector: MemoryCollecting {

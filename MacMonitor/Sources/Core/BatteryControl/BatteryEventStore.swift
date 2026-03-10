@@ -76,17 +76,14 @@ final class FileBatteryEventStore: BatteryEventStoring {
 
     func append(_ event: BatteryControlEvent) throws {
         try syncThrowing {
-            var events = loadEvents()
-            events = prune(events: events, referenceDate: event.timestamp)
-            events.append(event)
-            try write(events: events)
+            try appendLine(for: event)
         }
     }
 
     func recentEvents(limit: Int) -> [BatteryControlEvent] {
         queue.sync {
             guard limit > 0 else { return [] }
-            let pruned = prune(events: loadEvents(), referenceDate: Date())
+            let pruned = prune(events: loadRecentEvents(limit: max(limit * 3, limit)), referenceDate: Date())
             return Array(
                 pruned
                     .sorted(by: { $0.timestamp > $1.timestamp })
@@ -120,6 +117,60 @@ final class FileBatteryEventStore: BatteryEventStoring {
             }
     }
 
+    private func loadRecentEvents(limit: Int) -> [BatteryControlEvent] {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return []
+        }
+
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+            return loadEvents()
+        }
+
+        defer {
+            try? handle.close()
+        }
+
+        do {
+            let fileSize = try handle.seekToEnd()
+            if fileSize == 0 {
+                return []
+            }
+
+            let chunkSize: UInt64 = 64 * 1024
+            var cursor = fileSize
+            var buffer = Data()
+            var newlineCount = 0
+            let targetLineCount = max(limit + 1, 8)
+
+            while cursor > 0, newlineCount < targetLineCount {
+                let readSize = min(chunkSize, cursor)
+                cursor -= readSize
+                try handle.seek(toOffset: cursor)
+
+                guard let chunk = try handle.read(upToCount: Int(readSize)), !chunk.isEmpty else {
+                    break
+                }
+
+                buffer.insert(contentsOf: chunk, at: 0)
+                newlineCount += chunk.reduce(into: 0) { count, byte in
+                    if byte == 0x0A {
+                        count += 1
+                    }
+                }
+            }
+
+            let candidateLines = buffer
+                .split(separator: 0x0A)
+                .suffix(max(limit * 2, limit))
+
+            return candidateLines.compactMap { line in
+                try? decoder.decode(BatteryControlEvent.self, from: Data(line))
+            }
+        } catch {
+            return loadEvents()
+        }
+    }
+
     private func prune(events: [BatteryControlEvent], referenceDate: Date) -> [BatteryControlEvent] {
         events.filter { referenceDate.timeIntervalSince($0.timestamp) <= retentionInterval }
     }
@@ -143,6 +194,23 @@ final class FileBatteryEventStore: BatteryEventStoring {
         }
 
         try data.write(to: fileURL, options: [.atomic])
+    }
+
+    private func appendLine(for event: BatteryControlEvent) throws {
+        let lineData = try encoder.encode(event) + Data([0x0A])
+
+        if !fileManager.fileExists(atPath: fileURL.path) {
+            try lineData.write(to: fileURL, options: [.atomic])
+            return
+        }
+
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer {
+            try? handle.close()
+        }
+
+        try handle.seekToEnd()
+        try handle.write(contentsOf: lineData)
     }
 
     private func syncThrowing<T>(_ work: () throws -> T) throws -> T {

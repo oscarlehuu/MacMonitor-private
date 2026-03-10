@@ -123,13 +123,13 @@ final class BatteryPolicyCoordinatorTests: XCTestCase {
         XCTAssertEqual(context.backend.executedCommands.last, .setChargingPaused(true))
     }
 
-    func testInstallHelperRefreshesAvailability() {
+    func testInstallHelperRefreshesAvailability() async {
         let context = makeContext()
         context.backend.availability = .unavailable(reason: "not installed")
         context.backend.installResult = .success("installed")
         context.coordinator.start()
 
-        let result = context.coordinator.installHelperIfNeeded()
+        let result = await context.coordinator.installHelperIfNeededAsync()
 
         XCTAssertTrue(result.accepted)
         if case .available = context.coordinator.helperAvailability {

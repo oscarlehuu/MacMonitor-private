@@ -20,12 +20,16 @@ struct SharedSnapshotSummary: Codable, Equatable {
 }
 
 final class AppGroupSnapshotStore {
+    private struct SendableFileManagerBox: @unchecked Sendable {
+        let fileManager: FileManager
+    }
+
     private let fileManager: FileManager
     private let directoryURL: URL
     private let fileURL: URL
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-    private let queue = DispatchQueue(label: "com.oscar.macmonitor.app-group-snapshot-store")
+    private let stateQueue = DispatchQueue(label: "com.oscar.macmonitor.app-group-snapshot-state")
+    private let writeQueue = DispatchQueue(label: "com.oscar.macmonitor.app-group-snapshot-write")
+    private var cachedSummary: SharedSnapshotSummary?
 
     init(
         fileManager: FileManager = .default,
@@ -47,46 +51,60 @@ final class AppGroupSnapshotStore {
 
         fileURL = directoryURL.appendingPathComponent("shared-snapshot-v2.json")
 
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
-
         ensureDirectoryExists()
     }
 
     func write(snapshot: SystemSnapshot, history: [SystemSnapshot], referenceDate: Date = Date()) {
-        queue.sync {
-            ensureDirectoryExists()
+        let latest = makePoint(from: snapshot)
+        let recent24h = projectedPoints(
+            from: history + [snapshot],
+            since: referenceDate.addingTimeInterval(-24 * 60 * 60),
+            maxPoints: 96
+        )
+        let recent7d = projectedPoints(
+            from: history + [snapshot],
+            since: referenceDate.addingTimeInterval(-7 * 24 * 60 * 60),
+            maxPoints: 168
+        )
 
-            let latest = makePoint(from: snapshot)
-            let recent24h = projectedPoints(
-                from: history + [snapshot],
-                since: referenceDate.addingTimeInterval(-24 * 60 * 60),
-                maxPoints: 96
-            )
-            let recent7d = projectedPoints(
-                from: history + [snapshot],
-                since: referenceDate.addingTimeInterval(-7 * 24 * 60 * 60),
-                maxPoints: 168
-            )
+        let payload = SharedSnapshotSummary(
+            schemaVersion: .v2,
+            generatedAt: referenceDate,
+            latest: latest,
+            trend24Hours: recent24h,
+            trend7Days: recent7d
+        )
 
-            let payload = SharedSnapshotSummary(
-                schemaVersion: .v2,
-                generatedAt: referenceDate,
-                latest: latest,
-                trend24Hours: recent24h,
-                trend7Days: recent7d
-            )
+        stateQueue.sync {
+            cachedSummary = payload
+        }
 
+        let fileManagerBox = SendableFileManagerBox(fileManager: fileManager)
+        let directoryURL = self.directoryURL
+        let fileURL = self.fileURL
+
+        writeQueue.async {
+            Self.ensureDirectoryExists(fileManager: fileManagerBox.fileManager, directoryURL: directoryURL)
+            let encoder = Self.makeEncoder()
             guard let data = try? encoder.encode(payload) else { return }
             try? data.write(to: fileURL, options: .atomic)
         }
     }
 
     func loadSummary() -> SharedSnapshotSummary? {
-        queue.sync {
-            guard let data = try? Data(contentsOf: fileURL) else { return nil }
-            return try? decoder.decode(SharedSnapshotSummary.self, from: data)
+        return stateQueue.sync {
+            if let cachedSummary {
+                return cachedSummary
+            }
+
+            let decoder = Self.makeDecoder()
+            guard let data = try? Data(contentsOf: fileURL),
+                  let summary = try? decoder.decode(SharedSnapshotSummary.self, from: data) else {
+                return nil
+            }
+
+            cachedSummary = summary
+            return summary
         }
     }
 
@@ -136,6 +154,23 @@ final class AppGroupSnapshotStore {
     }
 
     private func ensureDirectoryExists() {
+        Self.ensureDirectoryExists(fileManager: fileManager, directoryURL: directoryURL)
+    }
+
+    private static func ensureDirectoryExists(fileManager: FileManager, directoryURL: URL) {
         try? fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }

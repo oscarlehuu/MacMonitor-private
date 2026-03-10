@@ -351,8 +351,7 @@ struct PopoverRootView: View {
             isStorageSummaryExpanded = false
             hoveredStorageSegmentID = nil
             normalizeLegacyScreenIfNeeded()
-            updateRAMRefreshActivity(for: viewModel.screen)
-            ramDetailsViewModel.start()
+            synchronizeRAMDetailsRefresh(for: viewModel.screen)
             storageManagementViewModel.loadIfNeeded()
         }
         .onDisappear {
@@ -360,7 +359,7 @@ struct PopoverRootView: View {
             resetPopoverResizeDragState()
         }
         .onChange(of: viewModel.screen) { _, screen in
-            updateRAMRefreshActivity(for: screen)
+            synchronizeRAMDetailsRefresh(for: screen)
         }
         .onChange(of: storageManagementViewModel.showingDeleteConfirmation) { _, isPresented in
             if isPresented {
@@ -3027,15 +3026,6 @@ struct PopoverRootView: View {
         }
     }
 
-    private func updateRAMRefreshActivity(for screen: SystemSummaryViewModel.Screen) {
-        switch screen {
-        case .temperature, .ram:
-            ramDetailsViewModel.setRefreshActive(true)
-        case .battery, .storage, .trends, .storageManagement, .settings, .ramPolicyManager:
-            ramDetailsViewModel.setRefreshActive(false)
-        }
-    }
-
     private func normalizeLegacyScreenIfNeeded() {
         guard !hasNormalizedLegacyScreen else { return }
         hasNormalizedLegacyScreen = true
@@ -3048,6 +3038,18 @@ struct PopoverRootView: View {
         case .ram, .storage, .trends, .settings, .ramPolicyManager:
             break
         }
+    }
+
+    private func synchronizeRAMDetailsRefresh(for screen: SystemSummaryViewModel.Screen) {
+        let shouldRefresh = screen == .ram || screen == .temperature
+
+        if shouldRefresh {
+            ramDetailsViewModel.start()
+            ramDetailsViewModel.setRefreshActive(true)
+            return
+        }
+
+        ramDetailsViewModel.setRefreshActive(false)
     }
 
     private func exportDiagnostics() {

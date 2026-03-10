@@ -13,19 +13,13 @@ final class MetricsEngine: ObservableObject {
     private let networkCollector: NetworkCollecting
     private let gpuCollector: GPUCollecting
     private let settings: SettingsStore
+    private let networkSamplingCoordinator: NetworkSamplingCoordinator
     private let now: () -> Date
-    private let networkSamplingInterval: TimeInterval
-    private let networkSamplingQueue = DispatchQueue(
-        label: "com.oscar.macmonitor.network-sampling",
-        qos: .utility
-    )
 
     private var timerCancellable: AnyCancellable?
     private var refreshIntervalCancellable: AnyCancellable?
     private var batteryChangeCancellable: AnyCancellable?
     private var thermalChangeCancellable: AnyCancellable?
-    private var networkSamplingTimer: DispatchSourceTimer?
-    private var networkBootstrapWorkItem: DispatchWorkItem?
 
     init(
         memoryCollector: MemoryCollecting,
@@ -48,7 +42,10 @@ final class MetricsEngine: ObservableObject {
         self.gpuCollector = gpuCollector
         self.settings = settings
         self.now = now
-        self.networkSamplingInterval = networkSamplingInterval
+        self.networkSamplingCoordinator = NetworkSamplingCoordinator(
+            collector: networkCollector,
+            interval: networkSamplingInterval
+        )
     }
 
     func start() {
@@ -56,9 +53,8 @@ final class MetricsEngine: ObservableObject {
         bindBatteryChanges()
         bindThermalChanges()
         scheduleTimer(using: settings.refreshInterval)
-        scheduleNetworkSampling()
         refresh(reason: .startup)
-        scheduleNetworkBootstrapRefreshIfNeeded()
+        scheduleNetworkSampling()
     }
 
     func stop() {
@@ -66,11 +62,7 @@ final class MetricsEngine: ObservableObject {
         refreshIntervalCancellable?.cancel()
         batteryChangeCancellable?.cancel()
         thermalChangeCancellable?.cancel()
-        networkSamplingTimer?.setEventHandler {}
-        networkSamplingTimer?.cancel()
-        networkSamplingTimer = nil
-        networkBootstrapWorkItem?.cancel()
-        networkBootstrapWorkItem = nil
+        networkSamplingCoordinator.stop()
     }
 
     func refreshNow() {
@@ -111,21 +103,12 @@ final class MetricsEngine: ObservableObject {
     }
 
     private func scheduleNetworkSampling() {
-        networkSamplingTimer?.setEventHandler {}
-        networkSamplingTimer?.cancel()
-
-        let timer = DispatchSource.makeTimerSource(queue: networkSamplingQueue)
-        timer.schedule(
-            deadline: .now() + networkSamplingInterval,
-            repeating: networkSamplingInterval
-        )
-        timer.setEventHandler { [weak self] in
+        networkSamplingCoordinator.start { [weak self] snapshot in
             Task { @MainActor [weak self] in
-                self?.refreshNetworkSample()
+                guard let self else { return }
+                self.applyNetworkSample(snapshot, timestamp: self.now())
             }
         }
-        networkSamplingTimer = timer
-        timer.resume()
     }
 
     private func refresh(reason: RefreshReason) {
@@ -134,7 +117,7 @@ final class MetricsEngine: ObservableObject {
         let battery = batteryCollector.collect() ?? .unavailable
         let thermal = thermalCollector.collect()
         let cpu = cpuCollector.collect()
-        let network = networkCollector.collect()
+        let network = networkSamplingCoordinator.cachedSnapshot()
         let gpu = gpuCollector.collect()
 
         latestSnapshot = SystemSnapshot(
@@ -150,16 +133,14 @@ final class MetricsEngine: ObservableObject {
         )
     }
 
-    private func refreshNetworkSample() {
+    private func applyNetworkSample(_ network: NetworkSnapshot, timestamp: Date) {
         guard let latestSnapshot else { return }
-
-        let network = networkCollector.collect()
         guard network != latestSnapshot.network else { return }
 
         self.latestSnapshot = SystemSnapshot(
             id: latestSnapshot.id,
             schemaVersion: latestSnapshot.schemaVersion,
-            timestamp: now(),
+            timestamp: timestamp,
             memory: latestSnapshot.memory,
             storage: latestSnapshot.storage,
             battery: latestSnapshot.battery,
@@ -169,24 +150,5 @@ final class MetricsEngine: ObservableObject {
             gpu: latestSnapshot.gpu,
             refreshReason: .networkSample
         )
-    }
-
-    private func scheduleNetworkBootstrapRefreshIfNeeded() {
-        networkBootstrapWorkItem?.cancel()
-
-        let workItem = DispatchWorkItem { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard latestSnapshot?.network.downloadBytesPerSecond == nil ||
-                    latestSnapshot?.network.uploadBytesPerSecond == nil else {
-                    return
-                }
-                refreshNetworkSample()
-            }
-        }
-
-        networkBootstrapWorkItem = workItem
-        let bootstrapDelay = min(max(networkSamplingInterval, 0.05), 0.25)
-        networkSamplingQueue.asyncAfter(deadline: .now() + bootstrapDelay, execute: workItem)
     }
 }

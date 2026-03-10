@@ -3,7 +3,7 @@ import Foundation
 import Security
 import ServiceManagement
 
-protocol BatteryHelperInstalling {
+protocol BatteryHelperInstalling: Sendable {
     func isHelperInstalled() -> Bool
     func installHelper() -> Result<BatteryHelperInstallMode, BatteryHelperInstallerError>
 }
@@ -36,7 +36,7 @@ enum BatteryHelperInstallerError: LocalizedError {
     }
 }
 
-final class SMJobBlessBatteryHelperInstaller: BatteryHelperInstalling {
+final class SMJobBlessBatteryHelperInstaller: BatteryHelperInstalling, @unchecked Sendable {
     private let helperLabel: String
     private let fileManager: FileManager
 

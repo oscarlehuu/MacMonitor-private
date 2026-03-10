@@ -24,6 +24,8 @@ final class MenuBarController: NSObject {
     private var isAuxiliaryPanelPresented = false
     private var hasInstalledStatusButton = false
     private var retainedStatusItemLength: CGFloat = 0
+    private var latestMenuBarSnapshot: SystemSnapshot?
+    private let retainedStatusItemShrinkStep: CGFloat = 6
 
     init(
         viewModel: SystemSummaryViewModel,
@@ -47,7 +49,7 @@ final class MenuBarController: NSObject {
     }
 
     func install() {
-        popover.behavior = .applicationDefined
+        popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
@@ -112,15 +114,16 @@ final class MenuBarController: NSObject {
         guard isAuxiliaryPanelPresented != isPresented else { return }
 
         isAuxiliaryPanelPresented = isPresented
-        popover.behavior = .applicationDefined
+        popover.behavior = isPresented ? .applicationDefined : .transient
     }
 
     private func bindViewModel() {
         viewModel.$snapshot
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] snapshot in
                 guard let self else { return }
-                statusItem.button?.toolTip = viewModel.statusTooltip
+                latestMenuBarSnapshot = snapshot
+                statusItem.button?.toolTip = viewModel.statusTooltip(for: latestMenuBarSnapshot)
                 renderStatusItem()
             }
             .store(in: &cancellables)
@@ -156,6 +159,7 @@ final class MenuBarController: NSObject {
     private func renderStatusItem() {
         guard let button = statusItem.button else { return }
         let settings = viewModel.settings
+        let snapshot = latestMenuBarSnapshot ?? viewModel.snapshot
 
         button.imagePosition = .noImage
         button.imageScaling = .scaleProportionallyDown
@@ -166,7 +170,7 @@ final class MenuBarController: NSObject {
         )
 
         let composedOutput = MenuBarDisplayFormatter.composedValue(
-            for: viewModel.snapshot,
+            for: snapshot,
             configuration: settings.menuBarComposerConfiguration
         )
         let titleFont = button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
@@ -191,7 +195,6 @@ final class MenuBarController: NSObject {
         applyBackgroundStyle(to: button, mode: .both)
         button.contentTintColor = nil
     }
-
     private func resetRetainedStatusItemLength() {
         retainedStatusItemLength = 0
         statusItem.length = NSStatusItem.variableLength
@@ -199,8 +202,13 @@ final class MenuBarController: NSObject {
 
     private func retainStatusItemLength(for button: NSStatusBarButton) {
         let textWidth = ceil(button.attributedTitle.size().width)
-        let targetLength = max(NSStatusItem.squareLength, textWidth + 10)
-        retainedStatusItemLength = max(retainedStatusItemLength, targetLength)
+        let minimumLength = max(18, ceil(button.bounds.height))
+        let targetLength = max(minimumLength, textWidth + 10)
+        if retainedStatusItemLength == 0 || targetLength >= retainedStatusItemLength {
+            retainedStatusItemLength = targetLength
+        } else {
+            retainedStatusItemLength = max(targetLength, retainedStatusItemLength - retainedStatusItemShrinkStep)
+        }
         statusItem.length = retainedStatusItemLength
     }
 
@@ -357,7 +365,7 @@ final class MenuBarController: NSObject {
 
         button.action = #selector(togglePopover(_:))
         button.target = self
-        button.sendAction(on: [.leftMouseUp])
+        button.sendAction(on: [.leftMouseDown])
         hasInstalledStatusButton = true
         renderStatusItem()
     }

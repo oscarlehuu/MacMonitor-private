@@ -49,12 +49,6 @@ struct RAMDetailsView: View {
 
             terminateBar
         }
-        .onAppear {
-            viewModel.start()
-        }
-        .onDisappear {
-            viewModel.stop()
-        }
         .alert(
             viewModel.mode == .ports ? "Terminate selected port owners?" : "Terminate selected processes?",
             isPresented: $viewModel.showingTerminateConfirmation

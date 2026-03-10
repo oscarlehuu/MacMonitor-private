@@ -10,6 +10,14 @@ protocol BatteryCollecting {
 }
 
 final class BatteryCollector: BatteryCollecting {
+    private final class WeakCollectorBox: @unchecked Sendable {
+        weak var collector: BatteryCollector?
+
+        init(_ collector: BatteryCollector) {
+            self.collector = collector
+        }
+    }
+
     private struct SystemProfilerBatteryHealthInfo {
         let maximumCapacityPercent: Int?
         let healthLabel: String?
@@ -284,14 +292,15 @@ final class BatteryCollector: BatteryCollecting {
         // to avoid blocking the main thread while system_profiler runs.
         if !isRefreshingSystemProfiler {
             isRefreshingSystemProfiler = true
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                let info = self?.readSystemProfilerBatteryHealthInfo()
+            let collectorBox = WeakCollectorBox(self)
+            DispatchQueue.global(qos: .utility).async {
+                let info = Self.readSystemProfilerBatteryHealthInfo()
                 DispatchQueue.main.async {
-                    self?.cachedSystemProfilerBatteryHealth = CachedSystemProfilerBatteryHealth(
+                    collectorBox.collector?.cachedSystemProfilerBatteryHealth = CachedSystemProfilerBatteryHealth(
                         info: info,
                         fetchedAt: referenceDate
                     )
-                    self?.isRefreshingSystemProfiler = false
+                    collectorBox.collector?.isRefreshingSystemProfiler = false
                 }
             }
         }
@@ -299,7 +308,7 @@ final class BatteryCollector: BatteryCollecting {
         return cachedSystemProfilerBatteryHealth?.info
     }
 
-    private func readSystemProfilerBatteryHealthInfo() -> SystemProfilerBatteryHealthInfo? {
+    private static func readSystemProfilerBatteryHealthInfo() -> SystemProfilerBatteryHealthInfo? {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
         task.arguments = ["-json", "SPPowerDataType"]

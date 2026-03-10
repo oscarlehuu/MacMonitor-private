@@ -302,18 +302,10 @@ final class BatteryPolicyCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func installHelperIfNeeded() -> BatteryControlCommandResult {
-        let result = controlService.installHelperIfNeeded()
-        if result.accepted {
-            lastErrorMessage = nil
-        } else {
-            lastErrorMessage = result.message
+    func installHelperIfNeededAsync() async -> BatteryControlCommandResult {
+        guard !isInstallingHelper else {
+            return .failure("Helper install is already in progress.")
         }
-        return result
-    }
-
-    func installHelperIfNeededAsync() async {
-        guard !isInstallingHelper else { return }
         isInstallingHelper = true
         defer { isInstallingHelper = false }
 
@@ -323,6 +315,7 @@ final class BatteryPolicyCoordinator: ObservableObject {
         } else {
             lastErrorMessage = result.message
         }
+        return result
     }
 
     private func applySafetyMonitorIfNeeded(events: [BatteryControlEvent]) {
