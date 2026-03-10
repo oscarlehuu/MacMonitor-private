@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.13](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.12...v0.5.13) (2026-03-10)
+
+
+### Bug Fixes
+
+* restore status bar responsiveness ([#55](https://github.com/oscarlehuu/MacMonitor-private/issues/55)) ([e37af51](https://github.com/oscarlehuu/MacMonitor-private/commit/e37af51822e862412f0be25566e98d91c97554f4))
+
 ## [0.5.12](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.11...v0.5.12) (2026-03-08)
 
 
