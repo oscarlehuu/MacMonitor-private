@@ -535,6 +535,7 @@ jobs:
           mkdir -p "${public_updates_dir}/notes"
           cp "${source_updates_dir}/appcast.xml" "${public_updates_dir}/appcast.xml"
           cp "${source_updates_dir}/notes/${notes_basename}" "${public_updates_dir}/notes/${notes_basename}"
+          sed -i '' 's|MacMonitor-private|MacMonitor|g' "${public_updates_dir}/notes/${notes_basename}"
           if [[ -f "${source_updates_dir}/.nojekyll" ]]; then
             cp "${source_updates_dir}/.nojekyll" "${public_updates_dir}/.nojekyll"
           else
