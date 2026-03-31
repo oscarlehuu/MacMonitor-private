@@ -418,6 +418,52 @@ jobs:
               --latest
           fi
 
+      - name: Upload assets to public distribution release
+        if: ${{ env.PUBLIC_DISTRIBUTION_REPO != '' }}
+        env:
+          PUBLIC_DISTRIBUTION_REPO: ${{ env.PUBLIC_DISTRIBUTION_REPO }}
+          PUBLIC_DISTRIBUTION_TOKEN: ${{ secrets.PUBLIC_DISTRIBUTION_TOKEN || secrets.UPDATES_REPO_TOKEN }}
+          SOURCE_RELEASE_NOTES: ${{ github.event.release.body }}
+          GH_TOKEN: ${{ secrets.PUBLIC_DISTRIBUTION_TOKEN || secrets.UPDATES_REPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          [[ -n "${PUBLIC_DISTRIBUTION_TOKEN:-}" ]] || (echo "Missing required secret: PUBLIC_DISTRIBUTION_TOKEN" && exit 1)
+          [[ "${PUBLIC_DISTRIBUTION_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || (echo "PUBLIC_DISTRIBUTION_REPO must use owner/repo format" && exit 1)
+
+          tag="${{ steps.meta.outputs.tag }}"
+          asset_path="${{ steps.build.outputs.asset_path }}"
+          asset_name="${{ steps.build.outputs.asset_name }}"
+          dmg_path="${{ steps.build.outputs.dmg_path }}"
+          dmg_name="${{ steps.build.outputs.dmg_name }}"
+          pkg_path="${{ steps.build.outputs.pkg_path }}"
+          pkg_name="${{ steps.build.outputs.pkg_name }}"
+
+          public_release_notes="${SOURCE_RELEASE_NOTES:-}"
+          if [[ -z "${public_release_notes}" ]]; then
+            public_release_notes="Release mirror from ${GITHUB_REPOSITORY}@${GITHUB_SHA}."
+          fi
+          public_release_notes="${public_release_notes//MacMonitor-private/MacMonitor}"
+
+          if gh release view "${tag}" --repo "${PUBLIC_DISTRIBUTION_REPO}" >/dev/null 2>&1; then
+            gh release upload "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
+              --repo "${PUBLIC_DISTRIBUTION_REPO}" \
+              --clobber
+          else
+            gh release create "${tag}" \
+              "${asset_path}#${asset_name}" \
+              "${dmg_path}#${dmg_name}" \
+              "${pkg_path}#${pkg_name}" \
+              --repo "${PUBLIC_DISTRIBUTION_REPO}" \
+              --title "MacMonitor ${tag}" \
+              --notes "${public_release_notes}" \
+              --latest
+          fi
+
       - name: Publish update payload + appcast
         env:
           GH_TOKEN: ${{ github.token }}
@@ -436,7 +482,7 @@ jobs:
           archives_dir="${RUNNER_TEMP}/sparkle-archives"
           base_updates_url="${UPDATES_BASE_URL%/}"
           release_notes_url_prefix="${base_updates_url}/notes/"
-          download_prefix="${base_updates_url}/downloads/"
+          download_prefix="https://github.com/${PUBLIC_DISTRIBUTION_REPO}/releases/download/${tag}/"
           updates_repo_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           if git ls-remote --heads "${updates_repo_remote}" gh-pages >/dev/null 2>&1; then
@@ -451,7 +497,6 @@ jobs:
           mkdir -p "${archives_dir}" "${updates_dir}/downloads" "${updates_dir}/notes"
 
           cp "${asset_path}" "${archives_dir}/${asset_name}"
-          cp "${asset_path}" "${updates_dir}/downloads/${asset_name}"
           if [[ -f "${updates_dir}/appcast.xml" ]]; then
             cp "${updates_dir}/appcast.xml" "${archives_dir}/appcast.xml"
           fi
@@ -486,8 +531,8 @@ jobs:
 
           git -C "${updates_dir}" config user.name "github-actions[bot]"
           git -C "${updates_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [[ -n "$(git -C "${updates_dir}" status --porcelain -- appcast.xml ".nojekyll" "downloads/${asset_name}" "notes/${notes_basename}")" ]]; then
-            git -C "${updates_dir}" add appcast.xml ".nojekyll" "downloads/${asset_name}" "notes/${notes_basename}"
+          if [[ -n "$(git -C "${updates_dir}" status --porcelain -- appcast.xml ".nojekyll" "notes/${notes_basename}")" ]]; then
+            git -C "${updates_dir}" add appcast.xml ".nojekyll" "notes/${notes_basename}"
             git -C "${updates_dir}" commit -m "chore: update appcast for ${tag}"
             git -C "${updates_dir}" push origin gh-pages
           fi
@@ -498,7 +543,6 @@ jobs:
           PUBLIC_DISTRIBUTION_REPO: ${{ env.PUBLIC_DISTRIBUTION_REPO }}
           PUBLIC_DISTRIBUTION_TOKEN: ${{ secrets.PUBLIC_DISTRIBUTION_TOKEN || secrets.UPDATES_REPO_TOKEN }}
           SOURCE_REPO_TOKEN: ${{ github.token }}
-          SOURCE_RELEASE_NOTES: ${{ github.event.release.body }}
           GH_TOKEN: ${{ secrets.PUBLIC_DISTRIBUTION_TOKEN || secrets.UPDATES_REPO_TOKEN }}
         shell: bash
         run: |
@@ -508,12 +552,7 @@ jobs:
           [[ "${PUBLIC_DISTRIBUTION_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || (echo "PUBLIC_DISTRIBUTION_REPO must use owner/repo format" && exit 1)
 
           tag="${{ steps.meta.outputs.tag }}"
-          asset_path="${{ steps.build.outputs.asset_path }}"
           asset_name="${{ steps.build.outputs.asset_name }}"
-          dmg_path="${{ steps.build.outputs.dmg_path }}"
-          dmg_name="${{ steps.build.outputs.dmg_name }}"
-          pkg_path="${{ steps.build.outputs.pkg_path }}"
-          pkg_name="${{ steps.build.outputs.pkg_name }}"
           notes_basename="${asset_name%.zip}.txt"
 
           source_updates_dir="${RUNNER_TEMP}/source-updates-site"
@@ -533,10 +572,11 @@ jobs:
             git -C "${public_updates_dir}" remote add origin "${public_remote}"
           fi
 
-          mkdir -p "${public_updates_dir}/downloads" "${public_updates_dir}/notes"
+          mkdir -p "${public_updates_dir}/notes"
           cp "${source_updates_dir}/appcast.xml" "${public_updates_dir}/appcast.xml"
-          cp "${source_updates_dir}/downloads/${asset_name}" "${public_updates_dir}/downloads/${asset_name}"
+          sed -i '' 's|MacMonitor-private|MacMonitor|g' "${public_updates_dir}/appcast.xml"
           cp "${source_updates_dir}/notes/${notes_basename}" "${public_updates_dir}/notes/${notes_basename}"
+          sed -i '' 's|MacMonitor-private|MacMonitor|g' "${public_updates_dir}/notes/${notes_basename}"
           if [[ -f "${source_updates_dir}/.nojekyll" ]]; then
             cp "${source_updates_dir}/.nojekyll" "${public_updates_dir}/.nojekyll"
           else
@@ -545,14 +585,15 @@ jobs:
 
           git -C "${public_updates_dir}" config user.name "github-actions[bot]"
           git -C "${public_updates_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [[ -n "$(git -C "${public_updates_dir}" status --porcelain -- appcast.xml .nojekyll "downloads/${asset_name}" "notes/${notes_basename}")" ]]; then
-            git -C "${public_updates_dir}" add appcast.xml .nojekyll "downloads/${asset_name}" "notes/${notes_basename}"
+          if [[ -n "$(git -C "${public_updates_dir}" status --porcelain -- appcast.xml .nojekyll "notes/${notes_basename}")" ]]; then
+            git -C "${public_updates_dir}" add appcast.xml .nojekyll "notes/${notes_basename}"
             git -C "${public_updates_dir}" commit -m "chore: mirror Sparkle assets for ${tag}"
             git -C "${public_updates_dir}" push origin gh-pages
           fi
 
           git clone --depth 1 --branch main "${public_remote}" "${public_main_dir}"
           cp "${GITHUB_WORKSPACE}/CHANGELOG.md" "${public_main_dir}/CHANGELOG.md"
+          sed -i '' 's|MacMonitor-private|MacMonitor|g' "${public_main_dir}/CHANGELOG.md"
 
           git -C "${public_main_dir}" config user.name "github-actions[bot]"
           git -C "${public_main_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -560,27 +601,4 @@ jobs:
             git -C "${public_main_dir}" add CHANGELOG.md
             git -C "${public_main_dir}" commit -m "docs: sync changelog for ${tag}"
             git -C "${public_main_dir}" push origin main
-          fi
-
-          public_release_notes="${SOURCE_RELEASE_NOTES:-}"
-          if [[ -z "${public_release_notes}" ]]; then
-            public_release_notes="Release mirror from ${GITHUB_REPOSITORY}@${GITHUB_SHA}."
-          fi
-
-          if gh release view "${tag}" --repo "${PUBLIC_DISTRIBUTION_REPO}" >/dev/null 2>&1; then
-            gh release upload "${tag}" \
-              "${asset_path}#${asset_name}" \
-              "${dmg_path}#${dmg_name}" \
-              "${pkg_path}#${pkg_name}" \
-              --repo "${PUBLIC_DISTRIBUTION_REPO}" \
-              --clobber
-          else
-            gh release create "${tag}" \
-              "${asset_path}#${asset_name}" \
-              "${dmg_path}#${dmg_name}" \
-              "${pkg_path}#${pkg_name}" \
-              --repo "${PUBLIC_DISTRIBUTION_REPO}" \
-              --title "MacMonitor ${tag}" \
-              --notes "${public_release_notes}" \
-              --latest
           fi
