@@ -465,13 +465,17 @@ jobs:
           fi
 
       - name: Publish update payload + appcast
+        if: ${{ env.PUBLIC_DISTRIBUTION_REPO != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SOURCE_RELEASE_NOTES: ${{ github.event.release.body }}
+          PUBLIC_DISTRIBUTION_REPO: ${{ env.PUBLIC_DISTRIBUTION_REPO }}
         shell: bash
         run: |
           set -euo pipefail
+
+          [[ "${PUBLIC_DISTRIBUTION_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || (echo "PUBLIC_DISTRIBUTION_REPO must use owner/repo format" && exit 1)
 
           tag="${{ steps.meta.outputs.tag }}"
           asset_path="${{ steps.build.outputs.asset_path }}"
@@ -494,7 +498,7 @@ jobs:
             git -C "${updates_dir}" remote add origin "${updates_repo_remote}"
           fi
 
-          mkdir -p "${archives_dir}" "${updates_dir}/downloads" "${updates_dir}/notes"
+          mkdir -p "${archives_dir}" "${updates_dir}/notes"
 
           cp "${asset_path}" "${archives_dir}/${asset_name}"
           if [[ -f "${updates_dir}/appcast.xml" ]]; then
