@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.14](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.13...v0.5.14) (2026-03-31)
+
+
+### Bug Fixes
+
+* point Sparkle downloads to GitHub Releases and sanitize public links ([#59](https://github.com/oscarlehuu/MacMonitor-private/issues/59)) ([4f625ff](https://github.com/oscarlehuu/MacMonitor-private/commit/4f625ff2bf9b18e2b9f662acd2db0b898797ff39))
+* sync Xcode build version with release-please ([#57](https://github.com/oscarlehuu/MacMonitor-private/issues/57)) ([e1f79c6](https://github.com/oscarlehuu/MacMonitor-private/commit/e1f79c6ad97eb8fbddb426c3f739d0c4b4c53e1f))
+
 ## [0.5.13](https://github.com/oscarlehuu/MacMonitor-private/compare/v0.5.12...v0.5.13) (2026-03-10)
 
 

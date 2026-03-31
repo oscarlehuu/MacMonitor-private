@@ -29,7 +29,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MacMonitor/Config/App-Info.plist
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.5.13 # x-release-please-version
+        MARKETING_VERSION: 0.5.14 # x-release-please-version
         SPARKLE_APPCAST_URL: "https://oscarlehuu.github.io/MacMonitor/appcast.xml"
         SPARKLE_PUBLIC_ED_KEY: "zDPSx0PEYWhHawIvT2UGPeIzkJtD14DSoh7Xl7KsVUU="
       configs:
@@ -81,7 +81,7 @@ targets:
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         OTHER_CODE_SIGN_FLAGS: --identifier com.oscar.macmonitor.battery-helper
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.5.13 # x-release-please-version
+        MARKETING_VERSION: 0.5.14 # x-release-please-version
   MacMonitorWidget:
     type: app-extension
     platform: macOS
@@ -95,7 +95,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MacMonitorWidget/Info.plist
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.5.13 # x-release-please-version
+        MARKETING_VERSION: 0.5.14 # x-release-please-version
   MacMonitorTests:
     type: bundle.unit-test
     platform: macOS
