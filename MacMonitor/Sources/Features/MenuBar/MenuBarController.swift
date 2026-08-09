@@ -49,8 +49,17 @@ final class MenuBarController: NSObject {
     }
 
     func install() {
+        // Menu bar item must appear even if SwiftUI popover construction is slow; accessory apps
+        // have no Dock icon, so a missing status item looks like "nothing happened".
+        statusItem.isVisible = true
         popover.behavior = .transient
         popover.delegate = self
+
+        installAppearanceObserver()
+        installRevealPopoverObserver()
+        bindViewModel()
+        installStatusButtonWhenReady()
+
         popover.contentViewController = NSHostingController(
             rootView: PopoverRootView(
                 viewModel: viewModel,
@@ -71,11 +80,6 @@ final class MenuBarController: NSObject {
             )
         )
         applyMainPopoverDefaultSize()
-
-        installAppearanceObserver()
-        installRevealPopoverObserver()
-        bindViewModel()
-        installStatusButtonWhenReady()
     }
 
     func uninstall() {
@@ -351,7 +355,7 @@ final class MenuBarController: NSObject {
         }
     }
 
-    private func installStatusButtonWhenReady(retriesRemaining: Int = 10) {
+    private func installStatusButtonWhenReady(retriesRemaining: Int = 40) {
         guard !hasInstalledStatusButton else { return }
 
         guard let button = statusItem.button else {

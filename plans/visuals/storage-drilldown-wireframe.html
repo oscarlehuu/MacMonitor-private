@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storage Drill-Down Wireframe — MacMonitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'Fira Code', 'SF Mono', monospace;
+  --bg: #0d1421;
+  --surface: #111d2e;
+  --surface-elevated: #162438;
+  --border: rgba(100, 160, 220, 0.12);
+  --border-bright: rgba(100, 160, 220, 0.22);
+  --text: #c8d8e8;
+  --text-dim: #607080;
+  --text-bright: #e8f0f8;
+  --accent: #4a90d9;
+  --accent-dim: rgba(74, 144, 217, 0.1);
+  --green: #50c878;
+  --green-dim: rgba(80, 200, 120, 0.1);
+  --red: #e55353;
+  --red-dim: rgba(229, 83, 83, 0.1);
+  --amber: #e0a030;
+  --amber-dim: rgba(224, 160, 48, 0.1);
+  --teal: #40b8a8;
+  --teal-dim: rgba(64, 184, 168, 0.1);
+  --purple: #a07ee0;
+  --purple-dim: rgba(160, 126, 224, 0.1);
+  --orange: #e07840;
+  --orange-dim: rgba(224, 120, 64, 0.1);
+  --selected-bg: rgba(74, 144, 217, 0.15);
+  --indent-line: rgba(100, 160, 220, 0.08);
+}
+
+[data-theme="light"] {
+  --bg: #f0f4f8;
+  --surface: #ffffff;
+  --surface-elevated: #e8eef4;
+  --border: rgba(30, 60, 100, 0.1);
+  --border-bright: rgba(30, 60, 100, 0.2);
+  --text: #1a2a3a;
+  --text-dim: #5a7090;
+  --text-bright: #0a1a2a;
+  --accent: #1a5fa8;
+  --accent-dim: rgba(26, 95, 168, 0.08);
+  --green: #2d8a4e;
+  --green-dim: rgba(45, 138, 78, 0.08);
+  --red: #c0392b;
+  --red-dim: rgba(192, 57, 43, 0.08);
+  --amber: #b8860b;
+  --amber-dim: rgba(184, 134, 11, 0.08);
+  --teal: #0f766e;
+  --teal-dim: rgba(15, 118, 110, 0.08);
+  --purple: #7c3aed;
+  --purple-dim: rgba(124, 58, 237, 0.08);
+  --orange: #c2410c;
+  --orange-dim: rgba(194, 65, 12, 0.08);
+  --selected-bg: rgba(26, 95, 168, 0.1);
+  --indent-line: rgba(30, 60, 100, 0.06);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding: 32px;
+}
+
+.theme-toggle {
+  position: fixed; top: 16px; right: 16px; z-index: 100;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-dim); padding: 6px 12px; border-radius: 6px;
+  cursor: pointer; font-family: var(--font-mono); font-size: 11px;
+}
+.theme-toggle:hover { border-color: var(--border-bright); color: var(--text); }
+
+.page { max-width: 880px; margin: 0 auto; }
+
+h1 { font-size: 28px; font-weight: 700; color: var(--text-bright); margin-bottom: 8px; }
+.subtitle { font-size: 14px; color: var(--text-dim); margin-bottom: 40px; }
+
+/* ── Section ── */
+.section { margin-bottom: 48px; }
+.section-label {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+.section-label::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ── Wireframe phone ── */
+.phone-frame {
+  background: var(--surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 16px;
+  padding: 0;
+  max-width: 420px;
+  overflow: hidden;
+}
+
+.phone-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.phone-header .title { font-weight: 600; font-size: 14px; }
+.phone-header .actions { display: flex; gap: 8px; }
+.phone-header .btn-small {
+  font-size: 11px; color: var(--text-dim); cursor: default;
+  padding: 4px 8px; border-radius: 4px; background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+/* ── Disk bar ── */
+.disk-bar-wrap { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.disk-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.disk-bar {
+  height: 6px; background: var(--surface-elevated); border-radius: 3px; overflow: hidden;
+}
+.disk-bar-fill { height: 100%; width: 64%; background: var(--accent); border-radius: 3px; }
+.free-label { font-size: 12px; color: var(--green); font-weight: 500; padding: 8px 20px 0; }
+
+/* ── Filter chips ── */
+.chips { display: flex; gap: 6px; padding: 10px 20px; }
+.chip {
+  font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 20px;
+  border: 1px solid var(--border); color: var(--text-dim); cursor: default;
+  background: var(--surface-elevated);
+}
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Tree list ── */
+.tree-list { padding: 4px 12px 16px; }
+
+.tree-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 6px; cursor: default;
+  transition: background 0.15s;
+}
+.tree-row:hover { background: var(--accent-dim); }
+.tree-row.selected { background: var(--selected-bg); }
+
+.tree-row .checkbox {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--text-dim); display: flex; align-items: center; justify-content: center;
+}
+.tree-row.selected .checkbox {
+  border-color: var(--accent); background: var(--accent);
+}
+.tree-row.selected .checkbox::after {
+  content: '✓'; font-size: 10px; color: #fff; font-weight: 700;
+}
+.tree-row.partial .checkbox {
+  border-color: var(--accent); background: var(--accent);
+}
+.tree-row.partial .checkbox::after {
+  content: '–'; font-size: 12px; color: #fff; font-weight: 700;
+}
+
+.tree-row .icon { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+.icon-app { background: var(--accent-dim); color: var(--accent); }
+.icon-folder { background: var(--purple-dim); color: var(--purple); }
+.icon-cache { background: var(--orange-dim); color: var(--orange); }
+.icon-dev { background: var(--teal-dim); color: var(--teal); }
+
+.tree-row .name { font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-row .chevron { font-size: 9px; color: var(--text-dim); transition: transform 0.2s; flex-shrink: 0; }
+.tree-row .chevron.open { transform: rotate(90deg); }
+
+.tree-row .size-bar { width: 50px; height: 5px; background: var(--surface-elevated); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.tree-row .size-bar-fill { height: 100%; border-radius: 3px; }
+.bar-blue { background: var(--accent); }
+.bar-purple { background: var(--purple); }
+.bar-orange { background: var(--orange); }
+.bar-teal { background: var(--teal); }
+
+.tree-row .size { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); width: 52px; text-align: right; flex-shrink: 0; }
+
+/* ── Indent levels ── */
+.depth-1 { padding-left: 28px; }
+.depth-2 { padding-left: 48px; }
+.depth-3 { padding-left: 68px; }
+
+.depth-1, .depth-2, .depth-3 {
+  position: relative;
+}
+.depth-1::before, .depth-2::before, .depth-3::before {
+  content: ''; position: absolute; left: 20px; top: 0; bottom: 0;
+  width: 1px; background: var(--indent-line);
+}
+.depth-2::before { left: 40px; }
+.depth-3::before { left: 60px; }
+
+/* ── Child row styling ── */
+.tree-row.child .name { color: var(--text-dim); font-size: 11px; }
+.tree-row.child .checkbox { width: 14px; height: 14px; }
+.tree-row.child .icon { width: 15px; height: 15px; font-size: 9px; }
+
+/* ── Annotations ── */
+.annotation {
+  display: flex; gap: 12px; align-items: flex-start;
+  margin-top: 20px; padding: 16px 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 13px;
+}
+.annotation .badge {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent-dim); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+.annotation p { color: var(--text-dim); }
+.annotation strong { color: var(--text); }
+
+/* ── Comparison columns ── */
+.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+@media (max-width: 800px) { .comparison { grid-template-columns: 1fr; } }
+.comparison .col-label {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 8px;
+}
+
+/* ── Interaction table ── */
+.interaction-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+.interaction-table th {
+  text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-dim); padding: 8px 12px;
+  border-bottom: 1px solid var(--border-bright);
+}
+.interaction-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.interaction-table code {
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--accent-dim); color: var(--accent);
+  padding: 2px 6px; border-radius: 4px;
+}
+
+/* ── Delete button ── */
+.delete-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: var(--red); color: #fff; margin: 8px 12px 16px; cursor: default;
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  html.setAttribute('data-theme', current === 'light' ? 'dark' : 'light');
+  this.textContent = html.getAttribute('data-theme') === 'light' ? '● Dark' : '○ Light';
+">○ Light</button>
+
+<div class="page">
+<h1>Storage Drill-Down Wireframe</h1>
+<p class="subtitle">Hierarchical path grouping with recursive expansion — Parent → Child → Subchild</p>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SECTION 1: Current vs Proposed -->
+<!-- ══════════════════════════════════════════ -->
+<div class="section">
+<div class="section-label">Before → After comparison</div>
+
+<div class="comparison">
+<div>
+  <div class="col-label">Current — flat list</div>
+  <div class="phone-frame">
+    <div class="tree-list" style="padding-top:12px">
+      <div class="tree-row">
+        <div class="checkbox"></div>
+        <div class="icon icon-app">A</div>
+        <div class="name">League of Legends</div>
+        <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:100%"></div></div>
+        <div class="size">37 GB</div>
+      </div>
+      <div class="tree-row">
+        <div class="checkbox"></div>
+        <div class="icon icon-app">D</div>
+        <div class="name">Docker</div>
+        <div class="chevron">›</div>
+        <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:53%"></div></div>
+        <div class="size">19.5 GB</div>
+      </div>
+      <div class="tree-row">
+        <div class="checkbox"></div>
+        <div class="icon icon-folder">F</div>
+        <div class="name">Projects</div>
+        <div class="size-bar"><div class="size-bar-fill bar-purple" style="width:35%"></div></div>
+        <div class="size">13.2 GB</div>
+      </div>
+      <div class="tree-row">
+        <div class="checkbox"></div>
+        <div class="icon icon-app">C</div>
+        <div class="name">Claude</div>
+        <div class="chevron">›</div>
+        <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:31%"></div></div>
+        <div class="size">11.4 GB</div>
+      </div>
+      <div class="tree-row">
+        <div class="checkbox"></div>
+        <div class="icon icon-cache">$</div>
+        <div class="name">npm Cache</div>
+        <div class="size-bar"><div class="size-bar-fill bar-orange" style="width:16%"></div></div>
+        <div class="size">6.0 GB</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div>
+  <div class="col-label">Proposed — hierarchical drill-down</div>
+  <div class="phone-frame">
+    <div class="tree-list" style="padding-top:12px">
+      <!-- /Applications (parent) -->
+      <div class="tree-row partial">
+        <div class="checkbox"></div>
+        <div class="icon icon-folder">F</div>
+        <div class="name">Applications</div>
+        <div class="chevron open">›</div>
+        <div class="size-bar"><div class="size-bar-fill bar-purple" style="width:100%"></div></div>
+        <div class="size">82 GB</div>
+      </div>
+        <!-- League of Legends (leaf) -->
+        <div class="tree-row child depth-1 selected">
+          <div class="checkbox"></div>
+          <div class="icon icon-app">L</div>
+          <div class="name">League of Legends</div>
+          <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:100%"></div></div>
+          <div class="size">37 GB</div>
+        </div>
+        <!-- Docker (expandable child) -->
+        <div class="tree-row child depth-1">
+          <div class="checkbox"></div>
+          <div class="icon icon-app">D</div>
+          <div class="name">Docker</div>
+          <div class="chevron open">›</div>
+          <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:53%"></div></div>
+          <div class="size">19.5 GB</div>
+        </div>
+          <!-- Docker children (depth-2) -->
+          <div class="tree-row child depth-2">
+            <div class="checkbox"></div>
+            <div class="icon icon-cache">B</div>
+            <div class="name">App Bundle</div>
+            <div class="size-bar"><div class="size-bar-fill bar-orange" style="width:60%"></div></div>
+            <div class="size">2.1 GB</div>
+          </div>
+          <div class="tree-row child depth-2 selected">
+            <div class="checkbox"></div>
+            <div class="icon icon-cache">C</div>
+            <div class="name">App Cache</div>
+            <div class="size-bar"><div class="size-bar-fill bar-orange" style="width:100%"></div></div>
+            <div class="size">15.2 GB</div>
+          </div>
+          <div class="tree-row child depth-2">
+            <div class="checkbox"></div>
+            <div class="icon icon-cache">S</div>
+            <div class="name">App Support</div>
+            <div class="size-bar"><div class="size-bar-fill bar-orange" style="width:14%"></div></div>
+            <div class="size">2.2 GB</div>
+          </div>
+        <!-- Claude (collapsed child) -->
+        <div class="tree-row child depth-1">
+          <div class="checkbox"></div>
+          <div class="icon icon-app">C</div>
+          <div class="name">Claude</div>
+          <div class="chevron">›</div>
+          <div class="size-bar"><div class="size-bar-fill bar-blue" style="width:31%"></div></div>
+          <div class="size">11.4 GB</div>
+        </div>
+
+      <!-- ~/Projects (parent) -->
+      <div class="tree-row" style="margin-top:2px">
+        <div class="checkbox"></div>
+        <div class="icon icon-folder">F</div>
+        <div class="name">~/Projects</div>
+        <div class="chevron open">›</div>
+        <div class="size-bar"><div class="size-bar-fill bar-purple" style="width:35%"></div></div>
+        <div class="size">13.2 GB</div>
+      </div>
+        <div class="tree-row child depth-1">
+          <div class="checkbox"></div>
+          <div class="icon icon-folder">F</div>
+          <div class="name">OscarProjects</div>
+          <div class="chevron open">›</div>
+          <div class="size-bar"><div class="size-bar-fill bar-purple" style="width:80%"></div></div>
+          <div class="size">10.6 GB</div>
+        </div>
+          <div class="tree-row child depth-2">
+            <div class="checkbox"></div>
+            <div class="icon icon-folder">F</div>
+            <div class="name">MacMonitor</div>
+            <div class="chevron">›</div>
+            <div class="size-bar"><div class="size-bar-fill bar-purple" style="width:30%"></div></div>
+            <div class="size">3.2 GB</div>
+          </div>
+          <div class="tree-row child depth-2 selected">
+            <div class="checkbox"></div>
+            <div class="icon icon-dev">N</div>
+            <div class="name">old-project</div>
+            <div class="size-bar"><div class="size-bar-fill bar-teal" style="width:70%"></div></div>
+            <div class="size">7.4 GB</div>
+          </div>
+
+      <!-- Caches (collapsed) -->
+      <div class="tree-row" style="margin-top:2px">
+        <div class="checkbox"></div>
+        <div class="icon icon-cache">$</div>
+        <div class="name">~/Library/Caches</div>
+        <div class="chevron">›</div>
+        <div class="size-bar"><div class="size-bar-fill bar-orange" style="width:16%"></div></div>
+        <div class="size">6.0 GB</div>
+      </div>
+    </div>
+
+    <div class="delete-btn">
+      🗑  Delete 3 Selected (59.6 GB)
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SECTION 2: Interaction Model -->
+<!-- ══════════════════════════════════════════ -->
+<div class="section">
+<div class="section-label">Interaction model</div>
+
+<table class="interaction-table">
+<thead>
+  <tr><th>Action</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td><strong>Tap row body</strong></td>
+    <td>Expand / collapse children. If leaf node (no children), toggle selection instead.</td>
+  </tr>
+  <tr>
+    <td><strong>Tap checkbox</strong></td>
+    <td>Toggle selection. Selecting a parent <strong>selects all descendants recursively</strong>. Deselecting a parent deselects all.</td>
+  </tr>
+  <tr>
+    <td><strong>Partial state</strong> <code>◐</code></td>
+    <td>Parent shows partial when <em>some</em> (not all) descendants are selected. Tapping partial → selects all.</td>
+  </tr>
+  <tr>
+    <td><strong>Chevron</strong> <code>›</code></td>
+    <td>Present on any row with children. Rotates 90° when expanded. Click anywhere on row to toggle.</td>
+  </tr>
+  <tr>
+    <td><strong>Indent lines</strong></td>
+    <td>Vertical connector lines at each depth level show hierarchy. Depth 1 = 28px indent, depth 2 = 48px, depth 3 = 68px.</td>
+  </tr>
+  <tr>
+    <td><strong>Size bars</strong></td>
+    <td>Proportional within each level — children's bars are relative to sibling max, not global max.</td>
+  </tr>
+  <tr>
+    <td><strong>Size rollup</strong></td>
+    <td>Parent shows total of all descendants. "You can free ~X GB" counts only <em>selected</em> items at leaf level (no double-counting).</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SECTION 3: Grouping Rules -->
+<!-- ══════════════════════════════════════════ -->
+<div class="section">
+<div class="section-label">Grouping rules — what becomes a parent</div>
+
+<div class="annotation">
+  <div class="badge">1</div>
+  <div><p><strong>Top-level groups by scan source path.</strong> Items from <code>/Applications</code> group under "Applications". Items from <code>~/Library/Caches</code> group under "~/Library/Caches". Items from <code>~/Projects</code> group under "~/Projects". Custom-added folders become their own top-level group.</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge">2</div>
+  <div><p><strong>App groups nest inside their scan source.</strong> "Zed" appears under "Applications" (because its bundle is at <code>/Applications/Zed.app</code>). Its children (bundle, cache, support) appear as depth-2 items under Zed.</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge">3</div>
+  <div><p><strong>Folder items with shared parents auto-group.</strong> If <code>~/Projects/A/node_modules</code> and <code>~/Projects/B/node_modules</code> both appear, they nest under <code>~/Projects</code> → <code>A</code> and <code>B</code> as intermediate groups.</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge">4</div>
+  <div><p><strong>Leaf nodes = no children.</strong> An item with no sub-items (e.g., a single cache folder) is a leaf. Tapping a leaf toggles selection directly — no expand/collapse.</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge">5</div>
+  <div><p><strong>Default state: top-level collapsed.</strong> User sees top-level groups (Applications, ~/Projects, ~/Library/Caches, Dev Tools) with total sizes. Drill down to find what's big inside each.</p></div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SECTION 4: Data flow -->
+<!-- ══════════════════════════════════════════ -->
+<div class="section">
+<div class="section-label">Data flow — how items become a tree</div>
+
+<pre style="
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+  color: var(--text-dim); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; overflow-x: auto;
+">
+<span style="color:var(--accent)">scan()</span> → appGroups + looseItems (existing, unchanged)
+    │
+    ▼
+<span style="color:var(--accent)">buildTree()</span> → group by scan source path
+    │
+    ├── <span style="color:var(--green)">/Applications</span>
+    │   ├── League of Legends  <span style="color:var(--text-dim)">(leaf — single bundle)</span>
+    │   ├── Docker             <span style="color:var(--text-dim)">(expandable — bundle + cache + support)</span>
+    │   │   ├── App Bundle
+    │   │   ├── App Cache
+    │   │   └── App Support
+    │   ├── Claude
+    │   └── Cursor
+    │
+    ├── <span style="color:var(--green)">~/Projects</span>
+    │   ├── OscarProjects      <span style="color:var(--text-dim)">(intermediate directory)</span>
+    │   │   ├── MacMonitor
+    │   │   └── old-project
+    │   └── WorkProjects
+    │
+    ├── <span style="color:var(--green)">~/Library/Caches</span>
+    │   ├── com.docker.docker
+    │   ├── com.google.Chrome
+    │   └── yarn
+    │
+    └── <span style="color:var(--green)">Dev Tools</span>
+        ├── DerivedData
+        ├── Xcode Archives
+        └── Simulators
+</pre>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SECTION 5: Key design decisions -->
+<!-- ══════════════════════════════════════════ -->
+<div class="section">
+<div class="section-label">Open design decisions</div>
+
+<div class="annotation">
+  <div class="badge" style="background:var(--amber-dim);color:var(--amber)">?</div>
+  <div><p><strong>Max depth limit?</strong> Should we cap at depth 3 (parent → child → grandchild) to avoid endlessly deep trees? Or allow unlimited drill-down for custom folders?</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge" style="background:var(--amber-dim);color:var(--amber)">?</div>
+  <div><p><strong>Auto-expand single children?</strong> If "~/Projects" has only one child "OscarProjects", should it auto-expand to avoid a useless click? Or keep everything collapsed by default for consistency?</p></div>
+</div>
+
+<div class="annotation">
+  <div class="badge" style="background:var(--amber-dim);color:var(--amber)">?</div>
+  <div><p><strong>Filter chips with hierarchy?</strong> When "Apps" filter is active, show only app-related branches (Applications → app groups), hiding Caches and Projects? Or flatten back to the current flat list behavior for filters?</p></div>
+</div>
+
+</div>
+</div>
+</body>
+</html>

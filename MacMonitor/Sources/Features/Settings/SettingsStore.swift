@@ -487,7 +487,7 @@ protocol LaunchAtLoginManaging {
 final class SettingsStore: ObservableObject {
     static let mainPopoverFixedHeight: CGFloat = 620
     static let mainPopoverFallbackWidth: CGFloat = 440
-    static let mainPopoverMinWidth: CGFloat = 360
+    static let mainPopoverMinWidth: CGFloat = 404
     static let mainPopoverMaxWidth: CGFloat = 760
 
     @Published var appTheme: AppTheme {
